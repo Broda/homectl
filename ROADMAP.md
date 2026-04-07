@@ -21,6 +21,7 @@
 - Added `homectl domain remove` for DNS and ingress teardown.
 - Added `homectl domain status` with `ok`, `partial`, and `misconfigured` reporting.
 - Added `homectl domain repair` to converge stale or partial domain state.
+- Added `--json` output for `domain add`, `domain repair`, and `domain remove`.
 - Added a shared `cloudflared` service-management abstraction for runtime detection and restart handling.
 - Added `--json` output for `domain status`, `validate`, and `doctor`.
 - Added `--json` output for `list`.

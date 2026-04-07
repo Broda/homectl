@@ -126,10 +126,11 @@ Preview without changing anything:
 ```bash
 homectl domain add example.com --dry-run
 homectl domain add example.com --dry-run --restart-cloudflared
+homectl domain add example.com --dry-run --json
 homectl domain status example.com
 homectl domain status example.com --json
-homectl domain repair example.com --dry-run
-homectl domain remove example.com --dry-run
+homectl domain repair example.com --dry-run --json
+homectl domain remove example.com --dry-run --json
 homectl list --json
 homectl cloudflared status --json
 homectl cloudflared restart --dry-run
@@ -146,10 +147,10 @@ homectl up example.com --dry-run
 ## Command Overview
 
 - `homectl config init`
-- `homectl domain add <domain> [--dry-run] [--restart-cloudflared]`
+- `homectl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homectl domain status <domain> [--json]`
-- `homectl domain repair <domain> [--dry-run] [--restart-cloudflared]`
-- `homectl domain remove <domain> [--dry-run] [--restart-cloudflared]`
+- `homectl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
+- `homectl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homectl site init <hostname> [--force] [--dry-run]`
 - `homectl app init <hostname> [--template static|placeholder|node] [--force] [--dry-run]`
 - `homectl up <hostname> [--dry-run] [--json]`
@@ -164,6 +165,7 @@ homectl up example.com --dry-run
 ## Notes
 
 - `domain add` uses the Cloudflare DNS API to manage apex and wildcard records for the requested zone.
+- `domain add`, `domain repair`, and `domain remove` support `--json` for machine-readable mutation results.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, and apex and wildcard `cloudflared` ingress state.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.

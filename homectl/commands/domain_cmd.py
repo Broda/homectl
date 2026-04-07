@@ -29,6 +29,7 @@ domain_cli = typer.Typer(help="Manage domain-level Cloudflare Tunnel DNS routing
 def domain_add(
     domain: str = typer.Argument(..., help="Bare domain to route through the existing Cloudflare Tunnel."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print commands without making changes."),
+    json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
     restart_cloudflared: bool = typer.Option(
         False,
         "--restart-cloudflared",
@@ -36,13 +37,14 @@ def domain_add(
     ),
 ) -> None:
     """Create apex and wildcard tunnel DNS routes for a domain."""
-    _upsert_domain_routing(domain, dry_run, restart_cloudflared, verb="Added")
+    _upsert_domain_routing(domain, dry_run, json_output, restart_cloudflared, verb="Added", action="add")
 
 
 @domain_cli.command("repair")
 def domain_repair(
     domain: str = typer.Argument(..., help="Bare domain to reconcile against the expected tunnel and ingress state."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print commands without making changes."),
+    json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
     restart_cloudflared: bool = typer.Option(
         False,
         "--restart-cloudflared",
@@ -50,13 +52,14 @@ def domain_repair(
     ),
 ) -> None:
     """Repair apex and wildcard tunnel DNS routes and ingress entries for a domain."""
-    _upsert_domain_routing(domain, dry_run, restart_cloudflared, verb="Repaired")
+    _upsert_domain_routing(domain, dry_run, json_output, restart_cloudflared, verb="Repaired", action="repair")
 
 
 @domain_cli.command("remove")
 def domain_remove(
     domain: str = typer.Argument(..., help="Bare domain to remove from the existing Cloudflare Tunnel setup."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print commands without making changes."),
+    json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
     restart_cloudflared: bool = typer.Option(
         False,
         "--restart-cloudflared",
@@ -69,6 +72,9 @@ def domain_remove(
     client = CloudflareApiClient(config.cloudflare_api_token)
 
     ingress_changed = False
+    dns_results: list[dict[str, object]] = []
+    ingress_results: list[dict[str, object]] = []
+    restart_result: dict[str, object] | None = None
     try:
         zone = client.get_zone(bare_domain)
         zone_id = str(zone["id"])
@@ -77,15 +83,19 @@ def domain_remove(
         for record_name in records:
             if dry_run:
                 plan = client.plan_dns_record_removal(zone_id, record_name)
-                info(f"[dry-run] {plan.action} DNS {plan.record_type} {plan.record_name}")
+                dns_results.append(_dns_result_to_dict(plan))
+                if not json_output:
+                    info(f"[dry-run] {plan.action} DNS {plan.record_type} {plan.record_name}")
                 continue
 
             result = client.apply_dns_record_removal(zone_id, record_name)
+            dns_results.append(_dns_result_to_dict(result))
             action_label = {
                 "delete": "deleted",
                 "noop": "already absent",
             }.get(result.action, result.action)
-            info(f"{action_label} DNS {result.record_type} {result.record_name}")
+            if not json_output:
+                info(f"{action_label} DNS {result.record_type} {result.record_name}")
 
         ingress_changes = (
             plan_domain_ingress_removal(config.cloudflared_config, bare_domain)
@@ -94,28 +104,98 @@ def domain_remove(
         )
         ingress_changed = any(change.action != "noop" for change in ingress_changes)
         for change in ingress_changes:
+            ingress_results.append(_ingress_result_to_dict(change))
             prefix = "[dry-run] " if dry_run else ""
             action_label = {
                 "delete": "delete",
                 "noop": "already absent",
             }.get(change.action, change.action)
-            info(f"{prefix}{action_label} ingress {change.hostname}")
+            if not json_output:
+                info(f"{prefix}{action_label} ingress {change.hostname}")
     except (CloudflareApiError, typer.BadParameter) as exc:
-        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
+        message = _format_domain_error(exc)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action="remove",
+                        domain=bare_domain,
+                        dry_run=dry_run,
+                        ok=False,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                        error=message,
+                    ),
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=_exit_with_error(message)) from exc
     except CloudflaredConfigError as exc:
-        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
+        message = _format_domain_error(exc)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action="remove",
+                        domain=bare_domain,
+                        dry_run=dry_run,
+                        ok=False,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                        error=message,
+                    ),
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=_exit_with_error(message)) from exc
 
     if dry_run:
-        success(f"Dry-run complete for domain {bare_domain}")
         if restart_cloudflared and ingress_changed:
-            _plan_cloudflared_restart()
+            restart_result = _plan_cloudflared_restart(json_output=json_output)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action="remove",
+                        domain=bare_domain,
+                        dry_run=True,
+                        ok=True,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        success(f"Dry-run complete for domain {bare_domain}")
     else:
-        success(f"Removed domain routing for {bare_domain}")
         if ingress_changed:
             if restart_cloudflared:
-                _restart_cloudflared()
+                restart_result = _restart_cloudflared(json_output=json_output)
             else:
-                _warn_cloudflared_restart()
+                restart_result = _warn_cloudflared_restart(json_output=json_output)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action="remove",
+                        domain=bare_domain,
+                        dry_run=False,
+                        ok=True,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        success(f"Removed domain routing for {bare_domain}")
 
 
 @domain_cli.command("status")
@@ -212,12 +292,22 @@ def domain_status(
     raise typer.Exit(code=1)
 
 
-def _upsert_domain_routing(domain: str, dry_run: bool, restart_cloudflared: bool, verb: str) -> None:
+def _upsert_domain_routing(
+    domain: str,
+    dry_run: bool,
+    json_output: bool,
+    restart_cloudflared: bool,
+    verb: str,
+    action: str,
+) -> None:
     config = load_config()
     bare_domain = validate_bare_domain(domain)
     client = CloudflareApiClient(config.cloudflare_api_token)
 
     ingress_changed = False
+    dns_results: list[dict[str, object]] = []
+    ingress_results: list[dict[str, object]] = []
+    restart_result: dict[str, object] | None = None
     try:
         zone = client.get_zone(bare_domain)
         zone_id = str(zone["id"])
@@ -227,18 +317,22 @@ def _upsert_domain_routing(domain: str, dry_run: bool, restart_cloudflared: bool
         for record_name in records:
             if dry_run:
                 plan = client.plan_dns_record(zone_id, record_name, target)
-                info(
-                    f"[dry-run] {plan.action} DNS {plan.record_type} {plan.record_name} -> {plan.content}"
-                )
+                dns_results.append(_dns_result_to_dict(plan))
+                if not json_output:
+                    info(
+                        f"[dry-run] {plan.action} DNS {plan.record_type} {plan.record_name} -> {plan.content}"
+                    )
                 continue
 
             result = client.apply_dns_record(zone_id, record_name, target)
+            dns_results.append(_dns_result_to_dict(result))
             action_label = {
                 "create": "created",
                 "update": "updated",
                 "noop": "verified",
             }.get(result.action, result.action)
-            info(f"{action_label} DNS {result.record_type} {result.record_name} -> {result.content}")
+            if not json_output:
+                info(f"{action_label} DNS {result.record_type} {result.record_name} -> {result.content}")
 
         ingress_changes = (
             plan_domain_ingress(config.cloudflared_config, bare_domain, config.traefik_url)
@@ -247,55 +341,155 @@ def _upsert_domain_routing(domain: str, dry_run: bool, restart_cloudflared: bool
         )
         ingress_changed = any(change.action != "noop" for change in ingress_changes)
         for change in ingress_changes:
+            ingress_results.append(_ingress_result_to_dict(change))
             prefix = "[dry-run] " if dry_run else ""
             action_label = {
                 "create": "create",
                 "update": "update",
                 "noop": "verify",
             }.get(change.action, change.action)
-            info(f"{prefix}{action_label} ingress {change.hostname} -> {change.service}")
+            if not json_output:
+                info(f"{prefix}{action_label} ingress {change.hostname} -> {change.service}")
     except (CloudflareApiError, typer.BadParameter) as exc:
-        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
+        message = _format_domain_error(exc)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action=action,
+                        domain=bare_domain,
+                        dry_run=dry_run,
+                        ok=False,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                        error=message,
+                    ),
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=_exit_with_error(message)) from exc
     except CloudflaredConfigError as exc:
-        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
+        message = _format_domain_error(exc)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action=action,
+                        domain=bare_domain,
+                        dry_run=dry_run,
+                        ok=False,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                        error=message,
+                    ),
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=_exit_with_error(message)) from exc
 
     if dry_run:
-        success(f"Dry-run complete for domain {bare_domain}")
         if restart_cloudflared and ingress_changed:
-            _plan_cloudflared_restart()
+            restart_result = _plan_cloudflared_restart(json_output=json_output)
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    _domain_mutation_payload(
+                        action=action,
+                        domain=bare_domain,
+                        dry_run=True,
+                        ok=True,
+                        dns=dns_results,
+                        ingress=ingress_results,
+                        restart=restart_result,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        success(f"Dry-run complete for domain {bare_domain}")
         return
 
-    success(f"{verb} domain routing for {bare_domain}")
     if ingress_changed:
         if restart_cloudflared:
-            _restart_cloudflared()
+            restart_result = _restart_cloudflared(json_output=json_output)
         else:
-            _warn_cloudflared_restart()
+            restart_result = _warn_cloudflared_restart(json_output=json_output)
+    if json_output:
+        typer.echo(
+            json.dumps(
+                _domain_mutation_payload(
+                    action=action,
+                    domain=bare_domain,
+                    dry_run=False,
+                    ok=True,
+                    dns=dns_results,
+                    ingress=ingress_results,
+                    restart=restart_result,
+                ),
+                indent=2,
+            )
+        )
+        return
+    success(f"{verb} domain routing for {bare_domain}")
 
 
-def _restart_cloudflared() -> None:
+def _restart_cloudflared(json_output: bool = False) -> dict[str, object]:
     try:
         runtime = restart_cloudflared_service()
     except CloudflaredServiceError as exc:
-        warn(f"Ingress changed, but {exc}")
-        return
-    success(f"Restarted cloudflared via {runtime.mode}")
+        if not json_output:
+            warn(f"Ingress changed, but {exc}")
+        return {"ok": False, "detail": str(exc)}
+    if not json_output:
+        success(f"Restarted cloudflared via {runtime.mode}")
+    return {
+        "ok": True,
+        "mode": runtime.mode,
+        "detail": runtime.detail,
+        "restart_command": runtime.restart_command,
+    }
 
 
-def _plan_cloudflared_restart() -> None:
+def _plan_cloudflared_restart(json_output: bool = False) -> dict[str, object]:
     runtime = detect_cloudflared_runtime()
     if runtime.restart_command:
-        info(f"[dry-run] {' '.join(runtime.restart_command)}")
-        return
-    warn(f"[dry-run] {runtime.detail}")
+        if not json_output:
+            info(f"[dry-run] {' '.join(runtime.restart_command)}")
+        return {
+            "ok": True,
+            "dry_run": True,
+            "mode": runtime.mode,
+            "detail": runtime.detail,
+            "restart_command": runtime.restart_command,
+        }
+    if not json_output:
+        warn(f"[dry-run] {runtime.detail}")
+    return {
+        "ok": False,
+        "dry_run": True,
+        "mode": runtime.mode,
+        "detail": runtime.detail,
+        "restart_command": runtime.restart_command,
+    }
 
 
-def _warn_cloudflared_restart() -> None:
+def _warn_cloudflared_restart(json_output: bool = False) -> dict[str, object]:
     runtime = detect_cloudflared_runtime()
     if runtime.restart_command:
-        warn(f"Restart cloudflared to apply ingress changes: {' '.join(runtime.restart_command)}")
-        return
-    warn(f"Ingress changed; {runtime.detail}")
+        if not json_output:
+            warn(f"Restart cloudflared to apply ingress changes: {' '.join(runtime.restart_command)}")
+        return {
+            "ok": True,
+            "detail": runtime.detail,
+            "restart_command": runtime.restart_command,
+        }
+    if not json_output:
+        warn(f"Ingress changed; {runtime.detail}")
+    return {"ok": False, "detail": runtime.detail, "restart_command": runtime.restart_command}
 
 
 def _overall_domain_status(dns_statuses, ingress_statuses, expected_service: str) -> str:  # noqa: ANN001
@@ -324,3 +518,44 @@ def _format_domain_error(error: Exception) -> str:
     if isinstance(error, (CloudflaredConfigError, typer.BadParameter)):
         return describe_cloudflared_config_error(error)
     return str(error)
+
+
+def _dns_result_to_dict(result) -> dict[str, object]:
+    return {
+        "action": result.action,
+        "record_name": result.record_name,
+        "record_type": result.record_type,
+        "content": result.content,
+    }
+
+
+def _ingress_result_to_dict(change) -> dict[str, object]:
+    return {
+        "action": change.action,
+        "hostname": change.hostname,
+        "service": change.service,
+    }
+
+
+def _domain_mutation_payload(
+    action: str,
+    domain: str,
+    dry_run: bool,
+    ok: bool,
+    dns: list[dict[str, object]],
+    ingress: list[dict[str, object]],
+    restart: dict[str, object] | None,
+    error: str | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "action": action,
+        "domain": domain,
+        "dry_run": dry_run,
+        "ok": ok,
+        "dns": dns,
+        "ingress": ingress,
+        "restart": restart,
+    }
+    if error:
+        payload["error"] = error
+    return payload
