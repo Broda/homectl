@@ -47,6 +47,14 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+From a tagged GitHub release:
+
+```bash
+pip install "homectl @ https://github.com/Broda/homectl/archive/refs/tags/v0.1.0.tar.gz"
+```
+
+`homectl` currently uses GitHub releases as its public release channel. PyPI publishing is not enabled yet.
+
 ## Configuration
 
 Initialize the default config:

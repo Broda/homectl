@@ -53,6 +53,12 @@
 - Added a real multi-file `node` app scaffold under `homectl/templates/app/node/`.
 - Added a real multi-file `python` app scaffold under `homectl/templates/app/python/`.
 - Moved the placeholder app scaffold under `homectl/templates/app/placeholder/`.
+- Added packaging and release automation for tagged versions.
+- Added a GitHub Actions release workflow for `vX.Y.Z` tags that builds artifacts and publishes GitHub Releases.
+- Reused the shared Python checks workflow as the release gate before artifact publishing.
+- Chose `project.version` in `pyproject.toml` plus matching `vX.Y.Z` tags as the release version source of truth.
+- Chose GitHub releases as the current public release channel and deferred PyPI publishing.
+- Added written release instructions and GitHub-generated release notes discipline.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
 
@@ -61,20 +67,8 @@
 - Expand `app init` templates beyond the current placeholder and minimal scaffolds.
 - Consider additional templates for common self-hosted app patterns such as a static app plus API.
 - Decide how much opinionated app bootstrap belongs in `homectl` versus remaining a minimal Compose scaffold generator.
-- Add packaging and release automation for tagged versions.
-  Settle the version source of truth in package metadata and tag naming.
-  Build distributable artifacts on release tags.
-  Verify release automation reuses the same test gates as CI before publishing artifacts.
-- Add a GitHub Actions release workflow for tags.
-  Trigger on version tags and create a GitHub Release.
-  Attach built artifacts to the release.
-  Keep release workflow responsibilities separate from the main CI workflow.
 - Decide whether to publish to PyPI or stay GitHub-install only.
-  If PyPI is enabled, choose trusted publishing or token-based publishing.
-  If PyPI is deferred, keep release artifacts usable directly from GitHub releases.
-- Add versioning/release notes discipline once a public release cadence exists.
-  Define how changelog or release-note content is produced for each tag.
-  Keep README installation guidance aligned with the chosen release channel.
+  If PyPI is enabled later, choose trusted publishing or token-based publishing.
 - Add richer configuration options for more than one local ingress target or routing profile.
 - Support more than one local ingress URL when operators do not front everything through the same Traefik listener.
 - Consider per-domain or per-stack overrides for ingress target and docker network.
