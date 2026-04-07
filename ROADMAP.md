@@ -62,9 +62,19 @@
 - Consider additional templates for common self-hosted app patterns such as a static app plus API.
 - Decide how much opinionated app bootstrap belongs in `homectl` versus remaining a minimal Compose scaffold generator.
 - Add packaging and release automation for tagged versions.
+  Settle the version source of truth in package metadata and tag naming.
+  Build distributable artifacts on release tags.
+  Verify release automation reuses the same test gates as CI before publishing artifacts.
 - Add a GitHub Actions release workflow for tags.
+  Trigger on version tags and create a GitHub Release.
+  Attach built artifacts to the release.
+  Keep release workflow responsibilities separate from the main CI workflow.
 - Decide whether to publish to PyPI or stay GitHub-install only.
+  If PyPI is enabled, choose trusted publishing or token-based publishing.
+  If PyPI is deferred, keep release artifacts usable directly from GitHub releases.
 - Add versioning/release notes discipline once a public release cadence exists.
+  Define how changelog or release-note content is produced for each tag.
+  Keep README installation guidance aligned with the chosen release channel.
 - Add richer configuration options for more than one local ingress target or routing profile.
 - Support more than one local ingress URL when operators do not front everything through the same Traefik listener.
 - Consider per-domain or per-stack overrides for ingress target and docker network.
