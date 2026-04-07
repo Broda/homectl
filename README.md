@@ -13,6 +13,7 @@ MIT licensed.
 It automates the repetitive parts of:
 
 - adding apex and wildcard tunnel DNS routes for a new domain
+- reconciling local `cloudflared` ingress entries for new domains
 - scaffolding static sites and app directories
 - starting and stopping per-hostname Compose stacks
 - validating the local hosting environment
@@ -120,6 +121,7 @@ Preview without changing anything:
 
 ```bash
 homectl domain add example.com --dry-run
+homectl domain add example.com --dry-run --restart-cloudflared
 homectl site init example.com --dry-run
 homectl up example.com --dry-run
 ```
@@ -127,7 +129,7 @@ homectl up example.com --dry-run
 ## Command Overview
 
 - `homectl config init`
-- `homectl domain add <domain> [--dry-run]`
+- `homectl domain add <domain> [--dry-run] [--restart-cloudflared]`
 - `homectl site init <hostname> [--force] [--dry-run]`
 - `homectl app init <hostname> [--template static|placeholder|node] [--force] [--dry-run]`
 - `homectl up <hostname> [--dry-run]`
@@ -140,7 +142,10 @@ homectl up example.com --dry-run
 ## Notes
 
 - `domain add` uses the Cloudflare DNS API to manage apex and wildcard records for the requested zone.
+- `domain add` also reconciles apex and wildcard hostname entries in the configured `cloudflared` ingress file so new domains route locally to Traefik.
 - `domain add` resolves the tunnel target from the local `cloudflared` tunnel configuration and does not depend on the active `cloudflared tunnel login` zone.
+- pass `--restart-cloudflared` to have `domain add` restart the systemd `cloudflared` service automatically after ingress changes
+- without that flag, restart `cloudflared` manually after ingress changes
 - `site init` and `app init` generate Traefik-safe router and service identifiers from the hostname.
 - All generated Compose files join the external Docker network configured in `docker_network`.
 - In v1, `app init` uses templates designed to be expanded later. The `node` template is a placeholder scaffold rather than a full Node application bootstrap.

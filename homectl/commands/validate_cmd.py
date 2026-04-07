@@ -7,6 +7,7 @@ import urllib.request
 import typer
 import yaml
 
+from homectl.cloudflared import CloudflaredConfigError, find_hostname_route, validate_ingress_config
 from homectl.config import load_config
 from homectl.models import CheckResult, HomectlConfig
 from homectl.shell import command_exists, run_command
@@ -65,6 +66,7 @@ def build_validate_report(config: HomectlConfig) -> list[CheckResult]:
             str(config.cloudflared_config),
         )
     )
+    checks.append(_check_cloudflared_ingress_config(config))
     return checks
 
 
@@ -90,6 +92,7 @@ def build_hostname_doctor_report(config: HomectlConfig, hostname: str) -> list[C
     else:
         checks.append(CheckResult("docker compose ps", False, "skipped because docker-compose.yml is missing"))
 
+    checks.append(_check_cloudflared_hostname(config, valid_hostname))
     checks.append(_check_host_header(config, valid_hostname))
     return checks
 
@@ -133,6 +136,16 @@ def _check_traefik_http(config: HomectlConfig) -> CheckResult:
         return CheckResult("Traefik URL", False, f"{config.traefik_url} unreachable: {exc}")
 
 
+def _check_cloudflared_ingress_config(config: HomectlConfig) -> CheckResult:
+    if not config.cloudflared_config.exists():
+        return CheckResult("cloudflared ingress config", False, f"missing file: {config.cloudflared_config}")
+    try:
+        fallback = validate_ingress_config(config.cloudflared_config)
+    except (CloudflaredConfigError, typer.BadParameter) as exc:
+        return CheckResult("cloudflared ingress config", False, str(exc))
+    return CheckResult("cloudflared ingress config", True, f"fallback service {fallback}")
+
+
 def _check_host_header(config: HomectlConfig, hostname: str) -> CheckResult:
     request = urllib.request.Request(
         config.traefik_url,
@@ -145,6 +158,18 @@ def _check_host_header(config: HomectlConfig, hostname: str) -> CheckResult:
         return CheckResult("host-header request", True, f"{hostname} returned HTTP {exc.code}")
     except urllib.error.URLError as exc:
         return CheckResult("host-header request", False, f"request failed: {exc}")
+
+
+def _check_cloudflared_hostname(config: HomectlConfig, hostname: str) -> CheckResult:
+    if not config.cloudflared_config.exists():
+        return CheckResult("cloudflared ingress hostname", False, f"missing file: {config.cloudflared_config}")
+    try:
+        service = find_hostname_route(config.cloudflared_config, hostname)
+    except (CloudflaredConfigError, typer.BadParameter) as exc:
+        return CheckResult("cloudflared ingress hostname", False, str(exc))
+    if not service:
+        return CheckResult("cloudflared ingress hostname", False, f"no ingress entry for {hostname}")
+    return CheckResult("cloudflared ingress hostname", True, f"{hostname} routes to {service}")
 
 
 def _compose_ps_detail(result) -> str:

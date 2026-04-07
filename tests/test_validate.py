@@ -10,7 +10,10 @@ from homectl.shell import CommandResult
 
 def test_build_validate_report_uses_cloudflared_config_fallback(monkeypatch, tmp_path: Path) -> None:
     cloudflared_config = tmp_path / "cloudflared.yml"
-    cloudflared_config.write_text("tunnel: 1234-uuid\n", encoding="utf-8")
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: example.com\n    service: http://localhost:8081\n  - hostname: '*.example.com'\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
     config = HomectlConfig(
         tunnel_name="homectl-tunnel",
         sites_root=tmp_path / "sites",
@@ -56,18 +59,24 @@ def test_build_validate_report_uses_cloudflared_config_fallback(monkeypatch, tmp
     assert indexed["configured tunnel"].ok
     assert "references tunnel 1234-uuid" in indexed["configured tunnel"].detail
     assert indexed["Traefik URL"].ok
+    assert indexed["cloudflared ingress config"].ok
 
 
 def test_build_hostname_doctor_report(monkeypatch, tmp_path: Path) -> None:
     stack_dir = tmp_path / "sites" / "example.com"
     stack_dir.mkdir(parents=True)
     (stack_dir / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: example.com\n    service: http://localhost:8081\n  - hostname: '*.example.com'\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
     config = HomectlConfig(
         tunnel_name="homectl-tunnel",
         sites_root=tmp_path / "sites",
         docker_network="web",
         traefik_url="http://localhost:8081",
-        cloudflared_config=tmp_path / "cloudflared.yml",
+        cloudflared_config=cloudflared_config,
     )
 
     def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
@@ -93,4 +102,5 @@ def test_build_hostname_doctor_report(monkeypatch, tmp_path: Path) -> None:
     assert indexed["hostname directory"].ok
     assert indexed["docker-compose.yml"].ok
     assert indexed["docker compose ps"].ok
+    assert indexed["cloudflared ingress hostname"].ok
     assert indexed["host-header request"].ok
