@@ -12,7 +12,7 @@
 
 - Add more domain-level diagnostics and repair hints for unsafe or ambiguous `cloudflared` config states.
 - Consider a dedicated service-management command surface for inspecting or controlling `cloudflared`.
-- Add machine-readable output to additional commands where scripting would help, such as `list`.
+- Add machine-readable output to additional commands where scripting would help beyond the current status/reporting set.
 
 ## Recently Completed
 
@@ -23,6 +23,7 @@
 - Added `homectl domain repair` to converge stale or partial domain state.
 - Added a shared `cloudflared` service-management abstraction for runtime detection and restart handling.
 - Added `--json` output for `domain status`, `validate`, and `doctor`.
+- Added `--json` output for `list`.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
 

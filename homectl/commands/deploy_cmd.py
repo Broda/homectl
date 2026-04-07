@@ -61,20 +61,48 @@ def restart(
 
 def list_sites() -> None:
     """List scaffolded hostnames under the configured sites root."""
+    list_sites_with_format()
+
+
+def list_sites_with_format(
+    json_output: bool = typer.Option(False, "--json", help="Print the site list as JSON."),
+) -> None:
+    """List scaffolded hostnames under the configured sites root."""
     config = load_config()
     if not config.sites_root.exists():
-        warn(f"Sites root does not exist: {config.sites_root}")
+        if json_output:
+            payload = {
+                "sites_root": str(config.sites_root),
+                "ok": False,
+                "sites": [],
+                "error": f"Sites root does not exist: {config.sites_root}",
+            }
+            typer.echo(json.dumps(payload, indent=2))
+        else:
+            warn(f"Sites root does not exist: {config.sites_root}")
         raise typer.Exit(code=1)
 
-    found = False
+    sites: list[dict[str, object]] = []
     for child in sorted(path for path in config.sites_root.iterdir() if path.is_dir()):
-        found = True
         compose_file = child / "docker-compose.yml"
-        status = "compose=yes" if compose_file.exists() else "compose=no"
-        info(f"{child.name}\t{status}")
+        sites.append({"hostname": child.name, "compose": compose_file.exists()})
 
-    if not found:
+    if json_output:
+        payload = {
+            "sites_root": str(config.sites_root),
+            "ok": True,
+            "sites": sites,
+        }
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    if not sites:
         warn(f"No hostnames found under {config.sites_root}")
+        return
+
+    for site in sites:
+        status = "compose=yes" if site["compose"] else "compose=no"
+        info(f"{site['hostname']}\t{status}")
 
 
 def doctor(

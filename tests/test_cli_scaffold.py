@@ -117,16 +117,6 @@ def test_domain_add_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None
             restart_command=["systemctl", "restart", "cloudflared"],
         ),
     )
-    monkeypatch.setattr(
-        domain_cmd,
-        "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
-            mode="systemd",
-            active=True,
-            detail="systemd service is active",
-            restart_command=["systemctl", "restart", "cloudflared"],
-        ),
-    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["domain", "add", "example.com", "--dry-run"])
@@ -1119,3 +1109,44 @@ def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["hostname"] == "example.com"
     assert payload["ok"] is True
     assert payload["checks"][1]["name"] == "host-header request"
+
+
+def test_list_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    example_dir = sites_root / "example.com"
+    notes_dir = sites_root / "notes.example.com"
+    example_dir.mkdir(parents=True)
+    notes_dir.mkdir(parents=True)
+    (example_dir / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["list", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["sites_root"] == str(sites_root)
+    assert payload["sites"] == [
+        {"hostname": "example.com", "compose": True},
+        {"hostname": "notes.example.com", "compose": False},
+    ]
+
+
+def test_list_json_reports_missing_sites_root(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "missing-sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["list", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["sites"] == []
+    assert "Sites root does not exist" in payload["error"]

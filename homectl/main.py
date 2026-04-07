@@ -4,7 +4,7 @@ import typer
 
 from homectl.commands.app_cmd import app_cli
 from homectl.commands.config_cmd import config_cli
-from homectl.commands.deploy_cmd import doctor, down, list_sites, restart, up
+from homectl.commands.deploy_cmd import doctor, down, list_sites_with_format, restart, up
 from homectl.commands.domain_cmd import domain_cli
 from homectl.commands.site_cmd import site_cli
 from homectl.commands.validate_cmd import validate_with_format
@@ -24,7 +24,7 @@ app.add_typer(app_cli, name="app")
 app.command("up")(up)
 app.command("down")(down)
 app.command("restart")(restart)
-app.command("list")(list_sites)
+app.command("list")(list_sites_with_format)
 app.command("validate")(validate_with_format)
 app.command("doctor")(doctor)
 
