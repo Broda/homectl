@@ -44,21 +44,60 @@ def cloudflared_status(
 @cloudflared_cli.command("restart")
 def cloudflared_restart(
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the restart command without running it."),
+    json_output: bool = typer.Option(False, "--json", help="Print the restart result as JSON."),
 ) -> None:
     """Restart cloudflared when it is managed by a supported runtime."""
     runtime = detect_cloudflared_runtime()
     if dry_run:
         if runtime.restart_command:
-            info(f"[dry-run] {' '.join(runtime.restart_command)}")
-            success(f"Dry-run complete for cloudflared restart via {runtime.mode}")
+            if json_output:
+                payload = {
+                    "ok": True,
+                    "dry_run": True,
+                    "mode": runtime.mode,
+                    "detail": runtime.detail,
+                    "restart_command": runtime.restart_command,
+                }
+                typer.echo(json.dumps(payload, indent=2))
+            else:
+                info(f"[dry-run] {' '.join(runtime.restart_command)}")
+                success(f"Dry-run complete for cloudflared restart via {runtime.mode}")
             return
-        warn(f"[dry-run] {runtime.detail}")
+        if json_output:
+            payload = {
+                "ok": False,
+                "dry_run": True,
+                "mode": runtime.mode,
+                "detail": runtime.detail,
+                "restart_command": runtime.restart_command,
+            }
+            typer.echo(json.dumps(payload, indent=2))
+        else:
+            warn(f"[dry-run] {runtime.detail}")
         raise typer.Exit(code=1)
 
     try:
         runtime = restart_cloudflared_service()
     except CloudflaredServiceError as exc:
+        if json_output:
+            payload = {
+                "ok": False,
+                "dry_run": False,
+                "detail": str(exc),
+            }
+            typer.echo(json.dumps(payload, indent=2))
+            raise typer.Exit(code=1) from exc
         raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+    if json_output:
+        payload = {
+            "ok": True,
+            "dry_run": False,
+            "mode": runtime.mode,
+            "detail": runtime.detail,
+            "restart_command": runtime.restart_command,
+        }
+        typer.echo(json.dumps(payload, indent=2))
+        return
     success(f"Restarted cloudflared via {runtime.mode}")
 
 

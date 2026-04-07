@@ -25,6 +25,7 @@
 - Added `--json` output for `domain status`, `validate`, and `doctor`.
 - Added `--json` output for `list`.
 - Added `cloudflared status` and `cloudflared restart` commands.
+- Added `--json` output for `cloudflared restart`.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
 

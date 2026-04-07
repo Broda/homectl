@@ -136,6 +136,55 @@ def test_cloudflared_restart_reports_unmanaged_process(monkeypatch) -> None:
     assert "restart cloudflared manually" in result.output
 
 
+def test_cloudflared_restart_json_dry_run(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="docker",
+            active=True,
+            detail="running container(s): cloudflared",
+            restart_command=["docker", "restart", "cloudflared"],
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "restart", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["dry_run"] is True
+    assert payload["mode"] == "docker"
+    assert payload["restart_command"] == ["docker", "restart", "cloudflared"]
+
+
+def test_cloudflared_restart_json_failure(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="process",
+            active=True,
+            detail="process present: 123 cloudflared",
+            restart_command=None,
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "restart", "--dry-run", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["dry_run"] is True
+    assert payload["mode"] == "process"
+
+
 def test_domain_add_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None:
     from homectl.commands import domain_cmd
 
