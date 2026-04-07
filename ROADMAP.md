@@ -56,6 +56,7 @@
 ## Later
 
 - Expand `app init` templates beyond the current placeholder and minimal scaffolds.
+- Standardize future app templates under per-template directories in `homectl/templates/app/`, with `placeholder/`, `node/`, and `python/` as the initial layout targets.
 - Add a more complete Node app scaffold beyond the current README placeholder.
 - Consider additional templates for common self-hosted app patterns such as a static app plus API, or a simple Python service.
 - Decide how much opinionated app bootstrap belongs in `homectl` versus remaining a minimal Compose scaffold generator.
