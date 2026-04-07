@@ -167,7 +167,7 @@ homectl up example.com --dry-run
 
 - `domain add` uses the Cloudflare DNS API to manage apex and wildcard records for the requested zone.
 - `domain add`, `domain repair`, and `domain remove` support `--json` for machine-readable mutation results.
-- `domain status` reports expected tunnel target, apex and wildcard DNS state, and apex and wildcard `cloudflared` ingress state.
+- `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, and whether `homectl domain repair` is likely to fix the current state automatically.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results.

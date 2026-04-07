@@ -225,6 +225,8 @@ def domain_status(
         raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
 
     overall = _overall_domain_status(dns_statuses, ingress_statuses, config.traefik_url)
+    repairable = _domain_status_repairability(overall)
+    suggested_command = f"homectl domain repair {bare_domain}" if repairable else None
     if json_output:
         payload = {
             "domain": bare_domain,
@@ -232,6 +234,9 @@ def domain_status(
             "expected_ingress_service": config.traefik_url,
             "overall": overall,
             "ok": overall == "ok",
+            "repairable": repairable,
+            "manual_fix_required": not repairable and overall != "ok",
+            "suggested_command": suggested_command,
             "dns": [
                 {
                     "record_name": status.record_name,
@@ -289,6 +294,11 @@ def domain_status(
 
     if not json_output:
         warn(f"Overall status for {bare_domain}: {overall}")
+        if repairable:
+            info(f"Repairable by homectl: yes")
+            info(f"Suggested command: {suggested_command}")
+        else:
+            warn("Repairable by homectl: no; manual cleanup is likely required first")
     raise typer.Exit(code=1)
 
 
@@ -518,6 +528,10 @@ def _format_domain_error(error: Exception) -> str:
     if isinstance(error, (CloudflaredConfigError, typer.BadParameter)):
         return describe_cloudflared_config_error(error)
     return str(error)
+
+
+def _domain_status_repairability(overall: str) -> bool:
+    return overall in {"partial", "misconfigured"}
 
 
 def _dns_result_to_dict(result) -> dict[str, object]:

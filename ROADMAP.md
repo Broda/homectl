@@ -40,6 +40,7 @@
 - Added optional `--restart-cloudflared` support for domain-changing commands.
 - Added `homectl domain remove` for DNS and ingress teardown.
 - Added `homectl domain status` with `ok`, `partial`, and `misconfigured` reporting.
+- Added a repairability signal and suggested repair command to `homectl domain status`.
 - Added `homectl domain repair` to converge stale or partial domain state.
 - Added `--json` output for `domain add`, `domain repair`, and `domain remove`.
 - Added a shared `cloudflared` service-management abstraction for runtime detection and restart handling.
