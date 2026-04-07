@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import typer
 
 from homectl.cloudflare import CloudflareApiClient, CloudflareApiError, tunnel_cname_target
@@ -118,6 +120,7 @@ def domain_remove(
 @domain_cli.command("status")
 def domain_status(
     domain: str = typer.Argument(..., help="Bare domain to inspect in Cloudflare DNS and cloudflared ingress."),
+    json_output: bool = typer.Option(False, "--json", help="Print the domain status report as JSON."),
 ) -> None:
     """Report whether a domain is fully wired to the configured tunnel and local ingress."""
     config = load_config()
@@ -140,45 +143,71 @@ def domain_status(
     except CloudflaredConfigError as exc:
         raise typer.Exit(code=_exit_with_error(str(exc))) from exc
 
-    info(f"Expected tunnel target: {target}")
-    info(f"Expected ingress service: {config.traefik_url}")
-
-    all_dns_ok = True
-    for status in dns_statuses:
-        if not status.exists:
-            bullet_report("FAIL", f"DNS {status.record_name}", "record missing", False)
-            all_dns_ok = False
-            continue
-
-        detail = f"{status.record_type} -> {status.content}"
-        if status.proxied:
-            detail += " (proxied)"
-        ok = status.matches_expected
-        bullet_report("PASS" if ok else "FAIL", f"DNS {status.record_name}", detail, ok)
-        all_dns_ok = all_dns_ok and ok
-
-    all_ingress_ok = True
-    for hostname, service in ingress_statuses:
-        if service is None:
-            bullet_report("FAIL", f"ingress {hostname}", "entry missing", False)
-            all_ingress_ok = False
-            continue
-
-        ok = service == config.traefik_url
-        bullet_report(
-            "PASS" if ok else "FAIL",
-            f"ingress {hostname}",
-            service,
-            ok,
-        )
-        all_ingress_ok = all_ingress_ok and ok
-
     overall = _overall_domain_status(dns_statuses, ingress_statuses, config.traefik_url)
+    if json_output:
+        payload = {
+            "domain": bare_domain,
+            "expected_tunnel_target": target,
+            "expected_ingress_service": config.traefik_url,
+            "overall": overall,
+            "ok": overall == "ok",
+            "dns": [
+                {
+                    "record_name": status.record_name,
+                    "exists": status.exists,
+                    "record_type": status.record_type,
+                    "content": status.content,
+                    "proxied": status.proxied,
+                    "matches_expected": status.matches_expected,
+                }
+                for status in dns_statuses
+            ],
+            "ingress": [
+                {
+                    "hostname": hostname,
+                    "exists": service is not None,
+                    "service": service,
+                    "matches_expected": service == config.traefik_url,
+                }
+                for hostname, service in ingress_statuses
+            ],
+        }
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        info(f"Expected tunnel target: {target}")
+        info(f"Expected ingress service: {config.traefik_url}")
+
+        for status in dns_statuses:
+            if not status.exists:
+                bullet_report("FAIL", f"DNS {status.record_name}", "record missing", False)
+                continue
+
+            detail = f"{status.record_type} -> {status.content}"
+            if status.proxied:
+                detail += " (proxied)"
+            ok = status.matches_expected
+            bullet_report("PASS" if ok else "FAIL", f"DNS {status.record_name}", detail, ok)
+
+        for hostname, service in ingress_statuses:
+            if service is None:
+                bullet_report("FAIL", f"ingress {hostname}", "entry missing", False)
+                continue
+
+            ok = service == config.traefik_url
+            bullet_report(
+                "PASS" if ok else "FAIL",
+                f"ingress {hostname}",
+                service,
+                ok,
+            )
+
     if overall == "ok":
-        success(f"Overall status for {bare_domain}: ok")
+        if not json_output:
+            success(f"Overall status for {bare_domain}: ok")
         return
 
-    warn(f"Overall status for {bare_domain}: {overall}")
+    if not json_output:
+        warn(f"Overall status for {bare_domain}: {overall}")
     raise typer.Exit(code=1)
 
 

@@ -17,9 +17,23 @@ from homectl.utils import bullet_report, validate_hostname
 
 def validate() -> None:
     """Validate the local hosting environment."""
+    validate_with_format()
+
+
+def validate_with_format(
+    json_output: bool = typer.Option(False, "--json", help="Print the validation report as JSON."),
+) -> None:
+    """Validate the local hosting environment."""
     config = load_config()
     checks = build_validate_report(config)
-    _print_report(checks)
+    if json_output:
+        payload = {
+            "ok": all(check.ok for check in checks),
+            "checks": [_check_to_dict(check) for check in checks],
+        }
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        _print_report(checks)
     if any(not check.ok for check in checks):
         raise typer.Exit(code=1)
 
@@ -236,3 +250,7 @@ def _check_tunnel_reference(config: HomectlConfig) -> CheckResult:
 def _print_report(checks: list[CheckResult]) -> None:
     for check in checks:
         bullet_report("PASS" if check.ok else "FAIL", check.name, check.detail, check.ok)
+
+
+def _check_to_dict(check: CheckResult) -> dict[str, object]:
+    return {"name": check.name, "ok": check.ok, "detail": check.detail}

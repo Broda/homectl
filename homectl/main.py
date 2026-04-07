@@ -7,7 +7,7 @@ from homectl.commands.config_cmd import config_cli
 from homectl.commands.deploy_cmd import doctor, down, list_sites, restart, up
 from homectl.commands.domain_cmd import domain_cli
 from homectl.commands.site_cmd import site_cli
-from homectl.commands.validate_cmd import validate
+from homectl.commands.validate_cmd import validate_with_format
 
 app = typer.Typer(
     name="homectl",
@@ -25,7 +25,7 @@ app.command("up")(up)
 app.command("down")(down)
 app.command("restart")(restart)
 app.command("list")(list_sites)
-app.command("validate")(validate)
+app.command("validate")(validate_with_format)
 app.command("doctor")(doctor)
 
 

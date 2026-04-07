@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
 import yaml
 from typer.testing import CliRunner
 
@@ -850,6 +851,76 @@ def test_domain_status_reports_misconfigured(monkeypatch, tmp_path: Path) -> Non
     assert "Overall status for example.com: misconfigured" in result.output
 
 
+def test_domain_status_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["domain"] == "example.com"
+    assert payload["ok"] is True
+    assert payload["overall"] == "ok"
+    assert payload["dns"][0]["record_name"] == "example.com"
+    assert payload["ingress"][1]["hostname"] == "*.example.com"
+
+
 def test_deploy_dry_run_commands(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -870,3 +941,50 @@ def test_deploy_dry_run_commands(monkeypatch, tmp_path: Path) -> None:
     assert "docker compose up -d" in up_result.output
     assert "docker compose down" in down_result.output
     assert "docker compose up -d" in restart_result.output
+
+
+def test_validate_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import validate_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    checks = [
+        validate_cmd.CheckResult("cloudflared binary", True, "found in PATH"),
+        validate_cmd.CheckResult("docker binary", True, "found in PATH"),
+    ]
+    monkeypatch.setattr(validate_cmd, "build_validate_report", lambda config: checks)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["validate", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["checks"][0]["name"] == "cloudflared binary"
+
+
+def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import validate_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    checks = [
+        validate_cmd.CheckResult("hostname directory", True, "/tmp/example.com"),
+        validate_cmd.CheckResult("host-header request", True, "example.com returned HTTP 200"),
+    ]
+    monkeypatch.setattr(validate_cmd, "build_hostname_doctor_report", lambda config, hostname: checks)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["doctor", "example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["hostname"] == "example.com"
+    assert payload["ok"] is True
+    assert payload["checks"][1]["name"] == "host-header request"

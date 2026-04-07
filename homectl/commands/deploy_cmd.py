@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -78,6 +79,7 @@ def list_sites() -> None:
 
 def doctor(
     hostname: str = typer.Argument(..., help="Hostname to diagnose."),
+    json_output: bool = typer.Option(False, "--json", help="Print the doctor report as JSON."),
 ) -> None:
     """Diagnose one hostname stack and local Traefik routing."""
     from homectl.commands.validate_cmd import build_hostname_doctor_report
@@ -85,13 +87,23 @@ def doctor(
     config = load_config()
     valid_hostname = validate_hostname(hostname)
     results = build_hostname_doctor_report(config, valid_hostname)
-    for result in results:
-        symbol = "PASS" if result.ok else "FAIL"
-        info(f"{symbol} {result.name}: {result.detail}")
-
     failures = [item for item in results if not item.ok]
+    if json_output:
+        payload = {
+            "hostname": valid_hostname,
+            "ok": not failures,
+            "checks": [{"name": result.name, "ok": result.ok, "detail": result.detail} for result in results],
+        }
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        for result in results:
+            symbol = "PASS" if result.ok else "FAIL"
+            info(f"{symbol} {result.name}: {result.detail}")
+
     if failures:
-        warn(f"Doctor found {len(failures)} issue(s) for {valid_hostname}")
+        if not json_output:
+            warn(f"Doctor found {len(failures)} issue(s) for {valid_hostname}")
         raise typer.Exit(code=1)
 
-    success(f"Doctor checks passed for {valid_hostname}")
+    if not json_output:
+        success(f"Doctor checks passed for {valid_hostname}")

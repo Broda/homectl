@@ -4,15 +4,15 @@
 
 ## Now
 
-- Add machine-readable `--json` output for `domain status`, `validate`, and `doctor`.
+- Tighten validation and error messages around partial or conflicting domain state.
 - Keep the test suite and CI green as the CLI surface grows.
 - Preserve a simple operator model: one command should do the obvious thing, with `--dry-run` available for preview.
 
 ## Next
 
-- Tighten validation and error messages around partial or conflicting domain state.
 - Add more domain-level diagnostics and repair hints for unsafe or ambiguous `cloudflared` config states.
 - Consider a dedicated service-management command surface for inspecting or controlling `cloudflared`.
+- Add machine-readable output to additional commands where scripting would help, such as `list`.
 
 ## Recently Completed
 
@@ -22,6 +22,7 @@
 - Added `homectl domain status` with `ok`, `partial`, and `misconfigured` reporting.
 - Added `homectl domain repair` to converge stale or partial domain state.
 - Added a shared `cloudflared` service-management abstraction for runtime detection and restart handling.
+- Added `--json` output for `domain status`, `validate`, and `doctor`.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
 
