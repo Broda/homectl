@@ -260,6 +260,87 @@ def test_domain_add_restarts_cloudflared_when_requested(monkeypatch, tmp_path: P
     assert "Restarted cloudflared" in result.output
 
 
+def test_domain_repair_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def plan_dns_record(self, zone_id: str, record_name: str, content: str):  # noqa: ANN202
+            assert zone_id == "zone-123"
+            return type("Plan", (), {"action": "update", "record_type": "CNAME", "record_name": record_name, "content": content})()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "repair", "example.com", "--dry-run", "--restart-cloudflared"])
+
+    assert result.exit_code == 0, result.output
+    assert "[dry-run] update DNS CNAME example.com -> 11111111-2222-4333-8444-555555555555.cfargotunnel.com" in result.output
+    assert "[dry-run] create ingress *.example.com -> http://localhost:8081" in result.output
+    assert "[dry-run] systemctl restart cloudflared" in result.output
+
+
+def test_domain_repair_reports_repaired(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def apply_dns_record(self, zone_id: str, record_name: str, content: str):  # noqa: ANN202
+            return type("Plan", (), {"action": "update", "record_type": "CNAME", "record_name": record_name, "content": content})()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "repair", "example.com"])
+
+    assert result.exit_code == 0, result.output
+    assert "Repaired domain routing for example.com" in result.output
+
+
 def test_domain_remove_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None:
     from homectl.commands import domain_cmd
 

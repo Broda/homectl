@@ -10,10 +10,9 @@
 
 ## Next
 
-- Add `homectl domain remove` to tear down apex and wildcard DNS records and matching `cloudflared` ingress entries.
-- Add `homectl domain status` or expand `doctor` so domain wiring can be inspected in one place.
 - Improve `cloudflared` restart handling beyond the current systemd-focused path.
 - Tighten validation and error messages around partial or conflicting domain state.
+- Add `homectl domain repair` so partially configured or stale domain state can be converged automatically.
 
 ## Later
 
