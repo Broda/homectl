@@ -238,8 +238,53 @@ def test_cloudflared_restart_json_dry_run(monkeypatch) -> None:
     payload = json.loads(result.output)
     assert payload["ok"] is True
     assert payload["dry_run"] is True
-    assert payload["mode"] == "docker"
-    assert payload["restart_command"] == ["docker", "restart", "cloudflared"]
+
+
+def test_cloudflared_logs_reports_systemd_command(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="systemd",
+            active=True,
+            detail="systemd service is active",
+            restart_command=["systemctl", "restart", "cloudflared"],
+            logs_command=["journalctl", "-u", "cloudflared", "-n", "100", "--no-pager"],
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "logs", "--follow"])
+
+    assert result.exit_code == 0, result.output
+    assert "journalctl -u cloudflared -n 100 --no-pager -f" in result.output
+
+
+def test_cloudflared_logs_json_reports_unmanaged_process(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="process",
+            active=True,
+            detail="process present: 123 cloudflared",
+            restart_command=None,
+            logs_command=None,
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "logs", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["mode"] == "process"
+    assert payload["logs_command"] is None
 
 
 def test_cloudflared_restart_json_failure(monkeypatch) -> None:

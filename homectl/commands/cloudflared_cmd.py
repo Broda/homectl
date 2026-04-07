@@ -80,6 +80,29 @@ def cloudflared_restart(
     success(f"Restarted cloudflared via {runtime.mode}")
 
 
+@cloudflared_cli.command("logs")
+def cloudflared_logs(
+    follow: bool = typer.Option(False, "--follow", help="Suggest a follow/tail command for the detected runtime."),
+    json_output: bool = typer.Option(False, "--json", help="Print the log-command guidance as JSON."),
+) -> None:
+    """Show the right log command for the detected cloudflared runtime."""
+    runtime = detect_cloudflared_runtime()
+    logs_command = _logs_command(runtime, follow=follow)
+    ok = logs_command is not None
+    if json_output:
+        payload = _runtime_payload(runtime, ok=ok)
+        payload["follow"] = follow
+        payload["logs_command"] = logs_command
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        if logs_command:
+            info(" ".join(logs_command))
+        else:
+            warn(f"No automatic log command available for {runtime.mode}: {runtime.detail}")
+    if not ok:
+        raise typer.Exit(code=1)
+
+
 def _exit_with_error(message: str) -> int:
     typer.secho(message, fg=typer.colors.RED, err=True)
     return 1
@@ -92,7 +115,21 @@ def _runtime_payload(runtime, ok: bool, dry_run: bool | None = None) -> dict[str
         "active": runtime.active,
         "detail": runtime.detail,
         "restart_command": runtime.restart_command,
+        "logs_command": runtime.logs_command,
     }
     if dry_run is not None:
         payload["dry_run"] = dry_run
     return payload
+
+
+def _logs_command(runtime, follow: bool) -> list[str] | None:  # noqa: ANN001
+    if runtime.logs_command is None:
+        return None
+    if not follow:
+        return runtime.logs_command
+
+    if runtime.mode == "systemd":
+        return runtime.logs_command + ["-f"]
+    if runtime.mode == "docker":
+        return runtime.logs_command[:-1] + ["--follow", runtime.logs_command[-1]]
+    return runtime.logs_command

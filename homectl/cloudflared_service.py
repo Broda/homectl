@@ -11,6 +11,7 @@ class CloudflaredRuntime:
     active: bool
     detail: str
     restart_command: list[str] | None = None
+    logs_command: list[str] | None = None
 
 
 class CloudflaredServiceError(RuntimeError):
@@ -25,6 +26,7 @@ def detect_cloudflared_runtime() -> CloudflaredRuntime:
             active=True,
             detail="systemd service is active",
             restart_command=["systemctl", "restart", "cloudflared"],
+            logs_command=["journalctl", "-u", "cloudflared", "-n", "100", "--no-pager"],
         )
 
     docker_ps = run_command(
@@ -39,6 +41,7 @@ def detect_cloudflared_runtime() -> CloudflaredRuntime:
             active=True,
             detail=detail,
             restart_command=["docker", "restart", container_name],
+            logs_command=["docker", "logs", "--tail", "100", container_name],
         )
 
     pgrep = run_command(["pgrep", "-fa", "cloudflared"])
@@ -48,10 +51,11 @@ def detect_cloudflared_runtime() -> CloudflaredRuntime:
             active=True,
             detail=f"process present: {pgrep.stdout}",
             restart_command=None,
+            logs_command=None,
         )
 
     detail = systemctl.stderr or systemctl.stdout or "cloudflared not detected via systemd, docker, or process scan"
-    return CloudflaredRuntime(mode="absent", active=False, detail=detail, restart_command=None)
+    return CloudflaredRuntime(mode="absent", active=False, detail=detail, restart_command=None, logs_command=None)
 
 
 def restart_cloudflared_service() -> CloudflaredRuntime:

@@ -117,6 +117,7 @@ Inspect the stack:
 ```bash
 homectl list
 homectl cloudflared status
+homectl cloudflared logs
 homectl validate
 homectl doctor test.example.com
 ```
@@ -133,6 +134,7 @@ homectl domain repair example.com --dry-run --json
 homectl domain remove example.com --dry-run --json
 homectl list --json
 homectl cloudflared status --json
+homectl cloudflared logs --follow --json
 homectl cloudflared restart --dry-run
 homectl cloudflared restart --dry-run --json
 homectl up example.com --dry-run --json
@@ -159,6 +161,7 @@ homectl up example.com --dry-run
 - `homectl restart <hostname> [--dry-run] [--json]`
 - `homectl list [--json]`
 - `homectl cloudflared status [--json]`
+- `homectl cloudflared logs [--follow] [--json]`
 - `homectl cloudflared restart [--dry-run] [--json]`
 - `homectl validate [--json]`
 - `homectl doctor <hostname> [--json]`
@@ -172,6 +175,7 @@ homectl up example.com --dry-run
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results.
 - `cloudflared status` reports the detected runtime mode, whether it is active, and the restart command when one is available.
+- `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
 - `domain add` also reconciles apex and wildcard hostname entries in the configured `cloudflared` ingress file so new domains route locally to Traefik.
 - `domain repair` converges apex and wildcard DNS records and matching `cloudflared` ingress entries to the expected state.
