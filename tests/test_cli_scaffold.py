@@ -1234,6 +1234,41 @@ def test_deploy_json_output(monkeypatch, tmp_path: Path) -> None:
     assert restart_payload["commands"][1]["command"] == ["docker", "compose", "up", "-d"]
 
 
+def test_deploy_json_reports_missing_stack(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["up", "missing.example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "up"
+    assert payload["ok"] is False
+    assert payload["stack_dir"] is None
+    assert "hostname directory does not exist" in payload["error"]
+
+
+def test_deploy_json_reports_missing_compose(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+    (sites_root / "example.com").mkdir(parents=True)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["down", "example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "down"
+    assert payload["ok"] is False
+    assert payload["stack_dir"] is None
+    assert "missing docker-compose.yml" in payload["error"]
+
+
 def test_validate_json_output(monkeypatch, tmp_path: Path) -> None:
     from homectl.commands import validate_cmd
 

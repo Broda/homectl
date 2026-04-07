@@ -28,7 +28,7 @@ def up(
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
 ) -> None:
     """Run docker compose up -d for a hostname."""
-    stack_dir = _resolve_stack_dir(hostname)
+    stack_dir = _resolve_stack_dir_for_output(hostname, json_output, "up", dry_run)
     command = ["docker", "compose", "up", "-d"]
     result = run_command(command, cwd=stack_dir, dry_run=dry_run, quiet=json_output)
     _emit_deploy_result(result, f"docker compose up for {hostname}", hostname, stack_dir, dry_run, json_output, "up")
@@ -42,7 +42,7 @@ def down(
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
 ) -> None:
     """Run docker compose down for a hostname."""
-    stack_dir = _resolve_stack_dir(hostname)
+    stack_dir = _resolve_stack_dir_for_output(hostname, json_output, "down", dry_run)
     command = ["docker", "compose", "down"]
     result = run_command(command, cwd=stack_dir, dry_run=dry_run, quiet=json_output)
     _emit_deploy_result(result, f"docker compose down for {hostname}", hostname, stack_dir, dry_run, json_output, "down")
@@ -56,7 +56,7 @@ def restart(
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
 ) -> None:
     """Restart a hostname stack by bringing it down and up again."""
-    stack_dir = _resolve_stack_dir(hostname)
+    stack_dir = _resolve_stack_dir_for_output(hostname, json_output, "restart", dry_run)
     executed: list[dict[str, object]] = []
     for command, label in (
         (["docker", "compose", "down"], "docker compose down"),
@@ -232,3 +232,23 @@ def _command_result_to_dict(result) -> dict[str, object]:
         "stdout": result.stdout,
         "stderr": result.stderr,
     }
+
+
+def _resolve_stack_dir_for_output(hostname: str, json_output: bool, action: str, dry_run: bool) -> Path:
+    try:
+        return _resolve_stack_dir(hostname)
+    except typer.BadParameter as exc:
+        if json_output:
+            payload = _deploy_payload(
+                hostname=hostname,
+                stack_dir=Path(),
+                action=action,
+                dry_run=dry_run,
+                ok=False,
+                commands=[],
+                error=str(exc),
+            )
+            payload["stack_dir"] = None
+            typer.echo(json.dumps(payload, indent=2))
+            raise typer.Exit(code=1) from exc
+        raise
