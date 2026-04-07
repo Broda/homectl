@@ -440,6 +440,223 @@ def test_domain_remove_restarts_cloudflared_when_requested(monkeypatch, tmp_path
     assert "Restarted cloudflared" in result.output
 
 
+def test_domain_status_reports_ok(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com"])
+
+    assert result.exit_code == 0, result.output
+    assert "PASS DNS example.com: CNAME -> 11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)" in result.output
+    assert "PASS ingress *.example.com: http://localhost:8081" in result.output
+    assert "Overall status for example.com: ok" in result.output
+
+
+def test_domain_status_reports_partial(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            if record_name == "example.com":
+                return type(
+                    "Status",
+                    (),
+                    {
+                        "record_name": record_name,
+                        "exists": True,
+                        "record_type": "CNAME",
+                        "content": expected_content,
+                        "proxied": True,
+                        "matches_expected": True,
+                    },
+                )()
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": False,
+                    "record_type": "",
+                    "content": "",
+                    "proxied": False,
+                    "matches_expected": False,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com"])
+
+    assert result.exit_code == 1, result.output
+    assert "FAIL DNS *.example.com: record missing" in result.output
+    assert "FAIL ingress *.example.com: entry missing" in result.output
+    assert "Overall status for example.com: partial" in result.output
+
+
+def test_domain_status_reports_misconfigured(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:9000"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            content = "wrong-target.example.com" if record_name == "example.com" else expected_content
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": content,
+                    "proxied": True,
+                    "matches_expected": record_name != "example.com",
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com"])
+
+    assert result.exit_code == 1, result.output
+    assert "FAIL DNS example.com: CNAME -> wrong-target.example.com (proxied)" in result.output
+    assert "FAIL ingress example.com: http://localhost:9000" in result.output
+    assert "Overall status for example.com: misconfigured" in result.output
+
+
 def test_deploy_dry_run_commands(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"

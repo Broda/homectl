@@ -31,6 +31,16 @@ class ApiPlan:
     content: str
 
 
+@dataclass(slots=True)
+class DnsRecordStatus:
+    record_name: str
+    exists: bool
+    record_type: str
+    content: str
+    proxied: bool
+    matches_expected: bool
+
+
 class CloudflareApiClient:
     def __init__(self, api_token: str) -> None:
         token = api_token.strip()
@@ -144,6 +154,36 @@ class CloudflareApiClient:
         record_content = str(record.get("content", "")).strip()
         self._request_json("DELETE", f"/zones/{zone_id}/dns_records/{record_id}")
         return ApiPlan("delete", record_name, record_type, record_content)
+
+    def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str) -> DnsRecordStatus:
+        existing = self._list_dns_records(zone_id, record_name)
+        if not existing:
+            return DnsRecordStatus(
+                record_name=record_name,
+                exists=False,
+                record_type="",
+                content="",
+                proxied=False,
+                matches_expected=False,
+            )
+        if len(existing) > 1:
+            raise CloudflareApiError(
+                f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
+            )
+
+        record = existing[0]
+        record_type = str(record.get("type", "")).strip()
+        content = str(record.get("content", "")).strip()
+        proxied = bool(record.get("proxied"))
+        matches_expected = record_type == "CNAME" and content == expected_content and proxied
+        return DnsRecordStatus(
+            record_name=record_name,
+            exists=True,
+            record_type=record_type,
+            content=content,
+            proxied=proxied,
+            matches_expected=matches_expected,
+        )
 
     def _list_dns_records(self, zone_id: str, record_name: str) -> list[dict[str, object]]:
         encoded = urllib.parse.quote(record_name, safe="")
