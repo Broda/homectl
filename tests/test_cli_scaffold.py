@@ -74,6 +74,68 @@ def test_app_init_node_template_creates_placeholder(monkeypatch, tmp_path: Path)
     assert (app_dir / "README.node-template.md").exists()
 
 
+def test_cloudflared_status_json_output(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="docker",
+            active=True,
+            detail="running container(s): cloudflared",
+            restart_command=["docker", "restart", "cloudflared"],
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "status", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["mode"] == "docker"
+    assert payload["restart_command"] == ["docker", "restart", "cloudflared"]
+
+
+def test_cloudflared_restart_dry_run(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="systemd",
+            active=True,
+            detail="systemd service is active",
+            restart_command=["systemctl", "restart", "cloudflared"],
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "restart", "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "[dry-run] systemctl restart cloudflared" in result.output
+    assert "Dry-run complete for cloudflared restart via systemd" in result.output
+
+
+def test_cloudflared_restart_reports_unmanaged_process(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "restart_cloudflared_service",
+        lambda: (_ for _ in ()).throw(cloudflared_cmd.CloudflaredServiceError("process present; restart cloudflared manually")),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "restart"])
+
+    assert result.exit_code == 1, result.output
+    assert "restart cloudflared manually" in result.output
+
+
 def test_domain_add_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None:
     from homectl.commands import domain_cmd
 
