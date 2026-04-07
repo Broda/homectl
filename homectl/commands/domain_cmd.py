@@ -223,7 +223,7 @@ def domain_status(
         raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
 
     overall = _overall_domain_status(dns_statuses, ingress_statuses, config.traefik_url)
-    repairable = _domain_status_repairability(overall, ingress_statuses)
+    repairable = _domain_status_repairability(overall, dns_statuses, ingress_statuses)
     suggested_command = f"homectl domain repair {bare_domain}" if repairable else None
     if json_output:
         payload = {
@@ -243,6 +243,10 @@ def domain_status(
                     "content": status.content,
                     "proxied": status.proxied,
                     "matches_expected": status.matches_expected,
+                    "multiple_records": getattr(status, "multiple_records", False),
+                    "record_count": getattr(status, "record_count", 1 if status.exists else 0),
+                    "detail": _dns_status_detail(status),
+                    "records": getattr(status, "records", []),
                 }
                 for status in dns_statuses
             ],
@@ -271,11 +275,12 @@ def domain_status(
                 bullet_report("FAIL", f"DNS {status.record_name}", "record missing", False)
                 continue
 
-            detail = f"{status.record_type} -> {status.content}"
-            if status.proxied:
-                detail += " (proxied)"
-            ok = status.matches_expected
-            bullet_report("PASS" if ok else "FAIL", f"DNS {status.record_name}", detail, ok)
+            bullet_report(
+                "PASS" if status.matches_expected else "FAIL",
+                f"DNS {status.record_name}",
+                _dns_status_detail(status),
+                status.matches_expected,
+            )
 
         for status in ingress_statuses:
             ok = status["matches_expected"]
@@ -548,9 +553,13 @@ def _build_domain_ingress_statuses(config_path, domain: str, expected_service: s
 def _overall_domain_status(dns_statuses, ingress_statuses, expected_service: str) -> str:  # noqa: ANN001
     dns_exists = [status.exists for status in dns_statuses]
     dns_matches = [status.matches_expected for status in dns_statuses]
+    dns_conflicts = [getattr(status, "multiple_records", False) for status in dns_statuses]
     ingress_exists = [status["service"] is not None for status in ingress_statuses]
     ingress_matches = [status["matches_expected"] for status in ingress_statuses]
-    dns_wrong = [status.exists and not status.matches_expected for status in dns_statuses]
+    dns_wrong = [
+        status.exists and not status.matches_expected and not getattr(status, "multiple_records", False)
+        for status in dns_statuses
+    ]
     ingress_wrong = [
         status["service"] is not None and not status["matches_expected"]
         for status in ingress_statuses
@@ -558,7 +567,7 @@ def _overall_domain_status(dns_statuses, ingress_statuses, expected_service: str
 
     if all(dns_matches) and all(ingress_matches):
         return "ok"
-    if any(dns_wrong) or any(ingress_wrong):
+    if any(dns_conflicts) or any(dns_wrong) or any(ingress_wrong):
         return "misconfigured"
     if any(dns_exists) or any(ingress_exists):
         return "partial"
@@ -576,8 +585,10 @@ def _format_domain_error(error: Exception) -> str:
     return str(error)
 
 
-def _domain_status_repairability(overall: str, ingress_statuses) -> bool:  # noqa: ANN001
+def _domain_status_repairability(overall: str, dns_statuses, ingress_statuses) -> bool:  # noqa: ANN001
     if overall not in {"partial", "misconfigured"}:
+        return False
+    if any(getattr(status, "multiple_records", False) for status in dns_statuses):
         return False
     return not any(status["shadowed"] for status in ingress_statuses)
 
@@ -625,3 +636,13 @@ def _domain_mutation_payload(
     if error:
         payload["error"] = error
     return payload
+
+
+def _dns_status_detail(status) -> str:  # noqa: ANN001
+    detail = getattr(status, "detail", "")
+    if detail:
+        return detail
+    rendered = f"{status.record_type} -> {status.content}"
+    if status.proxied:
+        rendered += " (proxied)"
+    return rendered

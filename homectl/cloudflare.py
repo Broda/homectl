@@ -5,7 +5,7 @@ import re
 import urllib.parse
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import typer
 import yaml
@@ -39,6 +39,10 @@ class DnsRecordStatus:
     content: str
     proxied: bool
     matches_expected: bool
+    multiple_records: bool = False
+    record_count: int = 0
+    detail: str = ""
+    records: list[dict[str, object]] = field(default_factory=list)
 
 
 class CloudflareApiClient:
@@ -165,10 +169,21 @@ class CloudflareApiClient:
                 content="",
                 proxied=False,
                 matches_expected=False,
+                detail="record missing",
             )
         if len(existing) > 1:
-            raise CloudflareApiError(
-                f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
+            rendered_records = [_render_dns_record(record) for record in existing]
+            return DnsRecordStatus(
+                record_name=record_name,
+                exists=True,
+                record_type="multiple",
+                content="",
+                proxied=any(bool(record.get("proxied")) for record in existing),
+                matches_expected=False,
+                multiple_records=True,
+                record_count=len(existing),
+                detail=f"multiple DNS records exist: {', '.join(rendered_records)}",
+                records=_records_to_status_records(existing),
             )
 
         record = existing[0]
@@ -176,6 +191,9 @@ class CloudflareApiClient:
         content = str(record.get("content", "")).strip()
         proxied = bool(record.get("proxied"))
         matches_expected = record_type == "CNAME" and content == expected_content and proxied
+        detail = f"{record_type} -> {content}"
+        if proxied:
+            detail += " (proxied)"
         return DnsRecordStatus(
             record_name=record_name,
             exists=True,
@@ -183,6 +201,9 @@ class CloudflareApiClient:
             content=content,
             proxied=proxied,
             matches_expected=matches_expected,
+            record_count=1,
+            detail=detail,
+            records=_records_to_status_records(existing),
         )
 
     def _list_dns_records(self, zone_id: str, record_name: str) -> list[dict[str, object]]:
@@ -254,3 +275,25 @@ def _resolve_tunnel_id(config: HomectlConfig) -> str:
                 return tunnel_id.lower()
 
     raise typer.BadParameter(f"could not parse tunnel ID from cloudflared tunnel info for {config.tunnel_name}")
+
+
+def _render_dns_record(record: dict[str, object]) -> str:
+    record_type = str(record.get("type", "")).strip() or "DNS"
+    content = str(record.get("content", "")).strip()
+    detail = f"{record_type} -> {content}"
+    if bool(record.get("proxied")):
+        detail += " (proxied)"
+    return detail
+
+
+def _records_to_status_records(records: list[dict[str, object]]) -> list[dict[str, object]]:
+    rendered: list[dict[str, object]] = []
+    for record in records:
+        rendered.append(
+            {
+                "type": str(record.get("type", "")).strip(),
+                "content": str(record.get("content", "")).strip(),
+                "proxied": bool(record.get("proxied")),
+            }
+        )
+    return rendered
