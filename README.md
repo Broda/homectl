@@ -1,5 +1,7 @@
 # homectl
 
+MIT licensed.
+
 `homectl` is a production-oriented Python CLI for managing a home-server hosting platform built around:
 
 - Cloudflare DNS

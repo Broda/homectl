@@ -8,6 +8,24 @@ version = "0.1.0"
 description = "CLI for managing a home-server hosting platform backed by Cloudflare Tunnel, Traefik, and Docker Compose."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  {name = "David Green"},
+]
+keywords = ["cloudflare", "tunnel", "traefik", "docker", "homelab", "cli"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: Proxy Servers",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Utilities",
+]
 dependencies = [
   "Jinja2>=3.1.0",
   "PyYAML>=6.0",
