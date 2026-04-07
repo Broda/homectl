@@ -7,7 +7,12 @@ import urllib.request
 import typer
 import yaml
 
-from homectl.cloudflared import CloudflaredConfigError, find_hostname_route, validate_ingress_config
+from homectl.cloudflared import (
+    CloudflaredConfigError,
+    describe_cloudflared_config_error,
+    find_hostname_route,
+    validate_ingress_config,
+)
 from homectl.cloudflared_service import detect_cloudflared_runtime
 from homectl.config import load_config
 from homectl.models import CheckResult, HomectlConfig
@@ -143,7 +148,7 @@ def _check_cloudflared_ingress_config(config: HomectlConfig) -> CheckResult:
     try:
         fallback = validate_ingress_config(config.cloudflared_config)
     except (CloudflaredConfigError, typer.BadParameter) as exc:
-        return CheckResult("cloudflared ingress config", False, str(exc))
+        return CheckResult("cloudflared ingress config", False, describe_cloudflared_config_error(exc))
     return CheckResult("cloudflared ingress config", True, f"fallback service {fallback}")
 
 
@@ -167,7 +172,7 @@ def _check_cloudflared_hostname(config: HomectlConfig, hostname: str) -> CheckRe
     try:
         service = find_hostname_route(config.cloudflared_config, hostname)
     except (CloudflaredConfigError, typer.BadParameter) as exc:
-        return CheckResult("cloudflared ingress hostname", False, str(exc))
+        return CheckResult("cloudflared ingress hostname", False, describe_cloudflared_config_error(exc))
     if not service:
         return CheckResult("cloudflared ingress hostname", False, f"no ingress entry for {hostname}")
     return CheckResult("cloudflared ingress hostname", True, f"{hostname} routes to {service}")

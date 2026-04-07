@@ -9,6 +9,7 @@ from homectl.cloudflared import (
     CloudflaredConfigError,
     apply_domain_ingress,
     apply_domain_ingress_removal,
+    describe_cloudflared_config_error,
     find_exact_hostname_route,
     plan_domain_ingress,
     plan_domain_ingress_removal,
@@ -100,9 +101,9 @@ def domain_remove(
             }.get(change.action, change.action)
             info(f"{prefix}{action_label} ingress {change.hostname}")
     except (CloudflareApiError, typer.BadParameter) as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
     except CloudflaredConfigError as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
 
     if dry_run:
         success(f"Dry-run complete for domain {bare_domain}")
@@ -139,9 +140,9 @@ def domain_status(
             for record_name in records
         ]
     except (CloudflareApiError, typer.BadParameter) as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
     except CloudflaredConfigError as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
 
     overall = _overall_domain_status(dns_statuses, ingress_statuses, config.traefik_url)
     if json_output:
@@ -254,9 +255,9 @@ def _upsert_domain_routing(domain: str, dry_run: bool, restart_cloudflared: bool
             }.get(change.action, change.action)
             info(f"{prefix}{action_label} ingress {change.hostname} -> {change.service}")
     except (CloudflareApiError, typer.BadParameter) as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
     except CloudflaredConfigError as exc:
-        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+        raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
 
     if dry_run:
         success(f"Dry-run complete for domain {bare_domain}")
@@ -317,3 +318,9 @@ def _overall_domain_status(dns_statuses, ingress_statuses, expected_service: str
 def _exit_with_error(message: str) -> int:
     typer.secho(message, fg=typer.colors.RED, err=True)
     return 1
+
+
+def _format_domain_error(error: Exception) -> str:
+    if isinstance(error, (CloudflaredConfigError, typer.BadParameter)):
+        return describe_cloudflared_config_error(error)
+    return str(error)

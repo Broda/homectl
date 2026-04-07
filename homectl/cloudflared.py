@@ -18,6 +18,14 @@ class IngressChange:
     service: str
 
 
+def describe_cloudflared_config_error(error: CloudflaredConfigError | typer.BadParameter) -> str:
+    message = str(error)
+    hint = _cloudflared_config_hint(message)
+    if not hint:
+        return message
+    return f"{message}. Hint: {hint}"
+
+
 def plan_domain_ingress(config_path: Path, domain: str, service_url: str) -> list[IngressChange]:
     parsed = _load_config(config_path)
     ingress = _normalize_ingress(parsed, config_path)
@@ -207,3 +215,24 @@ def _wildcard_for(hostname: str) -> str | None:
     if len(labels) < 3:
         return None
     return f"*.{'.'.join(labels[1:])}"
+
+
+def _cloudflared_config_hint(message: str) -> str | None:
+    if "duplicate ingress hostname entry found:" in message:
+        hostname = message.rsplit(":", 1)[-1].strip()
+        return f"remove the duplicate '{hostname}' ingress entry so the hostname appears only once"
+    if "fallback service must be the last ingress entry" in message:
+        return "move the hostname-less fallback service to the end of the ingress list"
+    if "must contain exactly one fallback service" in message:
+        return "keep exactly one hostname-less fallback service entry in the ingress list"
+    if "missing a fallback service" in message:
+        return "add one hostname-less fallback service entry, usually service: http_status:404, at the end"
+    if "entries must be mappings" in message:
+        return "rewrite each ingress entry as a YAML mapping with keys like hostname and service"
+    if "must be a non-empty list" in message:
+        return "define ingress as a YAML list with hostname routes followed by one fallback service"
+    if "config file missing" in message:
+        return "create the configured cloudflared YAML file or point homectl at the correct path"
+    if "invalid cloudflared config YAML" in message:
+        return "fix the YAML syntax before retrying"
+    return None
