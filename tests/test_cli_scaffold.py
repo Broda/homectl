@@ -98,6 +98,30 @@ def test_cloudflared_status_json_output(monkeypatch) -> None:
     assert payload["restart_command"] == ["docker", "restart", "cloudflared"]
 
 
+def test_cloudflared_status_json_failure(monkeypatch) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="absent",
+            active=False,
+            detail="cloudflared not detected via systemd, docker, or process scan",
+            restart_command=None,
+        ),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "status", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["mode"] == "absent"
+    assert payload["active"] is False
+
+
 def test_cloudflared_restart_dry_run(monkeypatch) -> None:
     from homectl.commands import cloudflared_cmd
 
