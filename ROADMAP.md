@@ -67,12 +67,29 @@
 - Expand `app init` templates beyond the current placeholder and minimal scaffolds.
 - Consider additional templates for common self-hosted app patterns such as a static app plus API.
 - Decide how much opinionated app bootstrap belongs in `homectl` versus remaining a minimal Compose scaffold generator.
-- Decide whether to publish to PyPI or stay GitHub-install only.
-  If PyPI is enabled later, choose trusted publishing or token-based publishing.
+- Publish to PyPI in addition to GitHub Releases.
+- Choose the PyPI publishing trust model.
+  Decide between PyPI trusted publishing and API-token publishing, with trusted publishing preferred if the repository and package setup fit.
+- Create and document the PyPI project.
+  Reserve the package name, populate package metadata needed for PyPI, and verify the long description renders correctly before enabling publication.
+- Extend the release workflow for PyPI publication.
+  Keep GitHub Releases as the current artifact channel, add a publish-on-tag step after artifact build and release gating, and ensure failures are isolated clearly between GitHub Release creation and PyPI upload.
+- Add a safe release path for initial PyPI rollout.
+  Start with TestPyPI or a manual dry-run path, confirm the built wheel and sdist install cleanly, then enable production PyPI publishing.
+- Update public install guidance once PyPI is live.
+  Change the README to prefer `pip install homectl`, keep the GitHub install path as a fallback, and update `RELEASING.md` with the exact PyPI release flow.
 - Add richer configuration options for more than one local ingress target or routing profile.
 - Support more than one local ingress URL when operators do not front everything through the same Traefik listener.
-- Consider per-domain or per-stack overrides for ingress target and docker network.
-- Decide whether multi-profile hosting belongs in one config file or separate config environments.
+- Add product-level support for per-domain or per-stack ingress overrides.
+  Allow one hosted stack to target a non-default local ingress URL without forcing a second global config file.
+- Add product-level support for per-domain or per-stack Docker network overrides.
+  Make it possible for stacks to join a non-default external network when the operator does not use the standard shared network.
+- Define the routing-profile model before adding more flags.
+  Decide whether multi-profile hosting belongs in one config file, named profiles, or separate config environments so the UX stays coherent.
+- Decide how domain lifecycle commands should honor routing overrides.
+  Ensure `domain add`, `status`, `repair`, and `remove` can report and reconcile the correct ingress target when a domain is not using the default profile.
+- Add product-focused tests for non-default routing setups.
+  Cover alternate ingress URLs, alternate Docker networks, and mixed default-versus-overridden stacks so the operator model stays reliable.
 - Consider broader Cloudflare API coverage where it meaningfully improves reliability over CLI-based flows.
 - Review whether tunnel inspection or management should move further from `cloudflared` CLI usage to the API.
 - Evaluate whether any remaining CLI-only flows are fragile enough to justify API replacements.
