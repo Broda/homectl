@@ -5,7 +5,6 @@
 ## Now
 
 - Tighten validation and error messages around partial or conflicting domain state.
-- Add more ingress diagnostics for partial wildcard coverage versus apex-only coverage.
 - Make ambiguous state messages more explicit about what `repair` can fix automatically versus what requires manual cleanup.
 - Review remaining non-JSON error paths and make sure they stay concise and actionable.
 - Keep the test suite and CI green as the CLI surface grows.
@@ -40,6 +39,7 @@
 - Added a repairability signal and suggested repair command to `homectl domain status`.
 - Added domain-status diagnostics for earlier ingress rules that shadow the requested hostname.
 - Added domain-status diagnostics for ambiguous Cloudflare DNS state such as multiple records for the same hostname.
+- Added explicit apex-only versus wildcard-only coverage diagnostics for domain status.
 - Added `homectl domain repair` to converge stale or partial domain state.
 - Added `--json` output for `domain add`, `domain repair`, and `domain remove`.
 - Added a shared `cloudflared` service-management abstraction for runtime detection and restart handling.

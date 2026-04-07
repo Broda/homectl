@@ -225,6 +225,7 @@ def domain_status(
     overall = _overall_domain_status(dns_statuses, ingress_statuses, config.traefik_url)
     repairable = _domain_status_repairability(overall, dns_statuses, ingress_statuses)
     suggested_command = f"homectl domain repair {bare_domain}" if repairable else None
+    coverage_issues = _coverage_issues(dns_statuses, ingress_statuses)
     if json_output:
         payload = {
             "domain": bare_domain,
@@ -235,6 +236,7 @@ def domain_status(
             "repairable": repairable,
             "manual_fix_required": not repairable and overall != "ok",
             "suggested_command": suggested_command,
+            "coverage_issues": coverage_issues,
             "dns": [
                 {
                     "record_name": status.record_name,
@@ -298,6 +300,8 @@ def domain_status(
 
     if not json_output:
         warn(f"Overall status for {bare_domain}: {overall}")
+        for issue in coverage_issues:
+            warn(issue)
         if repairable:
             info(f"Repairable by homectl: yes")
             info(f"Suggested command: {suggested_command}")
@@ -595,6 +599,24 @@ def _domain_status_repairability(overall: str, dns_statuses, ingress_statuses) -
 
 def _wildcard_probe_hostname(domain: str) -> str:
     return f"_homectl-probe.{domain}"
+
+
+def _coverage_issues(dns_statuses, ingress_statuses) -> list[str]:  # noqa: ANN001
+    issues: list[str] = []
+    apex_dns_exists = dns_statuses[0].exists
+    wildcard_dns_exists = dns_statuses[1].exists
+    apex_ingress_exists = ingress_statuses[0]["service"] is not None
+    wildcard_ingress_exists = ingress_statuses[1]["service"] is not None
+
+    if apex_dns_exists and not wildcard_dns_exists:
+        issues.append("DNS coverage is apex-only; wildcard DNS is missing")
+    if wildcard_dns_exists and not apex_dns_exists:
+        issues.append("DNS coverage is wildcard-only; apex DNS is missing")
+    if apex_ingress_exists and not wildcard_ingress_exists:
+        issues.append("Ingress coverage is apex-only; wildcard ingress is missing")
+    if wildcard_ingress_exists and not apex_ingress_exists:
+        issues.append("Ingress coverage is wildcard-only; apex ingress is missing")
+    return issues
 
 
 def _dns_result_to_dict(result) -> dict[str, object]:
