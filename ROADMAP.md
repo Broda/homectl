@@ -28,6 +28,7 @@
 - Added `cloudflared status` and `cloudflared restart` commands.
 - Added `--json` output for `cloudflared restart`.
 - Added `--json` output for `up`, `down`, and `restart`.
+- Added `--json` output for `site init` and `app init`.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
 

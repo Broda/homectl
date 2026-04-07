@@ -74,6 +74,63 @@ def test_app_init_node_template_creates_placeholder(monkeypatch, tmp_path: Path)
     assert (app_dir / "README.node-template.md").exists()
 
 
+def test_site_init_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["site", "init", "test.example.com", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "site_init"
+    assert payload["hostname"] == "test.example.com"
+    assert payload["dry_run"] is True
+    assert payload["ok"] is True
+    assert payload["files"][0].endswith("/test.example.com/docker-compose.yml")
+
+
+def test_app_init_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "notes.example.com", "--template", "node", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "app_init"
+    assert payload["hostname"] == "notes.example.com"
+    assert payload["template"] == "node"
+    assert payload["dry_run"] is True
+    assert payload["ok"] is True
+    assert payload["files"][-1].endswith("/notes.example.com/README.node-template.md")
+
+
+def test_app_init_json_reports_overwrite_error(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    target_dir = sites_root / "notes.example.com"
+    target_dir.mkdir(parents=True)
+    (target_dir / "docker-compose.yml").write_text("existing\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "notes.example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "app_init"
+    assert payload["ok"] is False
+    assert "refusing to overwrite existing file without --force" in payload["error"]
+
+
 def test_cloudflared_status_json_output(monkeypatch) -> None:
     from homectl.commands import cloudflared_cmd
 

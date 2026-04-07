@@ -66,18 +66,20 @@ def validate_bare_domain(domain: str) -> str:
     )
 
 
-def ensure_directory(path: Path, dry_run: bool = False) -> None:
+def ensure_directory(path: Path, dry_run: bool = False, quiet: bool = False) -> None:
     if dry_run:
-        info(f"[dry-run] mkdir -p {path}")
+        if not quiet:
+            info(f"[dry-run] mkdir -p {path}")
         return
     path.mkdir(parents=True, exist_ok=True)
 
 
-def write_text_file(path: Path, content: str, force: bool, dry_run: bool = False) -> None:
+def write_text_file(path: Path, content: str, force: bool, dry_run: bool = False, quiet: bool = False) -> None:
     if path.exists() and not force:
         raise typer.BadParameter(f"refusing to overwrite existing file without --force: {path}")
     if dry_run:
-        info(f"[dry-run] write {path}")
+        if not quiet:
+            info(f"[dry-run] write {path}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")

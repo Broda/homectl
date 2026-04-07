@@ -140,7 +140,8 @@ homectl down example.com --dry-run --json
 homectl restart example.com --dry-run --json
 homectl validate --json
 homectl doctor example.com --json
-homectl site init example.com --dry-run
+homectl site init example.com --dry-run --json
+homectl app init app.example.com --template placeholder --dry-run --json
 homectl up example.com --dry-run
 ```
 
@@ -151,8 +152,8 @@ homectl up example.com --dry-run
 - `homectl domain status <domain> [--json]`
 - `homectl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homectl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
-- `homectl site init <hostname> [--force] [--dry-run]`
-- `homectl app init <hostname> [--template static|placeholder|node] [--force] [--dry-run]`
+- `homectl site init <hostname> [--force] [--dry-run] [--json]`
+- `homectl app init <hostname> [--template static|placeholder|node] [--force] [--dry-run] [--json]`
 - `homectl up <hostname> [--dry-run] [--json]`
 - `homectl down <hostname> [--dry-run] [--json]`
 - `homectl restart <hostname> [--dry-run] [--json]`
@@ -169,6 +170,7 @@ homectl up example.com --dry-run
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, and apex and wildcard `cloudflared` ingress state.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
+- `site init` and `app init` support `--json` for machine-readable scaffold results.
 - `cloudflared status` reports the detected runtime mode, whether it is active, and the restart command when one is available.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
 - `domain add` also reconciles apex and wildcard hostname entries in the configured `cloudflared` ingress file so new domains route locally to Traefik.
