@@ -287,6 +287,83 @@ def test_cloudflared_logs_json_reports_unmanaged_process(monkeypatch) -> None:
     assert payload["logs_command"] is None
 
 
+def test_cloudflared_config_test_reports_cli_validation(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "test_cloudflared_config",
+        lambda path: type(
+            "Validation",
+            (),
+            {
+                "ok": True,
+                "detail": "Everything OK",
+                "command": ["cloudflared", "tunnel", "--config", str(path), "ingress", "validate"],
+                "method": "cloudflared",
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "config-test"])
+
+    assert result.exit_code == 0, result.output
+    assert "$ cloudflared tunnel --config" in result.output
+    assert "Everything OK" in result.output
+
+
+def test_cloudflared_config_test_json_reports_structural_fallback(monkeypatch, tmp_path: Path) -> None:
+    from homectl.commands import cloudflared_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homectl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "test_cloudflared_config",
+        lambda path: type(
+            "Validation",
+            (),
+            {
+                "ok": True,
+                "detail": "fallback service http_status:404",
+                "command": None,
+                "method": "structural",
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "config-test", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["method"] == "structural"
+    assert payload["command"] is None
+    assert payload["detail"] == "fallback service http_status:404"
+
+
 def test_cloudflared_restart_json_failure(monkeypatch) -> None:
     from homectl.commands import cloudflared_cmd
 

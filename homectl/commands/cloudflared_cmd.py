@@ -4,11 +4,13 @@ import json
 
 import typer
 
+from homectl.cloudflared import test_cloudflared_config
 from homectl.cloudflared_service import (
     CloudflaredServiceError,
     detect_cloudflared_runtime,
     restart_cloudflared_service,
 )
+from homectl.config import load_config
 from homectl.utils import info, success, warn
 
 cloudflared_cli = typer.Typer(help="Inspect and control the local cloudflared runtime.")
@@ -100,6 +102,33 @@ def cloudflared_logs(
         else:
             warn(f"No automatic log command available for {runtime.mode}: {runtime.detail}")
     if not ok:
+        raise typer.Exit(code=1)
+
+
+@cloudflared_cli.command("config-test")
+def cloudflared_config_test(
+    json_output: bool = typer.Option(False, "--json", help="Print the config-test result as JSON."),
+) -> None:
+    """Validate the configured cloudflared ingress config."""
+    config = load_config()
+    result = test_cloudflared_config(config.cloudflared_config)
+    payload = {
+        "ok": result.ok,
+        "config_path": str(config.cloudflared_config),
+        "method": result.method,
+        "command": result.command,
+        "detail": result.detail,
+    }
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        if result.command:
+            info(f"$ {' '.join(result.command)}")
+        if result.ok:
+            success(result.detail)
+        else:
+            warn(result.detail)
+    if not result.ok:
         raise typer.Exit(code=1)
 
 

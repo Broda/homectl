@@ -8,10 +8,10 @@ import typer
 import yaml
 
 from homectl.cloudflared import (
+    find_hostname_route,
+    test_cloudflared_config,
     CloudflaredConfigError,
     describe_cloudflared_config_error,
-    find_hostname_route,
-    validate_ingress_config,
 )
 from homectl.cloudflared_service import detect_cloudflared_runtime
 from homectl.config import load_config
@@ -143,13 +143,12 @@ def _check_traefik_http(config: HomectlConfig) -> CheckResult:
 
 
 def _check_cloudflared_ingress_config(config: HomectlConfig) -> CheckResult:
-    if not config.cloudflared_config.exists():
-        return CheckResult("cloudflared ingress config", False, f"missing file: {config.cloudflared_config}")
-    try:
-        fallback = validate_ingress_config(config.cloudflared_config)
-    except (CloudflaredConfigError, typer.BadParameter) as exc:
-        return CheckResult("cloudflared ingress config", False, describe_cloudflared_config_error(exc))
-    return CheckResult("cloudflared ingress config", True, f"fallback service {fallback}")
+    result = test_cloudflared_config(config.cloudflared_config)
+    if result.command:
+        detail = f"{' '.join(result.command)}: {result.detail}"
+    else:
+        detail = result.detail
+    return CheckResult("cloudflared ingress config", result.ok, detail)
 
 
 def _check_host_header(config: HomectlConfig, hostname: str) -> CheckResult:

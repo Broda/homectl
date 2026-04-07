@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 import yaml
+from homectl.shell import command_exists, run_command
 
 
 class CloudflaredConfigError(RuntimeError):
@@ -22,6 +23,14 @@ class IngressChange:
 class IngressRouteMatch:
     hostname: str
     service: str
+
+
+@dataclass(slots=True)
+class CloudflaredConfigValidation:
+    ok: bool
+    detail: str
+    command: list[str] | None = None
+    method: str = "structural"
 
 
 def describe_cloudflared_config_error(error: CloudflaredConfigError | typer.BadParameter) -> str:
@@ -79,6 +88,33 @@ def validate_ingress_config(config_path: Path) -> str:
     ingress = _normalize_ingress(parsed, config_path)
     fallback = ingress[-1]
     return str(fallback.get("service", "")).strip()
+
+
+def test_cloudflared_config(config_path: Path) -> CloudflaredConfigValidation:
+    if command_exists("cloudflared"):
+        command = ["cloudflared", "tunnel", "--config", str(config_path), "ingress", "validate"]
+        result = run_command(command, quiet=True)
+        if result.ok:
+            detail = result.stdout or result.stderr or f"cloudflared ingress validate passed for {config_path}"
+            return CloudflaredConfigValidation(ok=True, detail=detail, command=command, method="cloudflared")
+        detail = result.stderr or result.stdout or "cloudflared ingress validate failed"
+        return CloudflaredConfigValidation(ok=False, detail=detail, command=command, method="cloudflared")
+
+    try:
+        fallback = validate_ingress_config(config_path)
+    except (CloudflaredConfigError, typer.BadParameter) as exc:
+        return CloudflaredConfigValidation(
+            ok=False,
+            detail=describe_cloudflared_config_error(exc),
+            command=None,
+            method="structural",
+        )
+    return CloudflaredConfigValidation(
+        ok=True,
+        detail=f"fallback service {fallback}",
+        command=None,
+        method="structural",
+    )
 
 
 def find_hostname_route(config_path: Path, hostname: str) -> str | None:

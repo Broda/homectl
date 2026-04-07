@@ -28,7 +28,6 @@
 - Decide whether `cloudflared status` and restart output should expose a stable schema version for automation.
 - Consider broadening the `cloudflared` command surface beyond status/restart if more service controls are needed.
 - Consider `cloudflared reload` if a safe reload mechanism exists for the detected runtime.
-- Consider `cloudflared config test` or an equivalent validation command layered on the current YAML checks.
 
 ## Recently Completed
 
@@ -46,6 +45,7 @@
 - Added `--json` output for `domain status`, `validate`, and `doctor`.
 - Added `--json` output for `list`.
 - Added `cloudflared status` and `cloudflared restart` commands.
+- Added `cloudflared config-test` with `cloudflared`-CLI validation plus structural fallback.
 - Added `cloudflared logs` guidance for systemd and Docker runtimes.
 - Added `--json` output for `cloudflared restart`.
 - Added `--json` output for `up`, `down`, and `restart`.
