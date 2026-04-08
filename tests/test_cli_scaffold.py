@@ -2728,7 +2728,7 @@ def test_domain_status_json_reports_shadowed_ingress_as_manual_fix(monkeypatch, 
     assert payload["suggested_command"] is None
     assert payload["ingress_warnings"] == [
         "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1",
-        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname *.example.com at ingress index 2",
+        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard *.example.com at ingress index 2",
     ]
     assert payload["ingress"][0]["shadowed"] is True
     assert payload["ingress"][0]["effective_hostname"] == "*.com"

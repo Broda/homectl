@@ -231,6 +231,7 @@ Tasks:
 
 Subtasks:
 - Detect more cases where one ingress rule unintentionally captures another hostname.
+  Current coverage includes broad wildcard rules that may capture traffic intended for a narrower wildcard.
 - Improve guidance around wildcard precedence.
 - Improve messaging when the config file is valid YAML but semantically unsafe.
 - Decide whether `cloudflared status` should surface config warnings directly.

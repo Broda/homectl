@@ -409,3 +409,17 @@ def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path
     assert warnings == [
         "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"
     ]
+
+
+def test_collect_cloudflared_config_warnings_reports_wildcard_precedence_risk(tmp_path: Path) -> None:
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: '*.example.com'\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+
+    warnings = collect_cloudflared_config_warnings(cloudflared_config)
+
+    assert warnings == [
+        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard *.example.com at ingress index 1"
+    ]

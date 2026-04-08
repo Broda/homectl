@@ -255,13 +255,13 @@ homesrvctl up example.com --dry-run
 - stack-local config may select a named routing profile with `profile`, and direct stack-local overrides still win over profile-provided values.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
 - `domain status` also reports routing context for the apex stack, including the default ingress target, effective ingress target, selected profile, and source attribution for the effective target.
-- `domain status` now also surfaces non-fatal ingress warnings when the configured `cloudflared` ingress file contains risky wildcard precedence that may shadow later hostnames.
+- `domain status` now also surfaces non-fatal ingress warnings when the configured `cloudflared` ingress file contains risky wildcard precedence, including earlier wildcard rules that may shadow later hostnames or capture traffic intended for a narrower wildcard.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.
 - `cloudflared status` reports the detected runtime mode, whether it is active, and the restart command when one is available.
 - `cloudflared config-test` prefers `cloudflared tunnel ingress validate --config ...` when the binary is available and falls back to structural YAML/ingress validation otherwise.
-- `cloudflared status` now also surfaces non-fatal config warnings when the ingress file is structurally valid but risky, such as an earlier wildcard rule that may shadow a later hostname rule.
+- `cloudflared status` now also surfaces non-fatal config warnings when the ingress file is structurally valid but risky, such as an earlier wildcard rule that may shadow a later hostname rule or capture traffic intended for a narrower wildcard.
 - `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
 - `cloudflared reload` is available when the detected runtime exposes a safe reload command; today that is primarily a systemd capability check rather than a guaranteed cross-runtime feature.

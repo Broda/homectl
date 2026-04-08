@@ -34,6 +34,18 @@ class CloudflaredConfigValidation:
     warnings: list[str] | None = None
 
 
+@dataclass(slots=True)
+class CloudflaredConfigWarning:
+    code: str
+    detail: str
+    hint: str | None = None
+
+    def render(self) -> str:
+        if not self.hint:
+            return self.detail
+        return f"{self.detail}. Hint: {self.hint}"
+
+
 def describe_cloudflared_config_error(error: CloudflaredConfigError | typer.BadParameter) -> str:
     message = str(error)
     hint = _cloudflared_config_hint(message)
@@ -126,9 +138,13 @@ def test_cloudflared_config(config_path: Path) -> CloudflaredConfigValidation:
 
 
 def collect_cloudflared_config_warnings(config_path: Path) -> list[str]:
+    return [warning.render() for warning in inspect_cloudflared_config_warnings(config_path)]
+
+
+def inspect_cloudflared_config_warnings(config_path: Path) -> list[CloudflaredConfigWarning]:
     parsed = _load_config(config_path)
     ingress = _normalize_ingress(parsed, config_path)
-    warnings: list[str] = []
+    warnings: list[CloudflaredConfigWarning] = []
     host_entries = [
         (index, str(entry.get("hostname", "")).strip().lower(), str(entry.get("service", "")).strip())
         for index, entry in enumerate(ingress[:-1])
@@ -138,10 +154,28 @@ def collect_cloudflared_config_warnings(config_path: Path) -> list[str]:
         for later_index, later_hostname, _later_service in host_entries[index + 1 :]:
             if hostname == later_hostname:
                 continue
+            if _wildcard_precedence_risk(hostname, later_hostname):
+                warnings.append(
+                    CloudflaredConfigWarning(
+                        code="wildcard-precedence-risk",
+                        detail=(
+                            "earlier wildcard rule "
+                            f"{hostname} -> {service} may capture hosts intended for later wildcard {later_hostname} "
+                            f"at ingress index {later_index}"
+                        ),
+                    )
+                )
+                continue
             if _hostname_matches(hostname, later_hostname):
                 warnings.append(
-                    "earlier ingress rule "
-                    f"{hostname} -> {service} may shadow later hostname {later_hostname} at ingress index {later_index}"
+                    CloudflaredConfigWarning(
+                        code="wildcard-shadows-hostname",
+                        detail=(
+                            "earlier ingress rule "
+                            f"{hostname} -> {service} may shadow later hostname {later_hostname} at ingress index "
+                            f"{later_index}"
+                        ),
+                    )
                 )
     return warnings
 
@@ -297,6 +331,18 @@ def _hostname_matches(pattern: str, hostname: str) -> bool:
         return False
 
     return hostname.count(".") > suffix.count(".")
+
+
+def _wildcard_precedence_risk(pattern: str, later_hostname: str) -> bool:
+    if not pattern.startswith("*.") or not later_hostname.startswith("*."):
+        return False
+
+    pattern_suffix = pattern[2:]
+    later_suffix = later_hostname[2:]
+    if not pattern_suffix or not later_suffix or pattern_suffix == later_suffix:
+        return False
+
+    return later_suffix.endswith(f".{pattern_suffix}")
 
 
 def _cloudflared_config_hint(message: str) -> str | None:

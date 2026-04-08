@@ -19,6 +19,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added non-fatal `cloudflared` ingress warning reporting for risky wildcard shadowing in `cloudflared status` and `cloudflared config-test`.
 - Added the same non-fatal ingress shadowing warnings to `domain status` and `doctor`.
 - Added `cloudflared reload` for runtimes that expose a safe reload command.
+- Broadened `cloudflared` ingress warning detection to cover broad wildcard rules that may capture traffic intended for a narrower wildcard.
 - Broadened mixed-routing regression coverage for default stacks, profile-backed stacks, and direct override stacks.
 
 ## 0.2.0 - 2026-04-08
