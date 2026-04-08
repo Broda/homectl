@@ -78,6 +78,8 @@ Initialize the default config:
 ```bash
 homesrvctl config init
 homesrvctl config init --json
+homesrvctl config show
+homesrvctl config show --stack example.com --json
 ```
 
 That writes:
@@ -119,6 +121,8 @@ Create config:
 
 ```bash
 homesrvctl config init
+homesrvctl config show
+homesrvctl config show --stack example.com --json
 ```
 
 Add DNS tunnel routes for a domain:
@@ -204,6 +208,7 @@ homesrvctl up example.com --dry-run
 ## Command Overview
 
 - `homesrvctl config init [--path PATH] [--force] [--json]`
+- `homesrvctl config show [--path PATH] [--stack HOSTNAME] [--json]`
 - `homesrvctl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
@@ -227,6 +232,7 @@ homesrvctl up example.com --dry-run
 - `domain add`, `domain repair`, and `domain remove` support `--json` for machine-readable mutation results.
 - all `--json` commands include a top-level `schema_version` so automation can pin to a known output shape.
 - `config init --json` reports whether the config file was created or overwritten.
+- `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.

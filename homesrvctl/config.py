@@ -72,6 +72,29 @@ def load_stack_settings(config: HomesrvctlConfig, hostname: str) -> StackSetting
     )
 
 
+def config_sources(config: HomesrvctlConfig) -> dict[str, str]:
+    return {
+        "tunnel_name": "config",
+        "sites_root": "config",
+        "docker_network": "config",
+        "traefik_url": "config",
+        "cloudflared_config": "config",
+        "cloudflare_api_token": "config" if config.cloudflare_api_token else "environment-or-empty",
+    }
+
+
+def stack_settings_sources(config: HomesrvctlConfig, settings: StackSettings) -> dict[str, str]:
+    if not settings.has_local_config:
+        return {
+            "docker_network": "global-config",
+            "traefik_url": "global-config",
+        }
+    return {
+        "docker_network": "stack-local" if settings.docker_network != config.docker_network else "global-config",
+        "traefik_url": "stack-local" if settings.traefik_url != config.traefik_url else "global-config",
+    }
+
+
 def render_stack_settings(config: HomesrvctlConfig, docker_network: str, traefik_url: str) -> str:
     overrides: dict[str, str] = {}
     if docker_network != config.docker_network:

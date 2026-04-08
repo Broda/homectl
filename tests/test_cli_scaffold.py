@@ -183,6 +183,66 @@ def test_config_init_json_reports_existing_config(monkeypatch, tmp_path: Path) -
     assert "config already exists" in payload["error"]
 
 
+def test_config_show_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "config_show"
+    assert payload["ok"] is True
+    assert payload["global"]["sites_root"] == str(sites_root)
+    assert payload["global_sources"]["docker_network"] == "config"
+    assert payload["global"]["cloudflare_api_token_present"] is True
+
+
+def test_config_show_json_output_with_stack(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+    stack_dir = sites_root / "notes.example.com"
+    stack_dir.mkdir(parents=True)
+    (stack_dir / "homesrvctl.yml").write_text("traefik_url: http://localhost:9000\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show", "--stack", "notes.example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["stack"]["hostname"] == "notes.example.com"
+    assert payload["stack"]["has_local_config"] is True
+    assert payload["stack"]["effective"]["docker_network"] == "web"
+    assert payload["stack"]["effective"]["traefik_url"] == "http://localhost:9000"
+    assert payload["stack"]["effective_sources"] == {
+        "docker_network": "global-config",
+        "traefik_url": "stack-local",
+    }
+
+
+def test_config_show_text_output_with_stack(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show", "--stack", "notes.example.com"])
+
+    assert result.exit_code == 0, result.output
+    assert "Global configuration:" in result.output
+    assert "Stack configuration for notes.example.com:" in result.output
+    assert "docker_network: web (global-config)" in result.output
+    assert "traefik_url: http://localhost:8081 (global-config)" in result.output
+
+
 def test_site_init_json_output(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"

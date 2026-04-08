@@ -6,7 +6,14 @@ import typer
 
 import yaml
 
-from homesrvctl.config import init_config, load_config, load_stack_settings, stack_config_path
+from homesrvctl.config import (
+    config_sources,
+    init_config,
+    load_config,
+    load_stack_settings,
+    stack_config_path,
+    stack_settings_sources,
+)
 
 
 def test_init_and_load_config(tmp_path: Path) -> None:
@@ -65,3 +72,32 @@ def test_load_stack_settings_uses_local_overrides(tmp_path: Path) -> None:
     assert settings.has_local_config is True
     assert settings.docker_network == "edge"
     assert settings.traefik_url == "http://localhost:9000"
+
+
+def test_stack_settings_sources_reflect_stack_local_overrides(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    init_config(config_path)
+    config_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_data["sites_root"] = str(tmp_path / "sites")
+    config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
+    config = load_config(config_path)
+    stack_dir = config.hostname_dir("example.com")
+    stack_dir.mkdir(parents=True)
+    stack_config_path(stack_dir).write_text("traefik_url: http://localhost:9000\n", encoding="utf-8")
+
+    settings = load_stack_settings(config, "example.com")
+    sources = stack_settings_sources(config, settings)
+
+    assert sources == {
+        "docker_network": "global-config",
+        "traefik_url": "stack-local",
+    }
+
+
+def test_config_sources_report_empty_api_token_source(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    init_config(config_path)
+
+    config = load_config(config_path)
+
+    assert config_sources(config)["cloudflare_api_token"] == "environment-or-empty"

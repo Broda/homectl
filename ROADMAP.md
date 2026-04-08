@@ -11,6 +11,7 @@ This milestone is already done and serves as the current project baseline.
 ### CLI foundation
 
 - Config initialization exists.
+- Config inspection exists via `config show`.
 - Stack scaffolding exists for:
   - `site init`
   - `app init --template placeholder`
@@ -58,6 +59,7 @@ This milestone is already done and serves as the current project baseline.
 
 - JSON output exists for:
   - `config init`
+  - `config show`
   - `site init`
   - `app init`
   - `up`
@@ -236,15 +238,15 @@ Subtasks:
 
 ### 2.3 Expand config introspection
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Improve visibility into effective config resolution.
 - Make it easier to understand what global config plus stack-local config combine into.
 
 Subtasks:
-- Consider `config show --json`.
-- Consider stack-focused config inspection such as `config show --stack example.com`.
+- Extend `config show --json` if more effective-config detail becomes necessary.
+- Extend stack-focused config inspection beyond `config show --stack example.com` if operators need deeper routing visibility.
 - Decide whether effective config inspection belongs under:
   - `config`
   - `doctor`
