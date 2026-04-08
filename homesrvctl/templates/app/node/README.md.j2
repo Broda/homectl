@@ -12,9 +12,11 @@ This scaffold is a minimal production-oriented Node service for `{{ hostname }}`
 
 ## Local adjustments
 
-1. Copy `.env.example` to `.env` if you want to customize runtime values.
-2. Replace `src/server.js` with your real application code when ready.
-3. Add any dependencies you need to `package.json`.
+1. Copy `.env.example` to `.env` only if you need to change the default port or hostname values.
+2. Build and start the stack with `docker compose up --build`.
+3. Verify the container becomes healthy and that `https://{{ hostname }}/` returns the scaffold JSON response.
+4. Replace `src/server.js` with your real application code when ready.
+5. Add any dependencies you need to `package.json`.
 
 ## Runtime behavior
 
@@ -26,3 +28,4 @@ The default server responds on `/` with JSON containing:
 - `requestPath`
 
 Traefik forwards `{{ hostname }}` to the app on port `3000`.
+The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-3000}/`.

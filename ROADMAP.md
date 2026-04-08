@@ -309,6 +309,7 @@ Tasks:
 Subtasks:
 - Review whether generated READMEs are consistent in structure.
 - Review whether `.env.example` files explain only what users actually need.
+  Current baseline: generated `node` and `python` READMEs now include explicit first-run and healthcheck guidance, and `.env.example` files now say they are optional unless you need overrides.
 - Review whether Dockerfiles use reasonable defaults without too much magic.
 - Review whether generated source files include only the minimum useful comments.
   Current baseline: generated `node` and `python` app templates include container healthchecks against their default root endpoints.

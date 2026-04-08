@@ -12,9 +12,11 @@ This scaffold is a minimal production-oriented Python service for `{{ hostname }
 
 ## Local adjustments
 
-1. Copy `.env.example` to `.env` if you want to customize runtime values.
-2. Replace `app/main.py` with your real application code when ready.
-3. Add the dependencies you need to `requirements.txt`.
+1. Copy `.env.example` to `.env` only if you need to change the default port or hostname values.
+2. Build and start the stack with `docker compose up --build`.
+3. Verify the container becomes healthy and that `https://{{ hostname }}/` returns the scaffold JSON response.
+4. Replace `app/main.py` with your real application code when ready.
+5. Add the dependencies you need to `requirements.txt`.
 
 ## Runtime behavior
 
@@ -25,3 +27,4 @@ The default server responds on `/` with JSON containing:
 - `requestPath`
 
 Traefik forwards `{{ hostname }}` to the app on port `8000`.
+The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-8000}/`.
