@@ -62,6 +62,38 @@ def test_site_init_scaffolds_files(monkeypatch, tmp_path: Path) -> None:
     assert "test.example.com" in index_file.read_text(encoding="utf-8")
 
 
+def test_site_init_writes_stack_overrides(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "site",
+            "init",
+            "test.example.com",
+            "--docker-network",
+            "edge",
+            "--traefik-url",
+            "http://localhost:9000",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    compose_file = sites_root / "test.example.com" / "docker-compose.yml"
+    stack_config = sites_root / "test.example.com" / "homesrvctl.yml"
+    assert stack_config.exists()
+    assert "edge" in compose_file.read_text(encoding="utf-8")
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9000",
+    }
+
+
 def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -191,6 +223,34 @@ def test_app_init_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert payload["files"][-1].endswith("/notes.example.com/src/server.js")
     assert payload["rendered_templates"][0]["template"] == "app/node/docker-compose.yml.j2"
+
+
+def test_app_init_json_output_reports_stack_override_file(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "app",
+            "init",
+            "notes.example.com",
+            "--template",
+            "node",
+            "--docker-network",
+            "edge",
+            "--dry-run",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["files"][-1].endswith("/notes.example.com/homesrvctl.yml")
+    assert payload["rendered_templates"][-1]["template"] == "stack-config"
 
 
 def test_app_init_python_json_output(monkeypatch, tmp_path: Path) -> None:
@@ -1810,6 +1870,79 @@ def test_domain_status_json_reports_repairable(monkeypatch, tmp_path: Path) -> N
         "DNS coverage is apex-only; wildcard DNS is missing",
         "Ingress coverage is apex-only; wildcard ingress is missing",
     ]
+
+
+def test_domain_status_uses_stack_override_ingress_service(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    stack_dir = sites_root / "example.com"
+    stack_dir.mkdir(parents=True)
+    (stack_dir / "homesrvctl.yml").write_text(
+        yaml.safe_dump({"traefik_url": "http://localhost:9000"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:9000"},
+                    {"hostname": "*.example.com", "service": "http://localhost:9000"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["expected_ingress_service"] == "http://localhost:9000"
+    assert payload["ingress"][0]["service"] == "http://localhost:9000"
 
 
 def test_domain_status_json_reports_wildcard_only_coverage(monkeypatch, tmp_path: Path) -> None:

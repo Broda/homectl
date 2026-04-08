@@ -100,6 +100,19 @@ cloudflare_api_token: ""
 `cloudflare_api_token` may also be supplied via the `CLOUDFLARE_API_TOKEN` environment variable.
 It should have at least `Zone:Read` and `DNS:Edit` for the zones you want `homesrvctl domain add` to manage.
 
+Per-stack overrides may also be stored in:
+
+```text
+/srv/homesrvctl/sites/<hostname>/homesrvctl.yml
+```
+
+Supported stack-local keys:
+
+```yaml
+docker_network: edge
+traefik_url: http://localhost:9000
+```
+
 ## Usage
 
 Create config:
@@ -141,6 +154,13 @@ Scaffold a Python app:
 
 ```bash
 homesrvctl app init api.example.com --template python
+```
+
+Scaffold a stack with local overrides:
+
+```bash
+homesrvctl site init example.com --docker-network edge --traefik-url http://localhost:9000
+homesrvctl app init app.example.com --template node --docker-network edge
 ```
 
 Inspect the stack:
@@ -188,8 +208,8 @@ homesrvctl up example.com --dry-run
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
-- `homesrvctl site init <hostname> [--force] [--dry-run] [--json]`
-- `homesrvctl app init <hostname> [--template static|placeholder|node|python] [--force] [--dry-run] [--json]`
+- `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl app init <hostname> [--template static|placeholder|node|python] [--force] [--dry-run] [--json] [--docker-network NETWORK] [--traefik-url URL]`
 - `homesrvctl up <hostname> [--dry-run] [--json]`
 - `homesrvctl down <hostname> [--dry-run] [--json]`
 - `homesrvctl restart <hostname> [--dry-run] [--json]`
@@ -216,6 +236,7 @@ homesrvctl up example.com --dry-run
 - `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
 - `domain add` also reconciles apex and wildcard hostname entries in the configured `cloudflared` ingress file so new domains route locally to Traefik.
+- `domain add`, `domain status`, and `domain repair` honor stack-local `traefik_url` overrides stored in `<stack>/homesrvctl.yml` for the apex hostname.
 - `domain repair` converges apex and wildcard DNS records and matching `cloudflared` ingress entries to the expected state.
 - `domain add` resolves the tunnel target from the local `cloudflared` tunnel configuration and does not depend on the active `cloudflared tunnel login` zone.
 - `domain remove` removes apex and wildcard DNS records and matching `cloudflared` ingress entries for the requested zone.
@@ -223,5 +244,6 @@ homesrvctl up example.com --dry-run
 - without that flag, restart `cloudflared` manually after ingress changes
 - `site init` and `app init` generate Traefik-safe router and service identifiers from the hostname.
 - All generated Compose files join the external Docker network configured in `docker_network`.
+- `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
 - The `node` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `package.json`, `.env.example`, and `src/server.js`.
 - The `python` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `requirements.txt`, `.env.example`, and `app/main.py`.

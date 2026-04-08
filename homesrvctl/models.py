@@ -22,6 +22,16 @@ class HomesrvctlConfig:
 
 
 @dataclass(slots=True)
+class StackSettings:
+    hostname: str
+    stack_dir: Path
+    config_path: Path
+    docker_network: str
+    traefik_url: str
+    has_local_config: bool
+
+
+@dataclass(slots=True)
 class RenderContext:
     hostname: str
     safe_name: str

@@ -20,7 +20,7 @@ from homesrvctl.cloudflared_service import (
     detect_cloudflared_runtime,
     restart_cloudflared_service,
 )
-from homesrvctl.config import load_config
+from homesrvctl.config import load_config, load_stack_settings
 from homesrvctl.utils import bullet_report, info, success, validate_bare_domain, warn, with_json_schema
 
 domain_cli = typer.Typer(help="Manage domain-level Cloudflare Tunnel DNS routing.")
@@ -207,6 +207,7 @@ def domain_status(
     """Report whether a domain is fully wired to the configured tunnel and local ingress."""
     config = load_config()
     bare_domain = validate_bare_domain(domain)
+    stack_settings = load_stack_settings(config, bare_domain)
     client = CloudflareApiClient(config.cloudflare_api_token)
 
     try:
@@ -216,7 +217,11 @@ def domain_status(
         records = [bare_domain, f"*.{bare_domain}"]
 
         dns_statuses = [client.get_dns_record_status(zone_id, record_name, target) for record_name in records]
-        ingress_statuses = _build_domain_ingress_statuses(config.cloudflared_config, bare_domain, config.traefik_url)
+        ingress_statuses = _build_domain_ingress_statuses(
+            config.cloudflared_config,
+            bare_domain,
+            stack_settings.traefik_url,
+        )
     except (CloudflareApiError, typer.BadParameter) as exc:
         raise typer.Exit(code=_exit_with_error(_format_domain_error(exc))) from exc
     except CloudflaredConfigError as exc:
@@ -230,7 +235,7 @@ def domain_status(
         payload = with_json_schema({
             "domain": bare_domain,
             "expected_tunnel_target": target,
-            "expected_ingress_service": config.traefik_url,
+            "expected_ingress_service": stack_settings.traefik_url,
             "overall": overall,
             "ok": overall == "ok",
             "repairable": repairable,
@@ -270,7 +275,7 @@ def domain_status(
         typer.echo(json.dumps(payload, indent=2))
     else:
         info(f"Expected tunnel target: {target}")
-        info(f"Expected ingress service: {config.traefik_url}")
+        info(f"Expected ingress service: {stack_settings.traefik_url}")
 
         for status in dns_statuses:
             if not status.exists:
@@ -320,6 +325,7 @@ def _upsert_domain_routing(
 ) -> None:
     config = load_config()
     bare_domain = validate_bare_domain(domain)
+    stack_settings = load_stack_settings(config, bare_domain)
     client = CloudflareApiClient(config.cloudflare_api_token)
 
     ingress_changed = False
@@ -353,9 +359,9 @@ def _upsert_domain_routing(
                 info(f"{action_label} DNS {result.record_type} {result.record_name} -> {result.content}")
 
         ingress_changes = (
-            plan_domain_ingress(config.cloudflared_config, bare_domain, config.traefik_url)
+            plan_domain_ingress(config.cloudflared_config, bare_domain, stack_settings.traefik_url)
             if dry_run
-            else apply_domain_ingress(config.cloudflared_config, bare_domain, config.traefik_url)
+            else apply_domain_ingress(config.cloudflared_config, bare_domain, stack_settings.traefik_url)
         )
         ingress_changed = any(change.action != "noop" for change in ingress_changes)
         for change in ingress_changes:

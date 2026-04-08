@@ -53,6 +53,8 @@
 - Added a real multi-file `node` app scaffold under `homesrvctl/templates/app/node/`.
 - Added a real multi-file `python` app scaffold under `homesrvctl/templates/app/python/`.
 - Moved the placeholder app scaffold under `homesrvctl/templates/app/placeholder/`.
+- Added stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
+- Taught scaffold commands to write stack-local routing overrides and taught domain/doctor flows to honor apex stack `traefik_url` overrides.
 - Added packaging and release automation for tagged versions.
 - Added a GitHub Actions release workflow for `vX.Y.Z` tags that builds artifacts and publishes GitHub Releases.
 - Added a TestPyPI-first trusted publishing step to the tagged release workflow before GitHub Release creation.

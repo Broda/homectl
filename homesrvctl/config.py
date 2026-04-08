@@ -7,10 +7,11 @@ from typing import Any
 import typer
 import yaml
 
-from homesrvctl.models import HomesrvctlConfig
+from homesrvctl.models import HomesrvctlConfig, StackSettings
 
 
 DEFAULT_CONFIG = HomesrvctlConfig()
+STACK_CONFIG_FILENAME = "homesrvctl.yml"
 
 
 def default_config_path() -> Path:
@@ -46,6 +47,40 @@ def load_config(path: Path | None = None) -> HomesrvctlConfig:
         cloudflared_config=Path(str(merged["cloudflared_config"])),
         cloudflare_api_token=api_token,
     )
+
+
+def stack_config_path(stack_dir: Path) -> Path:
+    return stack_dir / STACK_CONFIG_FILENAME
+
+
+def load_stack_settings(config: HomesrvctlConfig, hostname: str) -> StackSettings:
+    stack_dir = config.hostname_dir(hostname)
+    path = stack_config_path(stack_dir)
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    merged = {
+        "docker_network": config.docker_network,
+        "traefik_url": config.traefik_url,
+        **(data or {}),
+    }
+    return StackSettings(
+        hostname=hostname,
+        stack_dir=stack_dir,
+        config_path=path,
+        docker_network=str(merged["docker_network"]),
+        traefik_url=str(merged["traefik_url"]),
+        has_local_config=path.exists(),
+    )
+
+
+def render_stack_settings(config: HomesrvctlConfig, docker_network: str, traefik_url: str) -> str:
+    overrides: dict[str, str] = {}
+    if docker_network != config.docker_network:
+        overrides["docker_network"] = docker_network
+    if traefik_url != config.traefik_url:
+        overrides["traefik_url"] = traefik_url
+    if not overrides:
+        return ""
+    return yaml.safe_dump(overrides, sort_keys=False)
 
 
 def init_config(path: Path | None = None, force: bool = False) -> Path:

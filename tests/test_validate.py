@@ -119,6 +119,48 @@ def test_build_hostname_doctor_report(monkeypatch, tmp_path: Path) -> None:
     assert indexed["host-header request"].ok
 
 
+def test_build_hostname_doctor_report_uses_stack_override_traefik_url(monkeypatch, tmp_path: Path) -> None:
+    stack_dir = tmp_path / "sites" / "example.com"
+    stack_dir.mkdir(parents=True)
+    (stack_dir / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (stack_dir / "homesrvctl.yml").write_text("traefik_url: http://localhost:9000\n", encoding="utf-8")
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: example.com\n    service: http://localhost:9000\n  - hostname: '*.example.com'\n    service: http://localhost:9000\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+    config = HomesrvctlConfig(
+        tunnel_name="homesrvctl-tunnel",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=cloudflared_config,
+    )
+
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+        if command[:4] == ["docker", "compose", "ps", "--format"]:
+            return CommandResult(command, 0, "[]", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    def fake_urlopen(request, timeout: int = 3):  # noqa: ANN001
+        assert request.full_url == "http://localhost:9000"
+        raise urllib.error.HTTPError(
+            url=request.full_url,
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(validate_cmd, "run_command", fake_run_command)
+    monkeypatch.setattr(validate_cmd.urllib.request, "urlopen", fake_urlopen)
+
+    checks = validate_cmd.build_hostname_doctor_report(config, "example.com")
+    indexed = {check.name: check for check in checks}
+
+    assert indexed["host-header request"].ok
+
+
 def test_build_validate_report_includes_cloudflared_hint(monkeypatch, tmp_path: Path) -> None:
     cloudflared_config = tmp_path / "cloudflared.yml"
     cloudflared_config.write_text(

@@ -14,7 +14,7 @@ from homesrvctl.cloudflared import (
     describe_cloudflared_config_error,
 )
 from homesrvctl.cloudflared_service import detect_cloudflared_runtime
-from homesrvctl.config import load_config
+from homesrvctl.config import load_config, load_stack_settings
 from homesrvctl.models import CheckResult, HomesrvctlConfig
 from homesrvctl.shell import command_exists, run_command
 from homesrvctl.utils import bullet_report, validate_hostname, with_json_schema
@@ -94,6 +94,7 @@ def build_hostname_doctor_report(config: HomesrvctlConfig, hostname: str) -> lis
     valid_hostname = validate_hostname(hostname)
     stack_dir = config.hostname_dir(valid_hostname)
     compose_file = stack_dir / "docker-compose.yml"
+    stack_settings = load_stack_settings(config, valid_hostname)
 
     checks = [
         CheckResult("hostname directory", stack_dir.exists(), str(stack_dir)),
@@ -113,7 +114,7 @@ def build_hostname_doctor_report(config: HomesrvctlConfig, hostname: str) -> lis
         checks.append(CheckResult("docker compose ps", False, "skipped because docker-compose.yml is missing"))
 
     checks.append(_check_cloudflared_hostname(config, valid_hostname))
-    checks.append(_check_host_header(config, valid_hostname))
+    checks.append(_check_host_header(stack_settings.traefik_url, valid_hostname))
     return checks
 
 
@@ -151,9 +152,9 @@ def _check_cloudflared_ingress_config(config: HomesrvctlConfig) -> CheckResult:
     return CheckResult("cloudflared ingress config", result.ok, detail)
 
 
-def _check_host_header(config: HomesrvctlConfig, hostname: str) -> CheckResult:
+def _check_host_header(traefik_url: str, hostname: str) -> CheckResult:
     request = urllib.request.Request(
-        config.traefik_url,
+        traefik_url,
         headers={"Host": hostname, "User-Agent": "homesrvctl/0.2.0"},
     )
     try:

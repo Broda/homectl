@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 import typer
 
-from homesrvctl.config import init_config, load_config
+import yaml
+
+from homesrvctl.config import init_config, load_config, load_stack_settings, stack_config_path
 
 
 def test_init_and_load_config(tmp_path: Path) -> None:
@@ -36,3 +38,30 @@ def test_load_config_uses_cloudflare_api_token_env_fallback(monkeypatch, tmp_pat
     config = load_config(config_path)
 
     assert config.cloudflare_api_token == "env-token"
+
+
+def test_load_stack_settings_uses_local_overrides(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    init_config(config_path)
+    config_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_data["sites_root"] = str(tmp_path / "sites")
+    config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
+    config = load_config(config_path)
+    stack_dir = config.hostname_dir("example.com")
+    stack_dir.mkdir(parents=True)
+    stack_config_path(stack_dir).write_text(
+        yaml.safe_dump(
+            {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_stack_settings(config, "example.com")
+
+    assert settings.has_local_config is True
+    assert settings.docker_network == "edge"
+    assert settings.traefik_url == "http://localhost:9000"
