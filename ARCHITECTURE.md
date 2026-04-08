@@ -127,6 +127,7 @@ Responsibilities:
 
 This layer should stay separate from CLI wiring so future dashboard/view growth does not bloat `homesrvctl/commands`.
 The current curses renderer is transitional; Textual is the planned long-term implementation for `homesrvctl tui`.
+The command wrapper should import the Textual app lazily so the rest of the CLI can still start cleanly if the local environment has not yet been refreshed to include the new dependency.
 
 ### Public contract changes should be deliberate
 

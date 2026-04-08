@@ -815,7 +815,7 @@ def test_cloudflared_status_json_output(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="docker",
             active=True,
             detail="running container(s): cloudflared",
@@ -872,7 +872,7 @@ def test_cloudflared_status_text_reports_warning_policy(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="docker",
             active=True,
             detail="running container(s): cloudflared",
@@ -920,7 +920,7 @@ def test_cloudflared_status_json_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="absent",
             active=False,
             detail="cloudflared not detected via systemd, docker, or process scan",
@@ -945,7 +945,7 @@ def test_cloudflared_restart_dry_run(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -984,7 +984,7 @@ def test_cloudflared_restart_json_dry_run(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="docker",
             active=True,
             detail="running container(s): cloudflared",
@@ -1009,7 +1009,7 @@ def test_cloudflared_logs_reports_systemd_command(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -1032,7 +1032,7 @@ def test_cloudflared_logs_json_reports_unmanaged_process(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="process",
             active=True,
             detail="process present: 123 cloudflared",
@@ -1182,7 +1182,7 @@ def test_cloudflared_restart_json_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="process",
             active=True,
             detail="process present: 123 cloudflared",
@@ -1207,7 +1207,7 @@ def test_cloudflared_restart_json_failure_runtime_fields(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="docker",
             active=True,
             detail="running container(s): cloudflared",
@@ -1239,7 +1239,7 @@ def test_cloudflared_reload_dry_run(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -1262,7 +1262,7 @@ def test_cloudflared_reload_json_failure_when_unsupported(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="docker",
             active=True,
             detail="running container(s): cloudflared",
@@ -1289,7 +1289,7 @@ def test_cloudflared_reload_json_success(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "reload_cloudflared_service",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -1301,7 +1301,7 @@ def test_cloudflared_reload_json_success(monkeypatch) -> None:
     monkeypatch.setattr(
         cloudflared_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",

@@ -56,7 +56,7 @@ def test_build_validate_report_uses_cloudflared_config_fallback(monkeypatch, tmp
     monkeypatch.setattr(
         validate_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -297,7 +297,7 @@ def test_build_validate_report_includes_cloudflared_hint(monkeypatch, tmp_path: 
     monkeypatch.setattr(
         validate_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="absent",
             active=False,
             detail="cloudflared not detected via systemd, docker, or process scan",
@@ -371,7 +371,7 @@ def test_build_validate_report_uses_cloudflared_cli_config_test(monkeypatch, tmp
     monkeypatch.setattr(
         validate_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",

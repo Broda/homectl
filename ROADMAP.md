@@ -472,6 +472,7 @@ Subtasks:
 
 Current baseline:
 - `homesrvctl tui` already exists in the main repo.
+- Textual is now added as a dependency for the TUI migration.
 - The current implementation shells out to existing `--json` commands for:
   - `list`
   - `cloudflared status`

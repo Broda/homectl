@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 
 from typer.testing import CliRunner
 
 from homesrvctl.commands import tui_cmd
 from homesrvctl.main import app
 from homesrvctl.shell import CommandResult
-from homesrvctl.tui import dashboard, data
+from homesrvctl.tui import app as textual_app, dashboard, data
 
 
 def test_run_json_command_parses_success_payload(monkeypatch) -> None:
@@ -209,3 +211,82 @@ def test_tui_requires_interactive_terminal(monkeypatch) -> None:
 
     assert result.exit_code == 2, result.output
     assert "tui requires an interactive terminal" in result.output
+
+
+def test_tui_invokes_textual_app(monkeypatch) -> None:
+    monkeypatch.setattr(tui_cmd.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(tui_cmd.sys.stdin, "isatty", lambda: True)
+    calls: list[tuple[str, float]] = []
+
+    class FakeTextualApp:
+        def __init__(self, refresh_seconds: float = 0.0) -> None:
+            calls.append(("init", refresh_seconds))
+
+        def run(self) -> None:
+            calls.append(("run", 0.0))
+
+    monkeypatch.setitem(sys.modules, "homesrvctl.tui.app", types.SimpleNamespace(HomesrvctlTextualApp=FakeTextualApp))
+
+    tui_cmd.tui(refresh_seconds=5.0)
+
+    assert calls == [("init", 5.0), ("run", 0.0)]
+
+
+def test_textual_app_summary_and_stack_list_text() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {
+            "ok": True,
+            "sites": [
+                {"hostname": "example.com", "compose": True},
+                {"hostname": "notes.example.com", "compose": False},
+            ],
+        },
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_section_index = 0
+    app.selected_stack_index = 1
+
+    summary = app._summary_text()
+    stack_list = app._stack_list_text()
+
+    assert "> Stacks: 2 stack(s), 1 ready" in summary
+    assert "selected: notes.example.com" in stack_list
+    assert "> notes.example.com [compose=no]" in stack_list
+
+
+def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None:
+    snapshots = [
+        {
+            "generated_at": "2026-04-08 12:00:00",
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": False}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+        {
+            "generated_at": "2026-04-08 12:01:00",
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+    ]
+    calls: list[tuple[str, str]] = []
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = snapshots[0]
+
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_action",
+        lambda hostname, action: calls.append((hostname, action)) or {"ok": True},
+    )
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._refresh_snapshot("dashboard ready")
+    app._run_selected_stack_action("up")
+
+    assert calls == [("example.com", "up")]
+    assert app.status_message == "up succeeded for example.com"
+    assert app.snapshot["list"]["sites"][0]["compose"] is True

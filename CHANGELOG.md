@@ -13,6 +13,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Added
 
+- Added Textual as the new TUI dependency and introduced a first Textual app foundation behind `homesrvctl tui`.
 - Added a first read-only `homesrvctl tui` dashboard that reuses the existing JSON command surface for stack, `cloudflared`, and validation summaries.
 - Expanded the initial TUI dashboard with keyboard selection, a focused detail pane, and a footer that shows controls plus refresh mode.
 - Added first stack controls to the TUI so the selected hostname can run `doctor`, `up`, `restart`, and `down` directly from the dashboard.
