@@ -14,6 +14,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Reorganized [`ROADMAP.md`](ROADMAP.md) into milestone-based planning with tasks and subtasks.
 - Added `config show` with text and JSON output for global config inspection and effective stack-local override inspection.
 - Added named routing profiles in global config plus stack-local `profile` selection for scaffolded stacks.
+- Added routing-context reporting to `domain status`, including default versus effective ingress target and source attribution.
+- Added routing-context reporting to `doctor`, including routing profile plus default and effective ingress targets.
 
 ## 0.2.0 - 2026-04-08
 

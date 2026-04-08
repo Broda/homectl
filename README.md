@@ -250,6 +250,7 @@ homesrvctl up example.com --dry-run
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
 - stack-local config may select a named routing profile with `profile`, and direct stack-local overrides still win over profile-provided values.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
+- `domain status` also reports routing context for the apex stack, including the default ingress target, effective ingress target, selected profile, and source attribution for the effective target.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.
@@ -257,6 +258,7 @@ homesrvctl up example.com --dry-run
 - `cloudflared config-test` prefers `cloudflared tunnel ingress validate --config ...` when the binary is available and falls back to structural YAML/ingress validation otherwise.
 - `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
+- `doctor` now reports routing profile, default ingress target, and effective ingress target before the hostname-specific routing checks.
 - `domain add` also reconciles apex and wildcard hostname entries in the configured `cloudflared` ingress file so new domains route locally to Traefik.
 - `domain add`, `domain status`, and `domain repair` honor stack-local `traefik_url` overrides stored in `<stack>/homesrvctl.yml` for the apex hostname.
 - `domain repair` converges apex and wildcard DNS records and matching `cloudflared` ingress entries to the expected state.

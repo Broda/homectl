@@ -86,6 +86,7 @@ This milestone is already done and serves as the current project baseline.
   - `traefik_url`
 - Scaffold commands can write stack-local overrides.
 - Domain and doctor flows honor apex stack `traefik_url` overrides.
+- `domain status` and `doctor` now explain routing context explicitly for the inspected hostname.
 
 ### Project and release infrastructure
 
