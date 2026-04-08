@@ -6,7 +6,7 @@ from homesrvctl.shell import CommandResult
 
 
 def test_detect_cloudflared_runtime_prefers_systemd(monkeypatch) -> None:
-    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False):  # noqa: ANN001, ANN202
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
         if command[:2] == ["systemctl", "is-active"]:
             return CommandResult(command, 0, "active", "")
         if command[:4] == ["systemctl", "show", "cloudflared", "--property"]:
@@ -24,7 +24,7 @@ def test_detect_cloudflared_runtime_prefers_systemd(monkeypatch) -> None:
 
 
 def test_detect_cloudflared_runtime_uses_docker_when_systemd_inactive(monkeypatch) -> None:
-    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False):  # noqa: ANN001, ANN202
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
         if command[:2] == ["systemctl", "is-active"]:
             return CommandResult(command, 3, "inactive", "")
         if command[:2] == ["docker", "ps"]:
