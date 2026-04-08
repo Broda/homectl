@@ -481,6 +481,9 @@ Subtasks:
   - `cloudflared`
   - validation state
   - recent domain issues
+- Add keyboard navigation between dashboard sections.
+- Add a focused detail pane so summaries are explorable without leaving the dashboard.
+- Add a footer/status line that explains the available controls and refresh mode.
 - Decide what “good default landing screen” means for a small homelab operator tool.
 - Keep the first dashboard read-only if that reduces implementation risk.
 
@@ -489,6 +492,10 @@ Current baseline:
   - stack summary
   - `cloudflared` runtime/config summary
   - validation failure summary
+- The dashboard now supports section selection and a focused detail pane for:
+  - stacks
+  - `cloudflared`
+  - validation
 - Refresh is manual with `r` by default, with optional timed refresh via `--refresh-seconds`.
 
 ### 5.3 Add guided flows for common operations

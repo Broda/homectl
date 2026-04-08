@@ -81,15 +81,37 @@ def test_render_dashboard_includes_sections_and_failures() -> None:
         },
     }
 
-    rendered = dashboard.render_dashboard(snapshot, width=80)
+    rendered = dashboard.render_dashboard(snapshot, width=80, selected="validate")
 
     assert "homesrvctl dashboard" in rendered
-    assert "Stacks" in rendered
-    assert "example.com" in rendered
-    assert "Cloudflared" in rendered
-    assert "warnings: 1" in rendered
-    assert "Validate" in rendered
+    assert "Summary" in rendered
+    assert "> Validate: 2 checks, 1 failing" in rendered
+    assert "Cloudflared: docker (active), 1 warning(s)" in rendered
+    assert "Validate detail" in rendered
     assert "Traefik URL: unreachable" in rendered
+    assert "controls: q quit | r refresh | tab/arrow move | mode: manual refresh" in rendered
+
+
+def test_render_dashboard_stack_detail_includes_stack_rows() -> None:
+    snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {
+            "ok": True,
+            "sites": [
+                {"hostname": "example.com", "compose": True},
+                {"hostname": "notes.example.com", "compose": False},
+            ],
+        },
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+
+    rendered = dashboard.render_dashboard(snapshot, width=80, selected="stacks")
+
+    assert "> Stacks: 2 stack(s), 1 ready" in rendered
+    assert "Stacks detail" in rendered
+    assert "- example.com [compose=yes]" in rendered
+    assert "- notes.example.com [compose=no]" in rendered
 
 
 def test_tui_requires_interactive_terminal(monkeypatch) -> None:

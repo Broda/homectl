@@ -5,22 +5,23 @@ import time
 
 from homesrvctl.tui.data import build_dashboard_snapshot
 
+SECTIONS = ["stacks", "cloudflared", "validate"]
+
 
 def run_dashboard(initial_snapshot: dict[str, object], refresh_seconds: float) -> None:
     curses.wrapper(_run_dashboard, initial_snapshot, refresh_seconds)
 
 
-def render_dashboard(snapshot: dict[str, object], width: int = 100) -> str:
+def render_dashboard(snapshot: dict[str, object], width: int = 100, selected: str = "stacks") -> str:
     lines: list[str] = []
     lines.append("homesrvctl dashboard")
-    lines.append("q quit | r refresh")
+    lines.append("q quit | r refresh | tab/arrow move")
     lines.append("")
-    lines.extend(_render_stack_section(snapshot.get("list"), width))
+    lines.extend(_render_summary(snapshot, width, selected))
     lines.append("")
-    lines.extend(_render_cloudflared_section(snapshot.get("cloudflared"), width))
+    lines.extend(_render_detail(snapshot, width, selected))
     lines.append("")
-    lines.extend(_render_validate_section(snapshot.get("validate"), width))
-    lines.append("")
+    lines.append(_render_footer(refresh_mode=None))
     lines.append(f"generated: {snapshot.get('generated_at', 'unknown')}")
     return "\n".join(lines)
 
@@ -29,13 +30,18 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
     curses.curs_set(0)
     stdscr.nodelay(refresh_seconds > 0)
     current = snapshot
+    selected_index = 0
     next_refresh = time.monotonic() + refresh_seconds if refresh_seconds > 0 else None
 
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
-        rendered = render_dashboard(current, width=max(width - 1, 40))
-        for row, line in enumerate(rendered.splitlines()):
+        refresh_mode = f"auto {refresh_seconds:g}s" if refresh_seconds > 0 else "manual refresh"
+        rendered = render_dashboard(current, width=max(width - 1, 40), selected=SECTIONS[selected_index])
+        lines = rendered.splitlines()
+        if len(lines) >= 2:
+            lines[-2] = _render_footer(refresh_mode=refresh_mode)
+        for row, line in enumerate(lines):
             if row >= height - 1:
                 break
             stdscr.addnstr(row, 0, line, max(width - 1, 1))
@@ -55,73 +61,133 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
             if refresh_seconds > 0:
                 next_refresh = time.monotonic() + refresh_seconds
             continue
+        if key in {9, curses.KEY_RIGHT, curses.KEY_DOWN, ord("j"), ord("J")}:
+            selected_index = (selected_index + 1) % len(SECTIONS)
+            continue
+        if key in {curses.KEY_LEFT, curses.KEY_UP, ord("k"), ord("K")}:
+            selected_index = (selected_index - 1) % len(SECTIONS)
+            continue
         if key == -1 and refresh_seconds > 0:
             current = build_dashboard_snapshot()
             next_refresh = time.monotonic() + refresh_seconds
 
 
-def _render_stack_section(payload, width: int) -> list[str]:  # noqa: ANN001
-    heading = _heading("Stacks", width)
-    if not isinstance(payload, dict):
-        return [heading, "unavailable"]
-    if not payload.get("ok"):
-        return [heading, f"error: {payload.get('error', 'unknown error')}"]
-
-    sites = payload.get("sites", [])
-    if not sites:
-        return [heading, "no stacks found"]
-
-    compose_ready = sum(1 for site in sites if site.get("compose"))
-    lines = [heading, f"{len(sites)} stack(s), {compose_ready} with docker-compose.yml"]
-    for site in sites[:8]:
-        status = "compose=yes" if site.get("compose") else "compose=no"
-        lines.append(f"- {site.get('hostname', '<unknown>')} [{status}]")
-    if len(sites) > 8:
-        lines.append(f"... {len(sites) - 8} more")
-    return lines
-
-
-def _render_cloudflared_section(payload, width: int) -> list[str]:  # noqa: ANN001
-    heading = _heading("Cloudflared", width)
-    if not isinstance(payload, dict):
-        return [heading, "unavailable"]
-
-    lines = [
-        heading,
-        f"runtime: {payload.get('mode', 'unknown')} ({'active' if payload.get('active') else 'inactive'})",
-        f"detail: {payload.get('detail', 'unknown')}",
+def _render_summary(snapshot: dict[str, object], width: int, selected: str) -> list[str]:
+    return [
+        _heading("Summary", width),
+        _summary_line("stacks", selected, _stacks_summary(snapshot.get("list"))),
+        _summary_line("cloudflared", selected, _cloudflared_summary(snapshot.get("cloudflared"))),
+        _summary_line("validate", selected, _validate_summary(snapshot.get("validate"))),
     ]
 
+
+def _render_detail(snapshot: dict[str, object], width: int, selected: str) -> list[str]:
+    label = selected.title() if selected != "cloudflared" else "Cloudflared"
+    heading = _heading(f"{label} detail", width)
+    if selected == "stacks":
+        return [heading, *_render_stack_detail(snapshot.get("list"))]
+    if selected == "cloudflared":
+        return [heading, *_render_cloudflared_detail(snapshot.get("cloudflared"))]
+    return [heading, *_render_validate_detail(snapshot.get("validate"))]
+
+
+def _render_footer(refresh_mode: str | None) -> str:
+    mode = refresh_mode or "manual refresh"
+    return f"controls: q quit | r refresh | tab/arrow move | mode: {mode}"
+
+
+def _summary_line(name: str, selected: str, detail: str) -> str:
+    marker = ">" if name == selected else " "
+    label = name.title() if name != "cloudflared" else "Cloudflared"
+    return f"{marker} {label}: {detail}"
+
+
+def _stacks_summary(payload) -> str:  # noqa: ANN001
+    if not isinstance(payload, dict):
+        return "unavailable"
+    if not payload.get("ok"):
+        return f"error: {payload.get('error', 'unknown error')}"
+    sites = payload.get("sites", [])
+    if not sites:
+        return "no stacks found"
+    compose_ready = sum(1 for site in sites if site.get("compose"))
+    return f"{len(sites)} stack(s), {compose_ready} ready"
+
+
+def _cloudflared_summary(payload) -> str:  # noqa: ANN001
+    if not isinstance(payload, dict):
+        return "unavailable"
+    runtime = payload.get("mode", "unknown")
+    active = "active" if payload.get("active") else "inactive"
     config_validation = payload.get("config_validation")
-    if isinstance(config_validation, dict):
-        status = "ok" if config_validation.get("ok") else "error"
-        lines.append(f"config: {status} - {config_validation.get('detail', 'unknown')}")
-        warnings = config_validation.get("warnings", [])
-        if warnings:
-            lines.append(f"warnings: {len(warnings)}")
-            for warning in warnings[:3]:
-                lines.append(f"- {warning}")
-            if len(warnings) > 3:
-                lines.append(f"... {len(warnings) - 3} more")
+    if isinstance(config_validation, dict) and config_validation.get("warnings"):
+        return f"{runtime} ({active}), {len(config_validation['warnings'])} warning(s)"
+    return f"{runtime} ({active})"
+
+
+def _validate_summary(payload) -> str:  # noqa: ANN001
+    if not isinstance(payload, dict):
+        return "unavailable"
+    checks = payload.get("checks", [])
+    failures = [check for check in checks if not check.get("ok")]
+    if not checks:
+        return "no checks"
+    return f"{len(checks)} checks, {len(failures)} failing"
+
+
+def _render_stack_detail(payload) -> list[str]:  # noqa: ANN001
+    if not isinstance(payload, dict):
+        return ["unavailable"]
+    if not payload.get("ok"):
+        return [f"error: {payload.get('error', 'unknown error')}"]
+    sites = payload.get("sites", [])
+    if not sites:
+        return ["no stacks found"]
+    lines = []
+    for site in sites[:12]:
+        status = "compose=yes" if site.get("compose") else "compose=no"
+        lines.append(f"- {site.get('hostname', '<unknown>')} [{status}]")
+    if len(sites) > 12:
+        lines.append(f"... {len(sites) - 12} more")
     return lines
 
 
-def _render_validate_section(payload, width: int) -> list[str]:  # noqa: ANN001
-    heading = _heading("Validate", width)
+def _render_cloudflared_detail(payload) -> list[str]:  # noqa: ANN001
     if not isinstance(payload, dict):
-        return [heading, "unavailable"]
-    if not payload.get("ok") and "checks" not in payload:
-        return [heading, f"error: {payload.get('error', 'unknown error')}"]
+        return ["unavailable"]
+    lines = [
+        f"runtime: {payload.get('mode', 'unknown')}",
+        f"active: {payload.get('active', False)}",
+        f"detail: {payload.get('detail', 'unknown')}",
+    ]
+    config_validation = payload.get("config_validation")
+    if isinstance(config_validation, dict):
+        lines.append(f"config ok: {config_validation.get('ok', False)}")
+        lines.append(f"config detail: {config_validation.get('detail', 'unknown')}")
+        warnings = config_validation.get("warnings", [])
+        if warnings:
+            lines.append("warnings:")
+            for warning in warnings[:5]:
+                lines.append(f"- {warning}")
+        else:
+            lines.append("warnings: none")
+    return lines
 
+
+def _render_validate_detail(payload) -> list[str]:  # noqa: ANN001
+    if not isinstance(payload, dict):
+        return ["unavailable"]
+    if not payload.get("ok") and "checks" not in payload:
+        return [f"error: {payload.get('error', 'unknown error')}"]
     checks = payload.get("checks", [])
     failures = [check for check in checks if not check.get("ok")]
-    lines = [heading, f"{len(checks)} check(s), {len(failures)} failing"]
-    for check in failures[:5]:
-        lines.append(f"- {check.get('name', '<unknown>')}: {check.get('detail', '')}")
     if not failures:
-        lines.append("all validation checks passing")
-    elif len(failures) > 5:
-        lines.append(f"... {len(failures) - 5} more")
+        return ["all validation checks passing"]
+    lines = []
+    for check in failures[:10]:
+        lines.append(f"- {check.get('name', '<unknown>')}: {check.get('detail', '')}")
+    if len(failures) > 10:
+        lines.append(f"... {len(failures) - 10} more")
     return lines
 
 

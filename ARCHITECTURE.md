@@ -121,6 +121,7 @@ The TUI command wrapper follows the same rule: it should prefer orchestrating st
 Responsibilities:
 - load read-only dashboard data from the existing JSON command surface
 - render terminal dashboard views
+- manage TUI-local selection and detail state
 - keep TUI-specific state and refresh behavior out of the command modules
 
 This layer should stay separate from CLI wiring so future dashboard/view growth does not bloat `homesrvctl/commands`.
