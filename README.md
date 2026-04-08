@@ -174,6 +174,12 @@ Scaffold a static website:
 homesrvctl app init www.example.com --template static
 ```
 
+Scaffold a static website plus API:
+
+```bash
+homesrvctl app init portal.example.com --template static-api
+```
+
 Scaffold a Python app:
 
 ```bash
@@ -238,7 +244,7 @@ homesrvctl up example.com --dry-run
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
-- `homesrvctl app init <hostname> [--template static|placeholder|node|python] [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl app init <hostname> [--template static|static-api|placeholder|node|python] [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
 - `homesrvctl up <hostname> [--dry-run] [--json]`
 - `homesrvctl down <hostname> [--dry-run] [--json]`
 - `homesrvctl restart <hostname> [--dry-run] [--json]`
@@ -288,6 +294,7 @@ homesrvctl up example.com --dry-run
 - `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
 - `site init` and `app init` can also write a stack-local `profile` selection when you pass `--profile`.
 - `app init --template static` now generates a real boring-static-website scaffold with nginx, `html/index.html`, `html/favicon.svg`, `html/assets/css/main.css`, `html/assets/js/main.js`, `html/assets/images/`, and a small generated README instead of the old placeholder stub.
+- `app init --template static-api` now generates a two-service scaffold with a static nginx site plus a small Python API routed on `/api` behind the same hostname.
 - The `node` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `package.json`, `.env.example`, and `src/server.js`.
 - The `python` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `requirements.txt`, `.env.example`, and `app/main.py`.
 - The `node` and `python` app templates now include a basic container healthcheck that probes the generated root endpoint on the app’s internal port.

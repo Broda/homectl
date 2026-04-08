@@ -1,0 +1,19 @@
+async function loadStatus() {
+  const target = document.getElementById("api-status");
+
+  try {
+    const response = await fetch("/api/status");
+    const payload = await response.json();
+    target.textContent = JSON.stringify(payload, null, 2);
+  } catch (error) {
+    target.textContent = JSON.stringify(
+      { error: "Unable to load /api/status", detail: String(error) },
+      null,
+      2,
+    );
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadStatus();
+});

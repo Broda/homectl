@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ hostname }}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/css/main.css">
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">{{ hostname }}</p>
+        <h1>Static site with a small built-in API.</h1>
+        <p class="lede">
+          This scaffold gives you a plain website on the front end and a tiny JSON API at
+          <code>/api/status</code>.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>Frontend status</h2>
+        <p>The browser script will call the API and render the response below.</p>
+        <pre id="api-status">Loading API response...</pre>
+      </section>
+    </main>
+    <script src="/assets/js/main.js"></script>
+  </body>
+</html>

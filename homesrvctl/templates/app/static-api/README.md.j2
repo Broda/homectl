@@ -1,0 +1,33 @@
+# {{ hostname }} Static Site + API
+
+This scaffold combines a static nginx site with a small Python API behind the same hostname.
+
+## Files
+
+- `docker-compose.yml`: two services behind Traefik
+- `html/index.html`: starter static page
+- `html/favicon.svg`: starter favicon
+- `html/assets/css/main.css`: starter stylesheet
+- `html/assets/js/main.js`: starter frontend script that calls the API
+- `html/assets/images/.gitkeep`: placeholder so the images directory is tracked
+- `api/Dockerfile`: container build for the API service
+- `api/requirements.txt`: starter dependency file
+- `api/app/main.py`: simple JSON API
+- `README.md`: quick notes for the scaffold
+
+## First run
+
+1. Edit `html/index.html` with your real page content.
+2. Replace `html/favicon.svg` when you are ready.
+3. Update `api/app/main.py` with your real API behavior.
+4. Start the stack with `docker compose up --build`.
+5. Verify the containers become healthy.
+6. Confirm `https://{{ hostname }}/` serves the frontend and `https://{{ hostname }}/api/status` returns JSON.
+
+## Runtime behavior
+
+- `site` serves files directly from `./html`
+- `api` serves JSON from `./api`
+- `GET /` serves the static page
+- `GET /api/status` returns scaffold API JSON
+- `GET /healthz` is used internally by the API healthcheck

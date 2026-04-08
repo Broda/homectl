@@ -180,7 +180,7 @@ Completed in this milestone so far:
 
 ### 1.3 Support more than one ingress target cleanly
 
-Status: planned
+Status: in_progress
 
 Tasks:
 - Add product-level support for more than one local ingress URL.
@@ -328,10 +328,12 @@ Goal: support a common self-hosted pattern where one hostname serves static asse
 
 Current baseline:
 - `app init --template static` now generates a real static-site scaffold with nginx, `html/index.html`, a placeholder favicon, basic asset folders, and a generated README.
+- `app init --template static-api` now generates a first basic site-plus-API scaffold with a static nginx frontend and a small Python API on `/api`.
 
 Tasks:
 - Define the scope of a combined static-plus-app scaffold.
 - Decide whether it should be a first-class app template.
+  Current baseline: the first implementation is now a first-class `static-api` template.
 
 Subtasks:
 - Decide whether the scaffold should generate:
@@ -344,6 +346,7 @@ Subtasks:
   - Python
   - runtime-agnostic layout
 - Add template-specific tests if implemented.
+  Current baseline: the template now has dedicated scaffold and JSON-output tests.
 
 ### 3.3 Decide the philosophy boundary for scaffolds
 

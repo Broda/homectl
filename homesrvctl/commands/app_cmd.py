@@ -18,7 +18,7 @@ from homesrvctl.utils import (
 )
 
 app_cli = typer.Typer(help="Scaffold application service directories.")
-TemplateName = Literal["static", "placeholder", "node", "python"]
+TemplateName = Literal["static", "static-api", "placeholder", "node", "python"]
 
 
 @app_cli.command("init")
@@ -152,6 +152,19 @@ def _template_outputs(target_dir, template: TemplateName) -> list[tuple]:  # noq
             (target_dir / "html" / "assets" / "css" / "main.css", "app/static/main.css.j2"),
             (target_dir / "html" / "assets" / "js" / "main.js", "app/static/main.js.j2"),
             (target_dir / "html" / "assets" / "images" / ".gitkeep", "app/static/images.gitkeep.j2"),
+        ]
+    if template == "static-api":
+        return [
+            (target_dir / "docker-compose.yml", "app/static-api/docker-compose.yml.j2"),
+            (target_dir / "README.md", "app/static-api/README.md.j2"),
+            (target_dir / "html" / "index.html", "app/static-api/index.html.j2"),
+            (target_dir / "html" / "favicon.svg", "app/static-api/favicon.svg.j2"),
+            (target_dir / "html" / "assets" / "css" / "main.css", "app/static-api/main.css.j2"),
+            (target_dir / "html" / "assets" / "js" / "main.js", "app/static-api/main.js.j2"),
+            (target_dir / "html" / "assets" / "images" / ".gitkeep", "app/static-api/images.gitkeep.j2"),
+            (target_dir / "api" / "Dockerfile", "app/static-api/api.Dockerfile.j2"),
+            (target_dir / "api" / "requirements.txt", "app/static-api/api.requirements.txt.j2"),
+            (target_dir / "api" / "app" / "main.py", "app/static-api/api.main.py.j2"),
         ]
     if template == "node":
         return [

@@ -31,6 +31,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Turned `app init --template static` into a real static-site scaffold with nginx, `html/index.html`, a generated README, and a container healthcheck.
 - Expanded the static-site scaffold to include starter asset folders plus placeholder `main.css` and `main.js` files wired from `index.html`.
 - Added a placeholder `favicon.svg` to the static-site scaffold and wired it from the generated HTML.
+- Added a first `static-api` app template that combines a static nginx site with a small Python API routed on `/api`.
 - Expanded scaffold regression coverage so generated `node` and `python` artifacts stay consistent across ports, healthchecks, first-run docs, and rendered template manifests.
 
 ## 0.2.0 - 2026-04-08

@@ -224,6 +224,43 @@ def test_app_init_static_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     assert "Static site scaffold loaded for www.example.com" in main_js
 
 
+def test_app_init_static_api_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "portal.example.com", "--template", "static-api"])
+
+    assert result.exit_code == 0, result.output
+    app_dir = sites_root / "portal.example.com"
+    assert (app_dir / "docker-compose.yml").exists()
+    assert (app_dir / "README.md").exists()
+    assert (app_dir / "html" / "index.html").exists()
+    assert (app_dir / "html" / "favicon.svg").exists()
+    assert (app_dir / "html" / "assets" / "css" / "main.css").exists()
+    assert (app_dir / "html" / "assets" / "js" / "main.js").exists()
+    assert (app_dir / "api" / "Dockerfile").exists()
+    assert (app_dir / "api" / "requirements.txt").exists()
+    assert (app_dir / "api" / "app" / "main.py").exists()
+    compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (app_dir / "README.md").read_text(encoding="utf-8")
+    index_html = (app_dir / "html" / "index.html").read_text(encoding="utf-8")
+    main_js = (app_dir / "html" / "assets" / "js" / "main.js").read_text(encoding="utf-8")
+    api_main = (app_dir / "api" / "app" / "main.py").read_text(encoding="utf-8")
+    assert "site:" in compose
+    assert "api:" in compose
+    assert "PathPrefix(`/api`)" in compose
+    assert "priority=100" in compose
+    assert "docker compose up --build" in readme
+    assert "/api/status" in readme
+    assert "portal.example.com" in index_html
+    assert "/api/status" in main_js
+    assert 'self.path == "/api/status"' in api_main
+    assert 'self.path == "/healthz"' in api_main
+
+
 def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -621,6 +658,39 @@ def test_app_init_static_json_output(monkeypatch, tmp_path: Path) -> None:
         "app/static/main.css.j2",
         "app/static/main.js.j2",
         "app/static/images.gitkeep.j2",
+    }
+
+
+def test_app_init_static_api_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "portal.example.com", "--template", "static-api", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "app_init"
+    assert payload["hostname"] == "portal.example.com"
+    assert payload["template"] == "static-api"
+    assert payload["dry_run"] is True
+    assert payload["ok"] is True
+    assert payload["files"][-1].endswith("/portal.example.com/api/app/main.py")
+    templates = {entry["template"] for entry in payload["rendered_templates"]}
+    assert templates == {
+        "app/static-api/docker-compose.yml.j2",
+        "app/static-api/README.md.j2",
+        "app/static-api/index.html.j2",
+        "app/static-api/favicon.svg.j2",
+        "app/static-api/main.css.j2",
+        "app/static-api/main.js.j2",
+        "app/static-api/images.gitkeep.j2",
+        "app/static-api/api.Dockerfile.j2",
+        "app/static-api/api.requirements.txt.j2",
+        "app/static-api/api.main.py.j2",
     }
 
 
