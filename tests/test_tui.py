@@ -36,6 +36,18 @@ def test_run_json_command_handles_invalid_json(monkeypatch) -> None:
     assert payload["error"] == "invalid JSON output"
 
 
+def test_run_json_command_reports_noisy_stdout(monkeypatch) -> None:
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
+        return CommandResult(command, 0, "$ systemctl is-active cloudflared\n{\"ok\": true}", "")
+
+    monkeypatch.setattr(data, "run_command", fake_run_command)
+
+    payload = data.run_json_subcommand(["cloudflared", "status"])
+
+    assert payload["ok"] is False
+    assert payload["error"] == "invalid JSON output"
+
+
 def test_build_dashboard_snapshot_uses_existing_json_surfaces() -> None:
     calls: list[tuple[str, ...]] = []
 

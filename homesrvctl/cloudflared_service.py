@@ -19,10 +19,13 @@ class CloudflaredServiceError(RuntimeError):
     pass
 
 
-def detect_cloudflared_runtime() -> CloudflaredRuntime:
-    systemctl = run_command(["systemctl", "is-active", "cloudflared"])
+def detect_cloudflared_runtime(*, quiet: bool = False) -> CloudflaredRuntime:
+    systemctl = run_command(["systemctl", "is-active", "cloudflared"], quiet=quiet)
     if systemctl.ok and systemctl.stdout == "active":
-        can_reload = run_command(["systemctl", "show", "cloudflared", "--property", "CanReload", "--value"], quiet=True)
+        can_reload = run_command(
+            ["systemctl", "show", "cloudflared", "--property", "CanReload", "--value"],
+            quiet=quiet,
+        )
         reload_command = ["systemctl", "reload", "cloudflared"] if can_reload.ok and can_reload.stdout.lower() == "yes" else None
         return CloudflaredRuntime(
             mode="systemd",
@@ -34,7 +37,8 @@ def detect_cloudflared_runtime() -> CloudflaredRuntime:
         )
 
     docker_ps = run_command(
-        ["docker", "ps", "--filter", "name=cloudflared", "--filter", "status=running", "--format", "{{.Names}}"]
+        ["docker", "ps", "--filter", "name=cloudflared", "--filter", "status=running", "--format", "{{.Names}}"],
+        quiet=quiet,
     )
     container_names = [line.strip() for line in docker_ps.stdout.splitlines() if line.strip()]
     if container_names:
@@ -49,7 +53,7 @@ def detect_cloudflared_runtime() -> CloudflaredRuntime:
             logs_command=["docker", "logs", "--tail", "100", container_name],
         )
 
-    pgrep = run_command(["pgrep", "-fa", "cloudflared"])
+    pgrep = run_command(["pgrep", "-fa", "cloudflared"], quiet=quiet)
     if pgrep.ok and pgrep.stdout.strip():
         return CloudflaredRuntime(
             mode="process",

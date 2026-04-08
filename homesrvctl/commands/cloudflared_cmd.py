@@ -22,7 +22,7 @@ def cloudflared_status(
     json_output: bool = typer.Option(False, "--json", help="Print the cloudflared runtime status as JSON."),
 ) -> None:
     """Show how cloudflared is currently managed and whether it is active."""
-    runtime = detect_cloudflared_runtime()
+    runtime = detect_cloudflared_runtime(quiet=json_output)
     config_validation = None
     try:
         config = load_config()
@@ -63,7 +63,7 @@ def cloudflared_restart(
     json_output: bool = typer.Option(False, "--json", help="Print the restart result as JSON."),
 ) -> None:
     """Restart cloudflared when it is managed by a supported runtime."""
-    runtime = detect_cloudflared_runtime()
+    runtime = detect_cloudflared_runtime(quiet=json_output)
     if dry_run:
         if runtime.restart_command:
             if json_output:
@@ -109,7 +109,7 @@ def cloudflared_reload(
     json_output: bool = typer.Option(False, "--json", help="Print the reload result as JSON."),
 ) -> None:
     """Reload cloudflared when the detected runtime supports it."""
-    runtime = detect_cloudflared_runtime()
+    runtime = detect_cloudflared_runtime(quiet=json_output)
     if dry_run:
         if runtime.reload_command:
             if json_output:
@@ -158,7 +158,7 @@ def cloudflared_logs(
     json_output: bool = typer.Option(False, "--json", help="Print the log-command guidance as JSON."),
 ) -> None:
     """Show the right log command for the detected cloudflared runtime."""
-    runtime = detect_cloudflared_runtime()
+    runtime = detect_cloudflared_runtime(quiet=json_output)
     logs_command = _logs_command(runtime, follow=follow)
     ok = logs_command is not None
     if json_output:

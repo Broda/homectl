@@ -146,7 +146,7 @@ def doctor(
 
     config, global_sources = load_config_details()
     valid_hostname = validate_hostname(hostname)
-    results = build_hostname_doctor_report(config, valid_hostname, global_sources)
+    results = build_hostname_doctor_report(config, valid_hostname, global_sources, quiet=json_output)
     failures = [item for item in results if not item.ok]
     if json_output:
         payload = with_json_schema({

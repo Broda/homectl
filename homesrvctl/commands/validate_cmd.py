@@ -31,7 +31,7 @@ def validate_with_format(
 ) -> None:
     """Validate the local hosting environment."""
     config = load_config()
-    checks = build_validate_report(config)
+    checks = build_validate_report(config, quiet=json_output)
     if json_output:
         payload = with_json_schema({
             "ok": all(check.ok for check in checks),
@@ -44,18 +44,19 @@ def validate_with_format(
         raise typer.Exit(code=1)
 
 
-def build_validate_report(config: HomesrvctlConfig) -> list[CheckResult]:
+def build_validate_report(config: HomesrvctlConfig, quiet: bool = False) -> list[CheckResult]:
     checks: list[CheckResult] = []
     checks.append(CheckResult("cloudflared binary", command_exists("cloudflared"), _binary_detail("cloudflared")))
     checks.append(CheckResult("docker binary", command_exists("docker"), _binary_detail("docker")))
 
-    compose_result = run_command(["docker", "compose", "version"])
+    compose_result = run_command(["docker", "compose", "version"], quiet=quiet)
     checks.append(_result_to_check("docker compose", compose_result, success_detail=compose_result.stdout or "available"))
 
     checks.append(_check_tunnel_reference(config))
 
     network_result = run_command(
-        ["docker", "network", "inspect", config.docker_network, "--format", "{{json .Name}}"]
+        ["docker", "network", "inspect", config.docker_network, "--format", "{{json .Name}}"],
+        quiet=quiet,
     )
     checks.append(
         _result_to_check(
@@ -66,7 +67,8 @@ def build_validate_report(config: HomesrvctlConfig) -> list[CheckResult]:
     )
 
     traefik_result = run_command(
-        ["docker", "ps", "--filter", "name=traefik", "--filter", "status=running", "--format", "{{.Names}}"]
+        ["docker", "ps", "--filter", "name=traefik", "--filter", "status=running", "--format", "{{.Names}}"],
+        quiet=quiet,
     )
     checks.append(
         CheckResult(
@@ -76,7 +78,7 @@ def build_validate_report(config: HomesrvctlConfig) -> list[CheckResult]:
         )
     )
 
-    cloudflared_service = _check_cloudflared_service()
+    cloudflared_service = _check_cloudflared_service(quiet=quiet)
     checks.append(cloudflared_service)
 
     checks.append(_check_traefik_http(config))
@@ -95,6 +97,7 @@ def build_hostname_doctor_report(
     config: HomesrvctlConfig,
     hostname: str,
     global_sources: dict[str, str] | None = None,
+    quiet: bool = False,
 ) -> list[CheckResult]:
     valid_hostname = validate_hostname(hostname)
     stack_dir = config.hostname_dir(valid_hostname)
@@ -115,7 +118,7 @@ def build_hostname_doctor_report(
     ]
 
     if compose_file.exists():
-        ps_result = run_command(["docker", "compose", "ps", "--format", "json"], cwd=stack_dir)
+        ps_result = run_command(["docker", "compose", "ps", "--format", "json"], cwd=stack_dir, quiet=quiet)
         checks.append(
             CheckResult(
                 "docker compose ps",
@@ -141,8 +144,8 @@ def _result_to_check(name: str, result, success_detail: str) -> CheckResult:
     return CheckResult(name, result.ok, detail)
 
 
-def _check_cloudflared_service() -> CheckResult:
-    runtime = detect_cloudflared_runtime()
+def _check_cloudflared_service(quiet: bool = False) -> CheckResult:
+    runtime = detect_cloudflared_runtime(quiet=quiet)
     return CheckResult("cloudflared service", runtime.active, runtime.detail)
 
 
@@ -226,7 +229,8 @@ def _check_tunnel_reference(config: HomesrvctlConfig) -> CheckResult:
             "tunnel",
             "info",
             config.tunnel_name,
-        ]
+        ],
+        quiet=True,
     )
     if tunnel_result.ok:
         return CheckResult(

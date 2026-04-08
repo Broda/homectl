@@ -27,7 +27,7 @@ def test_build_validate_report_uses_cloudflared_config_fallback(monkeypatch, tmp
     def fake_command_exists(binary: str) -> bool:
         return binary in {"cloudflared", "docker"}
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:3] == ["docker", "compose", "version"]:
             return CommandResult(command, 0, "Docker Compose version v5.1.1", "")
         if command[:4] == ["cloudflared", "--config", str(cloudflared_config), "tunnel"]:
@@ -92,7 +92,7 @@ def test_build_hostname_doctor_report(monkeypatch, tmp_path: Path) -> None:
         cloudflared_config=cloudflared_config,
     )
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:4] == ["docker", "compose", "ps", "--format"]:
             return CommandResult(command, 0, "[]", "")
         raise AssertionError(f"unexpected command: {command}")
@@ -140,7 +140,7 @@ def test_build_hostname_doctor_report_uses_stack_override_traefik_url(monkeypatc
         cloudflared_config=cloudflared_config,
     )
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:4] == ["docker", "compose", "ps", "--format"]:
             return CommandResult(command, 0, "[]", "")
         raise AssertionError(f"unexpected command: {command}")
@@ -184,7 +184,7 @@ def test_build_hostname_doctor_report_uses_profile_backed_traefik_url(monkeypatc
         profiles={"edge": RoutingProfile(docker_network="edge", traefik_url="http://localhost:9000")},
     )
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:4] == ["docker", "compose", "ps", "--format"]:
             return CommandResult(command, 0, "[]", "")
         raise AssertionError(f"unexpected command: {command}")
@@ -227,7 +227,7 @@ def test_build_hostname_doctor_report_includes_ingress_warnings(monkeypatch, tmp
         cloudflared_config=cloudflared_config,
     )
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:4] == ["docker", "compose", "ps", "--format"]:
             return CommandResult(command, 0, "[]", "")
         raise AssertionError(f"unexpected command: {command}")
@@ -272,7 +272,7 @@ def test_build_validate_report_includes_cloudflared_hint(monkeypatch, tmp_path: 
     def fake_command_exists(binary: str) -> bool:
         return binary in {"cloudflared", "docker"}
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:3] == ["docker", "compose", "version"]:
             return CommandResult(command, 0, "Docker Compose version v5.1.1", "")
         if command[:4] == ["cloudflared", "--config", str(cloudflared_config), "tunnel"]:
@@ -342,7 +342,7 @@ def test_build_validate_report_uses_cloudflared_cli_config_test(monkeypatch, tmp
     def fake_command_exists(binary: str) -> bool:
         return binary in {"cloudflared", "docker"}
 
-    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False) -> CommandResult:
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
         if command[:3] == ["docker", "compose", "version"]:
             return CommandResult(command, 0, "Docker Compose version v5.1.1", "")
         if command[:4] == ["cloudflared", "--config", str(cloudflared_config), "tunnel"]:
@@ -396,6 +396,65 @@ def test_build_validate_report_uses_cloudflared_cli_config_test(monkeypatch, tmp
     assert indexed["cloudflared ingress config"].ok
     assert "cloudflared tunnel --config" in indexed["cloudflared ingress config"].detail
     assert "Everything OK" in indexed["cloudflared ingress config"].detail
+
+
+def test_build_validate_report_uses_quiet_probes_when_requested(monkeypatch, tmp_path: Path) -> None:
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: example.com\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+    config = HomesrvctlConfig(
+        tunnel_name="homesrvctl-tunnel",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=cloudflared_config,
+    )
+    quiet_flags: list[bool] = []
+
+    def fake_command_exists(binary: str) -> bool:
+        return binary in {"cloudflared", "docker"}
+
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
+        quiet_flags.append(quiet)
+        if command[:3] == ["docker", "compose", "version"]:
+            return CommandResult(command, 0, "Docker Compose version v5.1.1", "")
+        if command[:4] == ["cloudflared", "--config", str(cloudflared_config), "tunnel"]:
+            return CommandResult(command, 1, "", "origin cert missing")
+        if command[:3] == ["docker", "network", "inspect"]:
+            return CommandResult(command, 0, "\"web\"", "")
+        if command[:2] == ["docker", "ps"]:
+            return CommandResult(command, 0, "traefik", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    def fake_urlopen(request, timeout: int = 3):  # noqa: ANN001
+        raise urllib.error.HTTPError(
+            url=config.traefik_url,
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(validate_cmd, "command_exists", fake_command_exists)
+    monkeypatch.setattr(validate_cmd, "run_command", fake_run_command)
+    monkeypatch.setattr(
+        validate_cmd,
+        "detect_cloudflared_runtime",
+        lambda quiet=False: CloudflaredRuntime(
+            mode="systemd",
+            active=True,
+            detail="systemd service is active",
+            restart_command=["systemctl", "restart", "cloudflared"],
+        ),
+    )
+    monkeypatch.setattr(validate_cmd.urllib.request, "urlopen", fake_urlopen)
+
+    checks = validate_cmd.build_validate_report(config, quiet=True)
+
+    assert checks
+    assert quiet_flags == [True, True, True, True]
 
 
 def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path: Path) -> None:

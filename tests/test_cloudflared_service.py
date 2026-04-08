@@ -6,7 +6,10 @@ from homesrvctl.shell import CommandResult
 
 
 def test_detect_cloudflared_runtime_prefers_systemd(monkeypatch) -> None:
+    calls: list[tuple[list[str], bool]] = []
+
     def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
+        calls.append((command, quiet))
         if command[:2] == ["systemctl", "is-active"]:
             return CommandResult(command, 0, "active", "")
         if command[:4] == ["systemctl", "show", "cloudflared", "--property"]:
@@ -21,6 +24,29 @@ def test_detect_cloudflared_runtime_prefers_systemd(monkeypatch) -> None:
     assert runtime.active
     assert runtime.restart_command == ["systemctl", "restart", "cloudflared"]
     assert runtime.reload_command == ["systemctl", "reload", "cloudflared"]
+    assert calls == [
+        (["systemctl", "is-active", "cloudflared"], False),
+        (["systemctl", "show", "cloudflared", "--property", "CanReload", "--value"], False),
+    ]
+
+
+def test_detect_cloudflared_runtime_honors_quiet(monkeypatch) -> None:
+    quiet_flags: list[bool] = []
+
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
+        quiet_flags.append(quiet)
+        if command[:2] == ["systemctl", "is-active"]:
+            return CommandResult(command, 0, "active", "")
+        if command[:4] == ["systemctl", "show", "cloudflared", "--property"]:
+            return CommandResult(command, 0, "yes", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(cloudflared_service, "run_command", fake_run_command)
+
+    runtime = cloudflared_service.detect_cloudflared_runtime(quiet=True)
+
+    assert runtime.mode == "systemd"
+    assert quiet_flags == [True, True]
 
 
 def test_detect_cloudflared_runtime_uses_docker_when_systemd_inactive(monkeypatch) -> None:
@@ -74,7 +100,7 @@ def test_reload_cloudflared_service_runs_reload_command(monkeypatch) -> None:
 
     monkeypatch.setattr(cloudflared_service, "detect_cloudflared_runtime", lambda: runtime)
 
-    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False):  # noqa: ANN001, ANN202
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
         calls.append(command)
         return CommandResult(command, 0, "", "")
 

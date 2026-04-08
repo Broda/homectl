@@ -3307,7 +3307,7 @@ def test_validate_json_output(monkeypatch, tmp_path: Path) -> None:
         validate_cmd.CheckResult("cloudflared binary", True, "found in PATH"),
         validate_cmd.CheckResult("docker binary", True, "found in PATH"),
     ]
-    monkeypatch.setattr(validate_cmd, "build_validate_report", lambda config: checks)
+    monkeypatch.setattr(validate_cmd, "build_validate_report", lambda config, quiet=False: checks)
 
     runner = CliRunner()
     result = runner.invoke(app, ["validate", "--json"])
@@ -3331,7 +3331,11 @@ def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
         validate_cmd.CheckResult("hostname directory", True, "/tmp/example.com"),
         validate_cmd.CheckResult("host-header request", True, "example.com returned HTTP 200"),
     ]
-    monkeypatch.setattr(validate_cmd, "build_hostname_doctor_report", lambda config, hostname, global_sources=None: checks)
+    monkeypatch.setattr(
+        validate_cmd,
+        "build_hostname_doctor_report",
+        lambda config, hostname, global_sources=None, quiet=False: checks,
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["doctor", "example.com", "--json"])
@@ -3359,7 +3363,11 @@ def test_doctor_json_output_includes_routing_context(monkeypatch, tmp_path: Path
         validate_cmd.CheckResult("effective ingress target", True, "http://localhost:9000 (profile:edge)"),
         validate_cmd.CheckResult("host-header request", True, "example.com returned HTTP 200"),
     ]
-    monkeypatch.setattr(validate_cmd, "build_hostname_doctor_report", lambda config, hostname, global_sources=None: checks)
+    monkeypatch.setattr(
+        validate_cmd,
+        "build_hostname_doctor_report",
+        lambda config, hostname, global_sources=None, quiet=False: checks,
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["doctor", "example.com", "--json"])
