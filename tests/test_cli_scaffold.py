@@ -122,6 +122,23 @@ def test_site_init_with_profile_writes_profile_selection(monkeypatch, tmp_path: 
     assert overrides == {"profile": "edge"}
 
 
+def test_site_init_with_docker_network_override_only_writes_network_override(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["site", "init", "test.example.com", "--docker-network", "edge"])
+
+    assert result.exit_code == 0, result.output
+    compose_file = sites_root / "test.example.com" / "docker-compose.yml"
+    stack_config = sites_root / "test.example.com" / "homesrvctl.yml"
+    assert "edge" in compose_file.read_text(encoding="utf-8")
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {"docker_network": "edge"}
+
+
 def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -336,6 +353,49 @@ def test_config_show_json_output_with_profile_and_direct_override(monkeypatch, t
     assert payload["stack"]["local_overrides"] == {
         "profile": "edge",
         "traefik_url": "http://localhost:9001",
+    }
+
+
+def test_config_show_json_output_for_default_and_override_stacks(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    monkeypatch.setenv("HOME", str(home))
+
+    default_dir = sites_root / "default.com"
+    default_dir.mkdir(parents=True)
+    override_dir = sites_root / "override.com"
+    override_dir.mkdir(parents=True)
+    (override_dir / "homesrvctl.yml").write_text(
+        yaml.safe_dump({"profile": "edge", "traefik_url": "http://localhost:9001"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    default_result = runner.invoke(app, ["config", "show", "--stack", "default.com", "--json"])
+    override_result = runner.invoke(app, ["config", "show", "--stack", "override.com", "--json"])
+
+    assert default_result.exit_code == 0, default_result.output
+    assert override_result.exit_code == 0, override_result.output
+    default_payload = json.loads(default_result.output)
+    override_payload = json.loads(override_result.output)
+
+    assert default_payload["stack"]["effective_sources"] == {
+        "docker_network": "global-file",
+        "traefik_url": "global-file",
+    }
+    assert override_payload["stack"]["effective_sources"] == {
+        "docker_network": "profile:edge",
+        "traefik_url": "stack-local",
     }
 
 
@@ -1131,6 +1191,86 @@ def test_domain_add_updates_cloudflared_ingress(monkeypatch, tmp_path: Path) -> 
         {"service": "http_status:404"},
     ]
     assert "Restart cloudflared to apply ingress changes" in result.output
+
+
+def test_domain_add_uses_effective_service_for_mixed_stacks(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    default_dir = sites_root / "default.com"
+    default_dir.mkdir(parents=True)
+    override_dir = sites_root / "override.com"
+    override_dir.mkdir(parents=True)
+    (override_dir / "homesrvctl.yml").write_text(
+        yaml.safe_dump({"profile": "edge", "traefik_url": "http://localhost:9001"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": f"zone-{zone_name}"}
+
+        def apply_dns_record(self, zone_id: str, record_name: str, content: str):  # noqa: ANN202
+            return type("Plan", (), {"action": "create", "record_type": "CNAME", "record_name": record_name, "content": content})()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+    monkeypatch.setattr(
+        domain_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="systemd",
+            active=True,
+            detail="systemd service is active",
+            restart_command=["systemctl", "restart", "cloudflared"],
+            reload_command=["systemctl", "reload", "cloudflared"],
+        ),
+    )
+
+    runner = CliRunner()
+    default_result = runner.invoke(app, ["domain", "add", "default.com"])
+    assert default_result.exit_code == 0, default_result.output
+    updated = yaml.safe_load(cloudflared_config.read_text(encoding="utf-8"))
+    assert updated["ingress"][:2] == [
+        {"hostname": "default.com", "service": "http://localhost:8081"},
+        {"hostname": "*.default.com", "service": "http://localhost:8081"},
+    ]
+
+    override_result = runner.invoke(app, ["domain", "add", "override.com"])
+    assert override_result.exit_code == 0, override_result.output
+    updated = yaml.safe_load(cloudflared_config.read_text(encoding="utf-8"))
+    assert updated["ingress"][:4] == [
+        {"hostname": "default.com", "service": "http://localhost:8081"},
+        {"hostname": "*.default.com", "service": "http://localhost:8081"},
+        {"hostname": "override.com", "service": "http://localhost:9001"},
+        {"hostname": "*.override.com", "service": "http://localhost:9001"},
+    ]
 
 
 def test_domain_add_restarts_cloudflared_when_requested(monkeypatch, tmp_path: Path) -> None:
