@@ -308,6 +308,7 @@ Tasks:
 
 Subtasks:
 - Review whether generated READMEs are consistent in structure.
+  Current baseline: generated `node` and `python` READMEs now both document endpoints, runtime inputs, and first-run behavior in the same structure.
 - Review whether `.env.example` files explain only what users actually need.
   Current baseline: generated `node` and `python` READMEs now include explicit first-run and healthcheck guidance, and `.env.example` files now say they are optional unless you need overrides.
 - Review whether Dockerfiles use reasonable defaults without too much magic.
@@ -316,6 +317,7 @@ Subtasks:
   Current baseline: scaffold regression coverage now checks rendered template manifests plus port and healthcheck consistency across generated `node` and `python` artifacts.
   Current baseline: generated `node` and `python` app templates include container healthchecks against their default root endpoints.
   Current baseline: generated `node` and `python` sources now expose a dedicated `/healthz` endpoint for container healthchecks.
+  Current baseline: generated `node` and `python` sources now return explicit `405` responses for unsupported methods instead of falling back to runtime-specific defaults.
 
 ### 3.2 Add a “static app plus API” pattern
 

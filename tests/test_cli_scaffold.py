@@ -173,6 +173,9 @@ def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) ->
     assert "ENV NODE_ENV=production" in dockerfile
     assert "RUN npm install --omit=dev" in dockerfile
     assert "/healthz" in server_js
+    assert "requestMethod" in server_js
+    assert "\"GET /healthz\": lightweight health response used by the container healthcheck" not in readme
+    assert "GET /healthz" in readme
     assert "\"start\": \"node src/server.js\"" in package_json
     assert "Replace src/server.js with your real Node application." in server_js
 
@@ -210,6 +213,8 @@ def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     assert "ENV PYTHONUNBUFFERED=1" in dockerfile
     assert "python -m pip install --no-cache-dir -r requirements.txt" in dockerfile
     assert "if self.path == \"/healthz\":" in main_py
+    assert "requestMethod" in main_py
+    assert "GET /healthz" in readme
     assert "Replace app/main.py with your real Python application." in main_py
 
 
@@ -238,6 +243,7 @@ def test_app_init_node_template_artifacts_stay_coherent(monkeypatch, tmp_path: P
     assert "RUN npm install --omit=dev" in dockerfile
     assert "PORT=3000" in env_example
     assert "port = Number.parseInt(process.env.PORT || \"3000\", 10)" in server_js
+    assert "method not allowed" in server_js
     assert "https://notes.example.com/" in readme
 
 
@@ -266,6 +272,7 @@ def test_app_init_python_template_artifacts_stay_coherent(monkeypatch, tmp_path:
     assert "python -m pip install --no-cache-dir -r requirements.txt" in dockerfile
     assert "PORT=8000" in env_example
     assert "PORT = int(os.environ.get(\"PORT\", \"8000\"))" in main_py
+    assert "def _method_not_allowed(self) -> None:" in main_py
     assert "https://api.example.com/" in readme
 
 

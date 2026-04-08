@@ -5,6 +5,14 @@ const appHostname = process.env.APP_HOSTNAME || "{{ hostname }}";
 const nodeEnv = process.env.NODE_ENV || "production";
 
 const server = http.createServer((request, response) => {
+  if ((request.method || "GET") !== "GET") {
+    response.statusCode = 405;
+    response.setHeader("Allow", "GET");
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.end(JSON.stringify({ error: "method not allowed" }));
+    return;
+  }
+
   if ((request.url || "/") === "/healthz") {
     response.statusCode = 200;
     response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -16,6 +24,7 @@ const server = http.createServer((request, response) => {
     hostname: "{{ hostname }}",
     appHostname,
     nodeEnv,
+    requestMethod: request.method || "GET",
     requestPath: request.url || "/",
     message: "Replace src/server.js with your real Node application."
   };

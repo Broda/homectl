@@ -20,12 +20,24 @@ This scaffold is a minimal production-oriented Node service for `{{ hostname }}`
 
 ## Runtime behavior
 
-The default server responds on `/` with JSON containing:
+The default server exposes:
+
+- `GET /`: scaffold JSON response
+- `GET /healthz`: lightweight health response used by the container healthcheck
+
+The root JSON response includes:
 
 - `hostname`
 - `appHostname`
 - `nodeEnv`
+- `requestMethod`
 - `requestPath`
+
+The generated app reads:
+
+- `PORT`
+- `APP_HOSTNAME`
+- `NODE_ENV`
 
 Traefik forwards `{{ hostname }}` to the app on port `3000`.
 The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-3000}/healthz`.

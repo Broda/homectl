@@ -26,6 +26,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added basic healthchecks to the generated `node` and `python` app templates so scaffolded containers verify their default root endpoints.
 - Added dedicated `/healthz` endpoints to the generated `node` and `python` apps so healthchecks no longer probe the user-facing root response.
 - Tightened generated Dockerfile defaults so the Node scaffold installs runtime dependencies and the Python scaffold sets standard runtime environment flags before installing requirements.
+- Standardized the generated app runtime baseline so both `node` and `python` scaffolds document `GET /` plus `GET /healthz`, expose their runtime inputs clearly, and return explicit `405` responses for unsupported methods.
 - Expanded scaffold regression coverage so generated `node` and `python` artifacts stay consistent across ports, healthchecks, first-run docs, and rendered template manifests.
 
 ## 0.2.0 - 2026-04-08
