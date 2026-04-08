@@ -276,10 +276,11 @@ homesrvctl up example.com --dry-run
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.
 - `cloudflared status` reports the detected runtime mode, whether it is active, and the restart command when one is available.
-- `tui` launches a read-only terminal dashboard backed by the existing JSON commands for `list`, `cloudflared status`, and `validate`.
+- `tui` launches a terminal dashboard backed by the existing JSON commands for `list`, `cloudflared status`, and `validate`.
 - The JSON forms of `cloudflared status`, `validate`, and `doctor` stay quiet so they can be consumed directly by scripts and the terminal dashboard.
 - The dashboard now supports keyboard selection between summary sections and shows a focused detail pane for the selected section.
 - TUI navigation uses `tab`, arrow keys, or `w`/`s` to move between sections.
+- On the stacks section, the TUI now supports stack selection with `a`/`d` and can run `doctor`, `up`, `restart`, and `down` for the selected hostname with `g`, `u`, `t`, and `x`.
 - `cloudflared config-test` prefers `cloudflared tunnel ingress validate --config ...` when the binary is available and falls back to structural YAML/ingress validation otherwise.
 - `cloudflared status` now also surfaces non-fatal config warnings when the ingress file is structurally valid but risky, such as an earlier wildcard rule that may shadow a later hostname rule or capture traffic intended for a narrower wildcard.
 - `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.

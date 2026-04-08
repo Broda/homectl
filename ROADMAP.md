@@ -496,11 +496,17 @@ Current baseline:
   - stacks
   - `cloudflared`
   - validation
+- The stacks section now supports:
+  - stack selection with `a` and `d`
+  - direct `doctor`
+  - direct `up`
+  - direct `restart`
+  - direct `down`
 - Refresh is manual with `r` by default, with optional timed refresh via `--refresh-seconds`.
 
 ### 5.3 Add guided flows for common operations
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Make the common multi-step operations easier to run without memorizing command sequences.
@@ -520,6 +526,13 @@ Subtasks:
   - routing overrides
   - restart/reload choices
 - Keep all TUI-driven mutations understandable as ordinary `homesrvctl` operations underneath.
+
+Completed in this milestone so far:
+- The TUI can now drive stack actions directly for the selected hostname:
+  - `doctor`
+  - `up`
+  - `restart`
+  - `down`
 
 ### 5.4 Make diagnostics explorable
 

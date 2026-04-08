@@ -3,7 +3,7 @@ from __future__ import annotations
 import curses
 import time
 
-from homesrvctl.tui.data import build_dashboard_snapshot
+from homesrvctl.tui.data import build_dashboard_snapshot, run_stack_action, stack_sites, summarize_stack_action
 
 SECTIONS = ["stacks", "cloudflared", "validate"]
 
@@ -13,13 +13,26 @@ def run_dashboard(initial_snapshot: dict[str, object], refresh_seconds: float) -
 
 
 def render_dashboard(snapshot: dict[str, object], width: int = 100, selected: str = "stacks") -> str:
+    return render_dashboard_state(snapshot, width=width, selected=selected)
+
+
+def render_dashboard_state(
+    snapshot: dict[str, object],
+    width: int = 100,
+    selected: str = "stacks",
+    selected_stack_index: int = 0,
+    action_status: str | None = None,
+) -> str:
     lines: list[str] = []
     lines.append("homesrvctl dashboard")
-    lines.append("q quit | r refresh | tab/arrow or w/s move")
+    lines.append("q quit | r refresh | tab/arrow or w/s move | stacks: a/d select, g doctor, u up, t restart, x down")
     lines.append("")
     lines.extend(_render_summary(snapshot, width, selected))
     lines.append("")
-    lines.extend(_render_detail(snapshot, width, selected))
+    lines.extend(_render_detail(snapshot, width, selected, selected_stack_index))
+    if action_status:
+        lines.append("")
+        lines.append(f"status: {action_status}")
     lines.append("")
     lines.append(_render_footer(refresh_mode=None))
     lines.append(f"generated: {snapshot.get('generated_at', 'unknown')}")
@@ -31,13 +44,26 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
     stdscr.nodelay(refresh_seconds > 0)
     current = snapshot
     selected_index = 0
+    selected_stack_index = 0
+    action_status: str | None = None
     next_refresh = time.monotonic() + refresh_seconds if refresh_seconds > 0 else None
 
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
         refresh_mode = f"auto {refresh_seconds:g}s" if refresh_seconds > 0 else "manual refresh"
-        rendered = render_dashboard(current, width=max(width - 1, 40), selected=SECTIONS[selected_index])
+        current_sites = stack_sites(current)
+        if current_sites:
+            selected_stack_index = max(0, min(selected_stack_index, len(current_sites) - 1))
+        else:
+            selected_stack_index = 0
+        rendered = render_dashboard_state(
+            current,
+            width=max(width - 1, 40),
+            selected=SECTIONS[selected_index],
+            selected_stack_index=selected_stack_index,
+            action_status=action_status,
+        )
         lines = rendered.splitlines()
         if len(lines) >= 2:
             lines[-2] = _render_footer(refresh_mode=refresh_mode)
@@ -58,6 +84,7 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
             return
         if key in {ord("r"), ord("R")}:
             current = build_dashboard_snapshot()
+            action_status = "dashboard refreshed"
             if refresh_seconds > 0:
                 next_refresh = time.monotonic() + refresh_seconds
             continue
@@ -67,8 +94,35 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
         if key in {curses.KEY_LEFT, curses.KEY_UP, ord("w"), ord("W")}:
             selected_index = (selected_index - 1) % len(SECTIONS)
             continue
+        if SECTIONS[selected_index] == "stacks" and current_sites:
+            if key in {ord("a"), ord("A")}:
+                selected_stack_index = (selected_stack_index - 1) % len(current_sites)
+                continue
+            if key in {ord("d"), ord("D")}:
+                selected_stack_index = (selected_stack_index + 1) % len(current_sites)
+                continue
+            if key in {ord("g"), ord("G"), ord("u"), ord("U"), ord("t"), ord("T"), ord("x"), ord("X")}:
+                selected_site = current_sites[selected_stack_index]
+                hostname = str(selected_site.get("hostname", ""))
+                action = {
+                    ord("g"): "doctor",
+                    ord("G"): "doctor",
+                    ord("u"): "up",
+                    ord("U"): "up",
+                    ord("t"): "restart",
+                    ord("T"): "restart",
+                    ord("x"): "down",
+                    ord("X"): "down",
+                }[key]
+                payload = run_stack_action(hostname, action)
+                action_status = summarize_stack_action(hostname, action, payload)
+                current = build_dashboard_snapshot()
+                if refresh_seconds > 0:
+                    next_refresh = time.monotonic() + refresh_seconds
+                continue
         if key == -1 and refresh_seconds > 0:
             current = build_dashboard_snapshot()
+            action_status = "dashboard refreshed"
             next_refresh = time.monotonic() + refresh_seconds
 
 
@@ -81,11 +135,11 @@ def _render_summary(snapshot: dict[str, object], width: int, selected: str) -> l
     ]
 
 
-def _render_detail(snapshot: dict[str, object], width: int, selected: str) -> list[str]:
+def _render_detail(snapshot: dict[str, object], width: int, selected: str, selected_stack_index: int) -> list[str]:
     label = selected.title() if selected != "cloudflared" else "Cloudflared"
     heading = _heading(f"{label} detail", width)
     if selected == "stacks":
-        return [heading, *_render_stack_detail(snapshot.get("list"))]
+        return [heading, *_render_stack_detail(snapshot.get("list"), selected_stack_index)]
     if selected == "cloudflared":
         return [heading, *_render_cloudflared_detail(snapshot.get("cloudflared"))]
     return [heading, *_render_validate_detail(snapshot.get("validate"))]
@@ -93,7 +147,7 @@ def _render_detail(snapshot: dict[str, object], width: int, selected: str) -> li
 
 def _render_footer(refresh_mode: str | None) -> str:
     mode = refresh_mode or "manual refresh"
-    return f"controls: q quit | r refresh | tab/arrow or w/s move | mode: {mode}"
+    return f"controls: q quit | r refresh | tab/arrow or w/s move | stacks a/d/g/u/t/x | mode: {mode}"
 
 
 def _summary_line(name: str, selected: str, detail: str) -> str:
@@ -135,7 +189,7 @@ def _validate_summary(payload) -> str:  # noqa: ANN001
     return f"{len(checks)} checks, {len(failures)} failing"
 
 
-def _render_stack_detail(payload) -> list[str]:  # noqa: ANN001
+def _render_stack_detail(payload, selected_stack_index: int = 0) -> list[str]:  # noqa: ANN001
     if not isinstance(payload, dict):
         return ["unavailable"]
     if not payload.get("ok"):
@@ -143,10 +197,18 @@ def _render_stack_detail(payload) -> list[str]:  # noqa: ANN001
     sites = payload.get("sites", [])
     if not sites:
         return ["no stacks found"]
-    lines = []
+    selected_stack_index = max(0, min(selected_stack_index, len(sites) - 1))
+    selected_site = sites[selected_stack_index]
+    lines = [
+        f"selected stack: {selected_site.get('hostname', '<unknown>')}",
+        f"compose file: {'yes' if selected_site.get('compose') else 'no'}",
+        "stack actions: a/d select | g doctor | u up | t restart | x down",
+        "",
+    ]
     for site in sites[:12]:
         status = "compose=yes" if site.get("compose") else "compose=no"
-        lines.append(f"- {site.get('hostname', '<unknown>')} [{status}]")
+        marker = ">" if site is selected_site else "-"
+        lines.append(f"{marker} {site.get('hostname', '<unknown>')} [{status}]")
     if len(sites) > 12:
         lines.append(f"... {len(sites) - 12} more")
     return lines
