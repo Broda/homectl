@@ -162,6 +162,8 @@ def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) ->
     server_js = (app_dir / "src" / "server.js").read_text(encoding="utf-8")
     assert "dockerfile: Dockerfile" in compose
     assert "loadbalancer.server.port=3000" in compose
+    assert "healthcheck:" in compose
+    assert "http://127.0.0.1:${PORT:-3000}/" in compose
     assert "\"start\": \"node src/server.js\"" in package_json
     assert "Replace src/server.js with your real Node application." in server_js
 
@@ -187,6 +189,8 @@ def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
     main_py = (app_dir / "app" / "main.py").read_text(encoding="utf-8")
     assert "loadbalancer.server.port=8000" in compose
+    assert "healthcheck:" in compose
+    assert "http://127.0.0.1:${PORT:-8000}/" in compose
     assert "Replace app/main.py with your real Python application." in main_py
 
 
