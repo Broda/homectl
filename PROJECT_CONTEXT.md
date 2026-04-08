@@ -25,6 +25,28 @@ The project focuses on:
 
 The project should stay narrow enough that operators can understand what each command changes.
 
+## Scaffold Boundary
+
+Scaffolds in `homesrvctl` are meant to produce small, deployable hosting baselines.
+
+They may include:
+- Compose
+- a minimal Dockerfile
+- a minimal runtime entrypoint
+- basic static assets
+- a small generated README
+- healthchecks
+
+They should not include by default:
+- large framework starters
+- frontend build pipelines
+- databases
+- auth systems
+- migrations
+- production app architecture choices
+
+If a new template would require substantial framework-specific machinery, that should be treated as a separate product decision rather than the automatic next scaffold.
+
 ## Product Principles
 
 - Correctness over convenience.

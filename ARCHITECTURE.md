@@ -83,6 +83,7 @@ Responsibilities:
 - support site and app initialization without making `homesrvctl` a general-purpose framework generator
 
 The per-template directory layout under `templates/app/` is intentional and should be preserved.
+Scaffold scope should stay within the philosophy recorded in [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md): small deployable baselines, not framework stacks.
 
 ### Shared utilities
 

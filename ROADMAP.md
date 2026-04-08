@@ -180,24 +180,22 @@ Completed in this milestone so far:
 
 ### 1.3 Support more than one ingress target cleanly
 
-Status: in_progress
+Status: deferred
 
 Tasks:
-- Add product-level support for more than one local ingress URL.
-- Ensure domain lifecycle commands resolve the correct ingress target from the effective routing config.
-- Ensure doctor and validation flows report the effective routing target clearly.
+- Revisit richer multi-ingress support only if real operator use cases outgrow the current profile-and-override model.
+- Keep the current routing model stable unless additional ingress classes clearly justify more product surface.
 
 Subtasks:
 - Decide whether additional ingress targets belong in:
   - named routing profiles
   - direct stack-local overrides only
-- Extend domain-status output so it clearly shows:
-  - default target
-  - effective target
-  - why the effective target differs
-- Add tests for mixed setups where:
-  - one stack uses the default ingress
-  - another stack uses an alternate ingress
+- Revisit whether domain and doctor flows need richer ingress-class reporting beyond the current routing context.
+- Add more tests only if a new ingress model is actually introduced.
+
+Current baseline:
+- Global profiles plus stack-local `traefik_url` overrides already support one-off alternate ingress targets.
+- `domain status`, `doctor`, and `config show` already report the effective routing target and its source.
 
 ### 1.4 Broaden non-default routing tests
 
@@ -257,23 +255,27 @@ Subtasks:
 
 ### 2.3 Expand config introspection
 
-Status: in progress
+Status: mostly shipped
 
 Tasks:
-- Improve visibility into effective config resolution.
-- Make it easier to understand what global config plus stack-local config combine into.
+- Keep the current effective-config surface stable and understandable.
+- Reopen this area only if new routing or TUI work reveals a real visibility gap.
 
 Subtasks:
-- Extend `config show --json` if more effective-config detail becomes necessary.
-- Extend stack-focused config inspection beyond `config show --stack example.com` if operators need deeper routing visibility.
-- Decide whether effective config inspection belongs under:
-  - `config`
-  - `doctor`
+- Extend `config show --json` only if additional consumers genuinely need more detail.
+- Keep stack-focused inspection aligned across:
+  - `config show --stack`
   - `domain status`
-- Ensure any new output clearly separates:
+  - `doctor`
+- Preserve clear separation between:
   - global values
   - inherited defaults
   - stack-local overrides
+
+Current baseline:
+- `config show` exists in text and JSON forms.
+- `config show --stack` reports effective routing values and their sources.
+- `domain status` and `doctor` already surface routing context for the inspected hostname.
 
 ### 2.4 Keep command surfaces convergent and predictable
 
@@ -350,23 +352,37 @@ Subtasks:
 
 ### 3.3 Decide the philosophy boundary for scaffolds
 
-Status: planned
+Status: shipped
 
-Tasks:
-- Decide how opinionated `homesrvctl` should be about application bootstrapping.
-- Keep the project focused on hosting operations, not full app generation.
+Goal: keep `homesrvctl` focused on deployable hosting baselines rather than turning it into a general app generator.
 
-Subtasks:
-- Write down what belongs in a scaffold:
+Decision:
+- A scaffold should provide the smallest useful deployable baseline for a hostname or app pattern.
+- A scaffold may include:
   - Compose
-  - Dockerfile
-  - minimal app entrypoint
-  - docs
-- Write down what does not belong by default:
+  - minimal Dockerfile
+  - minimal runtime entrypoint
+  - basic static assets
+  - small generated README guidance
+  - healthchecks
+- A scaffold should not include by default:
   - large framework setups
-  - heavy frontend stacks
+  - frontend build pipelines
+  - databases
+  - auth systems
+  - migrations
   - production app architecture choices
-- Use that boundary to guide future template additions.
+  - opinionated deployment stacks beyond the local hosting baseline
+
+Implications:
+- Templates should stay easy to understand after generation.
+- New templates should bias toward runtime-agnostic or minimal-runtime examples.
+- If a template starts needing substantial framework-specific machinery, it should be treated as a separate design decision, not the default next scaffold.
+
+Applied examples:
+- `static` stays a plain nginx-backed website with basic assets.
+- `static-api` stays a small two-service pattern rather than a frontend framework plus backend stack.
+- `node` and `python` stay minimal runtime baselines rather than framework starters.
 
 ### 3.4 Keep template layout scalable
 
