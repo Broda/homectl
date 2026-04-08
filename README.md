@@ -47,15 +47,21 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+From PyPI:
+
+```bash
+pip install homesrvctl
+```
+
 From a tagged GitHub release:
 
 ```bash
 pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.2.0.tar.gz"
 ```
 
-The published Python distribution name is `homesrvctl`. The CLI command remains `homesrvctl`.
+The published Python distribution name is `homesrvctl`. The CLI command is also `homesrvctl`.
 
-`homesrvctl` currently uses GitHub releases as its public release channel. Tagged releases publish to TestPyPI first. Production PyPI publishing is not enabled yet.
+`homesrvctl` is published to PyPI. GitHub Releases remain available as an additional artifact channel.
 
 ## Configuration
 
