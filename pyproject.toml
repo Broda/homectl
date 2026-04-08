@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "homesrvctl"
-version = "0.1.1"
+version = "0.2.0"
 description = "CLI for managing a home-server hosting platform backed by Cloudflare Tunnel, Traefik, and Docker Compose."
 readme = "README.md"
 requires-python = ">=3.11"

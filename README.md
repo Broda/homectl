@@ -50,7 +50,7 @@ pip install -e .
 From a tagged GitHub release:
 
 ```bash
-pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.1.1.tar.gz"
+pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.2.0.tar.gz"
 ```
 
 The published Python distribution name is `homesrvctl`. The CLI command remains `homesrvctl`.
