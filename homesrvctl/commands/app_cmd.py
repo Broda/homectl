@@ -148,6 +148,10 @@ def _template_outputs(target_dir, template: TemplateName) -> list[tuple]:  # noq
             (target_dir / "docker-compose.yml", "app/static/docker-compose.yml.j2"),
             (target_dir / "README.md", "app/static/README.md.j2"),
             (target_dir / "html" / "index.html", "app/static/index.html.j2"),
+            (target_dir / "html" / "favicon.svg", "app/static/favicon.svg.j2"),
+            (target_dir / "html" / "assets" / "css" / "main.css", "app/static/main.css.j2"),
+            (target_dir / "html" / "assets" / "js" / "main.js", "app/static/main.js.j2"),
+            (target_dir / "html" / "assets" / "images" / ".gitkeep", "app/static/images.gitkeep.j2"),
         ]
     if template == "node":
         return [

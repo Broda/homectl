@@ -287,7 +287,7 @@ homesrvctl up example.com --dry-run
 - All generated Compose files join the external Docker network configured in `docker_network`.
 - `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
 - `site init` and `app init` can also write a stack-local `profile` selection when you pass `--profile`.
-- `app init --template static` now generates a real boring-static-website scaffold with nginx, `html/index.html`, and a small generated README instead of the old placeholder stub.
+- `app init --template static` now generates a real boring-static-website scaffold with nginx, `html/index.html`, `html/favicon.svg`, `html/assets/css/main.css`, `html/assets/js/main.js`, `html/assets/images/`, and a small generated README instead of the old placeholder stub.
 - The `node` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `package.json`, `.env.example`, and `src/server.js`.
 - The `python` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `requirements.txt`, `.env.example`, and `app/main.py`.
 - The `node` and `python` app templates now include a basic container healthcheck that probes the generated root endpoint on the app’s internal port.

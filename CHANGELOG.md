@@ -29,6 +29,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Standardized the generated app runtime baseline so both `node` and `python` scaffolds document `GET /` plus `GET /healthz`, expose their runtime inputs clearly, and return explicit `405` responses for unsupported methods.
 - Removed unused metadata-style keys from the generated `node` and `python` `.env.example` files so they now only document real runtime overrides.
 - Turned `app init --template static` into a real static-site scaffold with nginx, `html/index.html`, a generated README, and a container healthcheck.
+- Expanded the static-site scaffold to include starter asset folders plus placeholder `main.css` and `main.js` files wired from `index.html`.
+- Added a placeholder `favicon.svg` to the static-site scaffold and wired it from the generated HTML.
 - Expanded scaffold regression coverage so generated `node` and `python` artifacts stay consistent across ports, healthchecks, first-run docs, and rendered template manifests.
 
 ## 0.2.0 - 2026-04-08

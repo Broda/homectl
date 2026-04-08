@@ -6,13 +6,20 @@ This scaffold is a minimal static website for `{{ hostname }}` served by nginx b
 
 - `docker-compose.yml`: nginx service with Traefik labels
 - `html/index.html`: starter page content
+- `html/favicon.svg`: starter favicon
+- `html/assets/css/main.css`: starter stylesheet
+- `html/assets/js/main.js`: starter browser script
+- `html/assets/images/.gitkeep`: placeholder so the images directory is tracked
 - `README.md`: quick notes for the scaffold
 
 ## First run
 
 1. Edit `html/index.html` with your real site content.
-2. Start the stack with `docker compose up -d`.
-3. Verify the container becomes healthy and that `https://{{ hostname }}/` serves your static page.
+2. Replace `html/favicon.svg` with your real site favicon when ready.
+3. Add your styles to `html/assets/css/main.css` and your scripts to `html/assets/js/main.js`.
+4. Put any images or other static media under `html/assets/images/`.
+5. Start the stack with `docker compose up -d`.
+6. Verify the container becomes healthy and that `https://{{ hostname }}/` serves your static page.
 
 ## Runtime behavior
 

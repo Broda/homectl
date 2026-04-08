@@ -327,7 +327,7 @@ Status: planned
 Goal: support a common self-hosted pattern where one hostname serves static assets and proxies to a small app service.
 
 Current baseline:
-- `app init --template static` now generates a real static-site scaffold with nginx, `html/index.html`, and a generated README.
+- `app init --template static` now generates a real static-site scaffold with nginx, `html/index.html`, a placeholder favicon, basic asset folders, and a generated README.
 
 Tasks:
 - Define the scope of a combined static-plus-app scaffold.

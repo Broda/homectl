@@ -194,15 +194,34 @@ def test_app_init_static_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     assert (app_dir / "docker-compose.yml").exists()
     assert (app_dir / "README.md").exists()
     assert (app_dir / "html" / "index.html").exists()
+    assert (app_dir / "html" / "favicon.svg").exists()
+    assert (app_dir / "html" / "assets" / "css" / "main.css").exists()
+    assert (app_dir / "html" / "assets" / "js" / "main.js").exists()
+    assert (app_dir / "html" / "assets" / "images" / ".gitkeep").exists()
     assert not (app_dir / ".env.example").exists()
     compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
     readme = (app_dir / "README.md").read_text(encoding="utf-8")
     index_html = (app_dir / "html" / "index.html").read_text(encoding="utf-8")
+    favicon = (app_dir / "html" / "favicon.svg").read_text(encoding="utf-8")
+    main_css = (app_dir / "html" / "assets" / "css" / "main.css").read_text(encoding="utf-8")
+    main_js = (app_dir / "html" / "assets" / "js" / "main.js").read_text(encoding="utf-8")
     assert "image: nginx:alpine" in compose
     assert "healthcheck:" in compose
     assert "http://127.0.0.1/" in compose
     assert "docker compose up -d" in readme
+    assert "html/favicon.svg" in readme
+    assert "html/assets/css/main.css" in readme
+    assert "html/assets/js/main.js" in readme
+    assert "html/assets/images/" in readme
     assert "www.example.com" in index_html
+    assert '<link rel="icon" href="/favicon.svg" type="image/svg+xml">' in index_html
+    assert '<link rel="stylesheet" href="/assets/css/main.css">' in index_html
+    assert '<script src="/assets/js/main.js"></script>' in index_html
+    assert "<svg" in favicon
+    assert 'aria-label="www.example.com"' in favicon
+    assert "W" in favicon
+    assert "font-family: Georgia" in main_css
+    assert "Static site scaffold loaded for www.example.com" in main_js
 
 
 def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
@@ -592,12 +611,16 @@ def test_app_init_static_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["template"] == "static"
     assert payload["dry_run"] is True
     assert payload["ok"] is True
-    assert payload["files"][-1].endswith("/www.example.com/html/index.html")
+    assert payload["files"][-1].endswith("/www.example.com/html/assets/images/.gitkeep")
     templates = {entry["template"] for entry in payload["rendered_templates"]}
     assert templates == {
         "app/static/docker-compose.yml.j2",
         "app/static/README.md.j2",
         "app/static/index.html.j2",
+        "app/static/favicon.svg.j2",
+        "app/static/main.css.j2",
+        "app/static/main.js.j2",
+        "app/static/images.gitkeep.j2",
     }
 
 
