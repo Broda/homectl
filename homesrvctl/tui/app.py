@@ -3,7 +3,7 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Header, Static
 
 from homesrvctl.tui.data import build_dashboard_snapshot, run_stack_action, stack_sites, summarize_stack_action
 
@@ -13,28 +13,34 @@ class HomesrvctlTextualApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;
-        background: #241a16;
-        color: #f7efe8;
+        background: #081014;
+        color: #d7fff7;
     }
 
     Header {
-        background: #5b3427;
-        color: #fff4ea;
+        background: #0fa697;
+        color: #081014;
+    }
+
+    HeaderClock {
+        color: #081014;
     }
 
     #summary_strip {
         layout: horizontal;
+        width: 100%;
         height: 9;
         padding: 1 2 0 2;
     }
 
     .summary_card {
         width: 1fr;
+        height: 1fr;
         margin-right: 1;
         padding: 1 2;
-        background: #3a2720;
-        border: round #b97851;
-        color: #fdf4ed;
+        background: #0d161b;
+        border: round #1fd6c1;
+        color: #d7fff7;
     }
 
     .summary_card:last-child {
@@ -42,15 +48,16 @@ class HomesrvctlTextualApp(App[None]):
     }
 
     .card_title {
-        color: #ffcf9f;
+        color: #ffcf5a;
         text-style: bold;
         margin-bottom: 1;
     }
 
     #body {
         layout: horizontal;
+        width: 100%;
         height: 1fr;
-        padding: 1 2;
+        padding: 0 2 0 2;
     }
 
     #controls_pane {
@@ -58,19 +65,20 @@ class HomesrvctlTextualApp(App[None]):
         min-width: 34;
         margin-right: 1;
         padding: 1 2;
-        background: #2f211c;
-        border: round #b97851;
+        background: #0b1419;
+        border: round #13bfae;
     }
 
     #detail_pane {
         width: 1fr;
+        min-width: 0;
         padding: 1 2;
-        background: #1d1512;
-        border: round #a96843;
+        background: #091116;
+        border: round #0fa697;
     }
 
     .pane_title {
-        color: #ffcf9f;
+        color: #ffcf5a;
         text-style: bold;
         margin-bottom: 1;
     }
@@ -84,12 +92,21 @@ class HomesrvctlTextualApp(App[None]):
     }
 
     #command_bar {
-        height: 4;
-        margin: 0 2 0 2;
-        padding: 1 2;
-        background: #5b3427;
-        color: #fff4ea;
-        border: round #d4976e;
+        layout: horizontal;
+        width: 100%;
+        height: 3;
+        margin: 0;
+        padding: 0 2;
+        background: #0fa697;
+        color: #081014;
+        border: none;
+    }
+
+    #command_bar_text {
+        width: 1fr;
+        height: 1fr;
+        background: #0fa697;
+        color: #081014;
     }
     """
 
@@ -125,8 +142,8 @@ class HomesrvctlTextualApp(App[None]):
             with Vertical(id="detail_pane"):
                 yield Static("Detail", classes="pane_title")
                 yield Static("", id="detail_box")
-        yield Static("", id="command_bar")
-        yield Footer()
+        with Horizontal(id="command_bar"):
+            yield Static("", id="command_bar_text")
 
     def on_mount(self) -> None:
         self._refresh_snapshot("dashboard ready")
@@ -201,7 +218,7 @@ class HomesrvctlTextualApp(App[None]):
         self.query_one("#summary_validate", Static).update(self._summary_card("Validate", self._validate_summary()))
         self.query_one("#controls_box", Static).update(self._control_list_text())
         self.query_one("#detail_box", Static).update(self._detail_text())
-        self.query_one("#command_bar", Static).update(self._command_bar_text())
+        self.query_one("#command_bar_text", Static).update(self._command_bar_text())
 
     def _summary_card(self, title: str, detail: str) -> str:
         return f"{title}\n\n{detail}"
