@@ -163,6 +163,10 @@ def inspect_cloudflared_config_warnings(config_path: Path) -> list[CloudflaredCo
                             f"{hostname} -> {service} may capture hosts intended for later wildcard {later_hostname} "
                             f"at ingress index {later_index}"
                         ),
+                        hint=(
+                            f"move the narrower wildcard {later_hostname} above {hostname}, "
+                            "or narrow/remove the broader wildcard if it is no longer needed"
+                        ),
                     )
                 )
                 continue
@@ -174,6 +178,10 @@ def inspect_cloudflared_config_warnings(config_path: Path) -> list[CloudflaredCo
                             "earlier ingress rule "
                             f"{hostname} -> {service} may shadow later hostname {later_hostname} at ingress index "
                             f"{later_index}"
+                        ),
+                        hint=(
+                            f"move {later_hostname} above {hostname}, "
+                            "or narrow/remove the earlier rule so the specific hostname matches first"
                         ),
                     )
                 )

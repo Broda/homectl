@@ -256,6 +256,7 @@ homesrvctl up example.com --dry-run
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
 - `domain status` also reports routing context for the apex stack, including the default ingress target, effective ingress target, selected profile, and source attribution for the effective target.
 - `domain status` now also surfaces non-fatal ingress warnings when the configured `cloudflared` ingress file contains risky wildcard precedence, including earlier wildcard rules that may shadow later hostnames or capture traffic intended for a narrower wildcard.
+- Those ingress warnings now include direct remediation hints, such as moving a narrower rule above a broader wildcard or removing an unused catch-all rule.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.

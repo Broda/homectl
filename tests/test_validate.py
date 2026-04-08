@@ -250,7 +250,8 @@ def test_build_hostname_doctor_report_includes_ingress_warnings(monkeypatch, tmp
     assert len(warning_checks) == 1
     assert not warning_checks[0].ok
     assert warning_checks[0].detail == (
-        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"
+        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
     )
 
 
@@ -407,7 +408,8 @@ def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path
     warnings = collect_cloudflared_config_warnings(cloudflared_config)
 
     assert warnings == [
-        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"
+        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
     ]
 
 
@@ -421,5 +423,7 @@ def test_collect_cloudflared_config_warnings_reports_wildcard_precedence_risk(tm
     warnings = collect_cloudflared_config_warnings(cloudflared_config)
 
     assert warnings == [
-        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard *.example.com at ingress index 1"
+        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard "
+        "*.example.com at ingress index 1. Hint: move the narrower wildcard *.example.com above *.com, "
+        "or narrow/remove the broader wildcard if it is no longer needed"
     ]

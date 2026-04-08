@@ -556,7 +556,10 @@ def test_cloudflared_status_json_output(monkeypatch) -> None:
                 "detail": "Everything OK",
                 "command": ["cloudflared", "tunnel", "--config", str(path), "ingress", "validate"],
                 "method": "cloudflared",
-                "warnings": ["earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"],
+                "warnings": [
+                    "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+                    "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
+                ],
             },
         )(),
     )
@@ -573,7 +576,8 @@ def test_cloudflared_status_json_output(monkeypatch) -> None:
     assert payload["reload_command"] is None
     assert payload["config_validation"]["ok"] is True
     assert payload["config_validation"]["warnings"] == [
-        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"
+        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
     ]
 
 
@@ -820,7 +824,10 @@ def test_cloudflared_config_test_reports_shadowing_warning(monkeypatch, tmp_path
                 "detail": "fallback service http_status:404",
                 "command": None,
                 "method": "structural",
-                "warnings": ["earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1"],
+                "warnings": [
+                    "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+                    "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
+                ],
             },
         )(),
     )
@@ -829,7 +836,11 @@ def test_cloudflared_config_test_reports_shadowing_warning(monkeypatch, tmp_path
     result = runner.invoke(app, ["cloudflared", "config-test"])
 
     assert result.exit_code == 0, result.output
-    assert "warning: earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1" in result.output
+    assert (
+        "warning: earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
+        in result.output
+    )
 
 
 def test_cloudflared_restart_json_failure(monkeypatch) -> None:
@@ -2727,8 +2738,10 @@ def test_domain_status_json_reports_shadowed_ingress_as_manual_fix(monkeypatch, 
     assert payload["manual_fix_required"] is True
     assert payload["suggested_command"] is None
     assert payload["ingress_warnings"] == [
-        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1",
-        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard *.example.com at ingress index 2",
+        "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first",
+        "earlier wildcard rule *.com -> http://localhost:9000 may capture hosts intended for later wildcard *.example.com at ingress index 2. "
+        "Hint: move the narrower wildcard *.example.com above *.com, or narrow/remove the broader wildcard if it is no longer needed",
     ]
     assert payload["ingress"][0]["shadowed"] is True
     assert payload["ingress"][0]["effective_hostname"] == "*.com"
@@ -3089,7 +3102,11 @@ def test_domain_status_reports_ingress_warnings(monkeypatch, tmp_path: Path) -> 
     result = runner.invoke(app, ["domain", "status", "example.com"])
 
     assert result.exit_code == 1, result.output
-    assert "Ingress warning: earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1" in result.output
+    assert (
+        "Ingress warning: earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+        "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
+        in result.output
+    )
 
 
 def test_list_json_output(monkeypatch, tmp_path: Path) -> None:
