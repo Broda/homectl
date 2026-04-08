@@ -228,7 +228,7 @@ class CloudflareApiClient:
             headers={
                 "Authorization": f"Bearer {self._api_token}",
                 "Content-Type": "application/json",
-                "User-Agent": "homesrvctl/0.1.0",
+                "User-Agent": "homesrvctl/0.1.1",
             },
         )
         try:

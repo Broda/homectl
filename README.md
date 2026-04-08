@@ -50,12 +50,12 @@ pip install -e .
 From a tagged GitHub release:
 
 ```bash
-pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.1.0.tar.gz"
+pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.1.1.tar.gz"
 ```
 
 The published Python distribution name is `homesrvctl`. The CLI command remains `homesrvctl`.
 
-`homesrvctl` currently uses GitHub releases as its public release channel. PyPI publishing is not enabled yet.
+`homesrvctl` currently uses GitHub releases as its public release channel. Tagged releases publish to TestPyPI first. Production PyPI publishing is not enabled yet.
 
 ## Configuration
 

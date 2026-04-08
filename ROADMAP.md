@@ -55,9 +55,10 @@
 - Moved the placeholder app scaffold under `homesrvctl/templates/app/placeholder/`.
 - Added packaging and release automation for tagged versions.
 - Added a GitHub Actions release workflow for `vX.Y.Z` tags that builds artifacts and publishes GitHub Releases.
+- Added a TestPyPI-first trusted publishing step to the tagged release workflow before GitHub Release creation.
 - Reused the shared Python checks workflow as the release gate before artifact publishing.
 - Chose `project.version` in `pyproject.toml` plus matching `vX.Y.Z` tags as the release version source of truth.
-- Chose GitHub releases as the current public release channel and deferred PyPI publishing.
+- Chose GitHub releases as the current public release channel, enabled TestPyPI validation, and deferred production PyPI publishing.
 - Added written release instructions and GitHub-generated release notes discipline.
 - Added CI via GitHub Actions and updated it to Node 24-compatible action versions.
 - Cleaned the public repository for release with generic examples, neutral defaults, and MIT licensing metadata.
