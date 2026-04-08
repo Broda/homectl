@@ -6,10 +6,10 @@ from pathlib import Path
 import typer
 
 from homesrvctl.config import (
-    config_sources,
     default_config_path,
     init_config,
-    load_config,
+    load_config_details,
+    load_stack_config_data,
     load_stack_settings,
     stack_settings_sources,
 )
@@ -90,7 +90,7 @@ def config_show(
     """Show global config and effective stack-local overrides."""
     target_path = path or default_config_path()
     try:
-        config = load_config(target_path)
+        config, global_sources = load_config_details(target_path)
     except typer.BadParameter as exc:
         if json_output:
             typer.echo(
@@ -122,29 +122,30 @@ def config_show(
         "config_path": str(target_path),
         "ok": True,
         "global": global_payload,
-        "global_sources": config_sources(config),
+        "global_sources": global_sources,
     }
 
     if stack:
         settings = load_stack_settings(config, stack)
+        local_overrides = load_stack_config_data(settings.stack_dir)
         payload["stack"] = {
             "hostname": stack,
             "stack_dir": str(settings.stack_dir),
             "stack_config_path": str(settings.config_path),
             "has_local_config": settings.has_local_config,
-            "local_overrides": (
-                {
-                    "docker_network": settings.docker_network,
-                    "traefik_url": settings.traefik_url,
-                }
-                if settings.has_local_config
-                else {}
-            ),
+            "local_overrides": local_overrides,
             "effective": {
                 "docker_network": settings.docker_network,
                 "traefik_url": settings.traefik_url,
             },
-            "effective_sources": stack_settings_sources(config, settings),
+            "effective_sources": stack_settings_sources(
+                config,
+                settings,
+                {
+                    "docker_network": f"global-{global_sources['docker_network']}",
+                    "traefik_url": f"global-{global_sources['traefik_url']}",
+                },
+            ),
         }
 
     if json_output:
@@ -164,7 +165,14 @@ def config_show(
         return
 
     settings = load_stack_settings(config, stack)
-    sources = stack_settings_sources(config, settings)
+    sources = stack_settings_sources(
+        config,
+        settings,
+        {
+            "docker_network": f"global-{global_sources['docker_network']}",
+            "traefik_url": f"global-{global_sources['traefik_url']}",
+        },
+    )
     info(f"Stack configuration for {stack}:")
     typer.echo(f"  stack_dir: {settings.stack_dir}")
     typer.echo(f"  stack_config_path: {settings.config_path}")

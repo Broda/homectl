@@ -89,7 +89,7 @@ def test_stack_settings_sources_reflect_stack_local_overrides(tmp_path: Path) ->
     sources = stack_settings_sources(config, settings)
 
     assert sources == {
-        "docker_network": "global-config",
+        "docker_network": "global-default",
         "traefik_url": "stack-local",
     }
 
@@ -100,4 +100,27 @@ def test_config_sources_report_empty_api_token_source(tmp_path: Path) -> None:
 
     config = load_config(config_path)
 
-    assert config_sources(config)["cloudflare_api_token"] == "environment-or-empty"
+    assert config_sources(config_path)["cloudflare_api_token"] == "file-empty"
+
+
+def test_config_sources_report_file_and_environment_values(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel_name": "custom-tunnel",
+                "sites_root": str(tmp_path / "sites"),
+                "cloudflare_api_token": "",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "env-token")
+
+    sources = config_sources(config_path)
+
+    assert sources["tunnel_name"] == "file"
+    assert sources["sites_root"] == "file"
+    assert sources["docker_network"] == "default"
+    assert sources["cloudflare_api_token"] == "environment"

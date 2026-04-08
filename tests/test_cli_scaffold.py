@@ -198,7 +198,7 @@ def test_config_show_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["action"] == "config_show"
     assert payload["ok"] is True
     assert payload["global"]["sites_root"] == str(sites_root)
-    assert payload["global_sources"]["docker_network"] == "config"
+    assert payload["global_sources"]["docker_network"] == "file"
     assert payload["global"]["cloudflare_api_token_present"] is True
 
 
@@ -222,8 +222,11 @@ def test_config_show_json_output_with_stack(monkeypatch, tmp_path: Path) -> None
     assert payload["stack"]["effective"]["docker_network"] == "web"
     assert payload["stack"]["effective"]["traefik_url"] == "http://localhost:9000"
     assert payload["stack"]["effective_sources"] == {
-        "docker_network": "global-config",
+        "docker_network": "global-file",
         "traefik_url": "stack-local",
+    }
+    assert payload["stack"]["local_overrides"] == {
+        "traefik_url": "http://localhost:9000",
     }
 
 
@@ -239,8 +242,8 @@ def test_config_show_text_output_with_stack(monkeypatch, tmp_path: Path) -> None
     assert result.exit_code == 0, result.output
     assert "Global configuration:" in result.output
     assert "Stack configuration for notes.example.com:" in result.output
-    assert "docker_network: web (global-config)" in result.output
-    assert "traefik_url: http://localhost:8081 (global-config)" in result.output
+    assert "docker_network: web (global-file)" in result.output
+    assert "traefik_url: http://localhost:8081 (global-file)" in result.output
 
 
 def test_site_init_json_output(monkeypatch, tmp_path: Path) -> None:
