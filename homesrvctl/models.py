@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+@dataclass(slots=True)
+class RoutingProfile:
+    docker_network: str
+    traefik_url: str
 
 
 @dataclass(slots=True)
@@ -12,6 +18,7 @@ class HomesrvctlConfig:
     traefik_url: str = "http://localhost:8081"
     cloudflared_config: Path = Path("/etc/cloudflared/config.yml")
     cloudflare_api_token: str = ""
+    profiles: dict[str, RoutingProfile] = field(default_factory=dict)
 
     @property
     def config_path(self) -> Path:
@@ -26,6 +33,7 @@ class StackSettings:
     hostname: str
     stack_dir: Path
     config_path: Path
+    profile: str | None
     docker_network: str
     traefik_url: str
     has_local_config: bool

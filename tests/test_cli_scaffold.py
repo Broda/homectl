@@ -14,7 +14,7 @@ def _assert_schema_version(payload: dict[str, object]) -> None:
     assert payload["schema_version"] == "1"
 
 
-def _write_config(home: Path, sites_root: Path) -> None:
+def _write_config(home: Path, sites_root: Path, profiles: dict[str, dict[str, str]] | None = None) -> None:
     config_dir = home / ".config" / "homesrvctl"
     config_dir.mkdir(parents=True, exist_ok=True)
     config = {
@@ -25,6 +25,8 @@ def _write_config(home: Path, sites_root: Path) -> None:
         "cloudflared_config": "/etc/cloudflared/config.yml",
         "cloudflare_api_token": "test-token",
     }
+    if profiles:
+        config["profiles"] = profiles
     (config_dir / "config.yml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
@@ -92,6 +94,32 @@ def test_site_init_writes_stack_overrides(monkeypatch, tmp_path: Path) -> None:
         "docker_network": "edge",
         "traefik_url": "http://localhost:9000",
     }
+
+
+def test_site_init_with_profile_writes_profile_selection(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["site", "init", "test.example.com", "--profile", "edge"])
+
+    assert result.exit_code == 0, result.output
+    compose_file = sites_root / "test.example.com" / "docker-compose.yml"
+    stack_config = sites_root / "test.example.com" / "homesrvctl.yml"
+    assert "edge" in compose_file.read_text(encoding="utf-8")
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {"profile": "edge"}
 
 
 def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
@@ -227,6 +255,45 @@ def test_config_show_json_output_with_stack(monkeypatch, tmp_path: Path) -> None
     }
     assert payload["stack"]["local_overrides"] == {
         "traefik_url": "http://localhost:9000",
+    }
+
+
+def test_config_show_json_output_with_profile(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    monkeypatch.setenv("HOME", str(home))
+    stack_dir = sites_root / "notes.example.com"
+    stack_dir.mkdir(parents=True)
+    (stack_dir / "homesrvctl.yml").write_text("profile: edge\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show", "--stack", "notes.example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["global"]["profiles"]["edge"] == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9000",
+    }
+    assert payload["stack"]["profile"] == "edge"
+    assert payload["stack"]["effective"] == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9000",
+    }
+    assert payload["stack"]["effective_sources"] == {
+        "docker_network": "profile:edge",
+        "traefik_url": "profile:edge",
     }
 
 

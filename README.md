@@ -99,6 +99,18 @@ cloudflared_config: /etc/cloudflared/config.yml
 cloudflare_api_token: ""
 ```
 
+Optional routing profiles may also be defined in the main config:
+
+```yaml
+profiles:
+  edge:
+    docker_network: edge
+    traefik_url: http://localhost:9000
+  internal:
+    docker_network: internal-web
+    traefik_url: http://localhost:8082
+```
+
 `cloudflare_api_token` may also be supplied via the `CLOUDFLARE_API_TOKEN` environment variable.
 It should have at least `Zone:Read` and `DNS:Edit` for the zones you want `homesrvctl domain add` to manage.
 
@@ -111,6 +123,7 @@ Per-stack overrides may also be stored in:
 Supported stack-local keys:
 
 ```yaml
+profile: edge
 docker_network: edge
 traefik_url: http://localhost:9000
 ```
@@ -123,6 +136,7 @@ Create config:
 homesrvctl config init
 homesrvctl config show
 homesrvctl config show --stack example.com --json
+homesrvctl site init example.com --profile edge
 ```
 
 Add DNS tunnel routes for a domain:
@@ -165,6 +179,7 @@ Scaffold a stack with local overrides:
 ```bash
 homesrvctl site init example.com --docker-network edge --traefik-url http://localhost:9000
 homesrvctl app init app.example.com --template node --docker-network edge
+homesrvctl app init api.example.com --template python --profile edge
 ```
 
 Inspect the stack:
@@ -213,8 +228,8 @@ homesrvctl up example.com --dry-run
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
-- `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--docker-network NETWORK] [--traefik-url URL]`
-- `homesrvctl app init <hostname> [--template static|placeholder|node|python] [--force] [--dry-run] [--json] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl app init <hostname> [--template static|placeholder|node|python] [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
 - `homesrvctl up <hostname> [--dry-run] [--json]`
 - `homesrvctl down <hostname> [--dry-run] [--json]`
 - `homesrvctl restart <hostname> [--dry-run] [--json]`
@@ -233,6 +248,7 @@ homesrvctl up example.com --dry-run
 - all `--json` commands include a top-level `schema_version` so automation can pin to a known output shape.
 - `config init --json` reports whether the config file was created or overwritten.
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
+- stack-local config may select a named routing profile with `profile`, and direct stack-local overrides still win over profile-provided values.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
@@ -251,5 +267,6 @@ homesrvctl up example.com --dry-run
 - `site init` and `app init` generate Traefik-safe router and service identifiers from the hostname.
 - All generated Compose files join the external Docker network configured in `docker_network`.
 - `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
+- `site init` and `app init` can also write a stack-local `profile` selection when you pass `--profile`.
 - The `node` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `package.json`, `.env.example`, and `src/server.js`.
 - The `python` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `requirements.txt`, `.env.example`, and `app/main.py`.

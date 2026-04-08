@@ -74,6 +74,38 @@ def test_load_stack_settings_uses_local_overrides(tmp_path: Path) -> None:
     assert settings.traefik_url == "http://localhost:9000"
 
 
+def test_load_stack_settings_uses_profile_before_direct_overrides(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "sites_root": str(tmp_path / "sites"),
+                "profiles": {
+                    "edge": {
+                        "docker_network": "edge",
+                        "traefik_url": "http://localhost:9000",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    stack_dir = config.hostname_dir("example.com")
+    stack_dir.mkdir(parents=True)
+    stack_config_path(stack_dir).write_text(
+        yaml.safe_dump({"profile": "edge", "traefik_url": "http://localhost:9001"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    settings = load_stack_settings(config, "example.com")
+
+    assert settings.profile == "edge"
+    assert settings.docker_network == "edge"
+    assert settings.traefik_url == "http://localhost:9001"
+
+
 def test_stack_settings_sources_reflect_stack_local_overrides(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yml"
     init_config(config_path)
@@ -91,6 +123,37 @@ def test_stack_settings_sources_reflect_stack_local_overrides(tmp_path: Path) ->
     assert sources == {
         "docker_network": "global-default",
         "traefik_url": "stack-local",
+    }
+
+
+def test_stack_settings_sources_reflect_profile_inheritance(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "sites_root": str(tmp_path / "sites"),
+                "profiles": {
+                    "edge": {
+                        "docker_network": "edge",
+                        "traefik_url": "http://localhost:9000",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    stack_dir = config.hostname_dir("example.com")
+    stack_dir.mkdir(parents=True)
+    stack_config_path(stack_dir).write_text("profile: edge\n", encoding="utf-8")
+
+    settings = load_stack_settings(config, "example.com")
+    sources = stack_settings_sources(config, settings)
+
+    assert sources == {
+        "docker_network": "profile:edge",
+        "traefik_url": "profile:edge",
     }
 
 

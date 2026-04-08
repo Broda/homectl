@@ -116,6 +116,13 @@ def config_show(
         "traefik_url": config.traefik_url,
         "cloudflared_config": str(config.cloudflared_config),
         "cloudflare_api_token_present": bool(config.cloudflare_api_token),
+        "profiles": {
+            name: {
+                "docker_network": profile.docker_network,
+                "traefik_url": profile.traefik_url,
+            }
+            for name, profile in sorted(config.profiles.items())
+        },
     }
     payload: dict[str, object] = {
         "action": "config_show",
@@ -126,13 +133,34 @@ def config_show(
     }
 
     if stack:
-        settings = load_stack_settings(config, stack)
+        try:
+            settings = load_stack_settings(config, stack)
+        except typer.BadParameter as exc:
+            if json_output:
+                typer.echo(
+                    json.dumps(
+                        with_json_schema(
+                            {
+                                "action": "config_show",
+                                "config_path": str(target_path),
+                                "ok": False,
+                                "global": global_payload,
+                                "global_sources": global_sources,
+                                "error": str(exc),
+                            }
+                        ),
+                        indent=2,
+                    )
+                )
+                raise typer.Exit(code=1) from exc
+            raise
         local_overrides = load_stack_config_data(settings.stack_dir)
         payload["stack"] = {
             "hostname": stack,
             "stack_dir": str(settings.stack_dir),
             "stack_config_path": str(settings.config_path),
             "has_local_config": settings.has_local_config,
+            "profile": settings.profile,
             "local_overrides": local_overrides,
             "effective": {
                 "docker_network": settings.docker_network,
@@ -177,6 +205,7 @@ def config_show(
     typer.echo(f"  stack_dir: {settings.stack_dir}")
     typer.echo(f"  stack_config_path: {settings.config_path}")
     typer.echo(f"  has_local_config: {settings.has_local_config}")
+    typer.echo(f"  profile: {settings.profile}")
     typer.echo("  effective:")
     typer.echo(f"    docker_network: {settings.docker_network} ({sources['docker_network']})")
     typer.echo(f"    traefik_url: {settings.traefik_url} ({sources['traefik_url']})")

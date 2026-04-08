@@ -7,7 +7,7 @@ from typing import Any
 import typer
 import yaml
 
-from homesrvctl.models import HomesrvctlConfig, StackSettings
+from homesrvctl.models import HomesrvctlConfig, RoutingProfile, StackSettings
 
 
 DEFAULT_CONFIG = HomesrvctlConfig()
@@ -19,6 +19,7 @@ CONFIG_FIELDS = (
     "traefik_url",
     "cloudflared_config",
     "cloudflare_api_token",
+    "profiles",
 )
 
 
@@ -34,6 +35,7 @@ def default_config_data() -> dict[str, Any]:
         "traefik_url": DEFAULT_CONFIG.traefik_url,
         "cloudflared_config": str(DEFAULT_CONFIG.cloudflared_config),
         "cloudflare_api_token": DEFAULT_CONFIG.cloudflare_api_token,
+        "profiles": {},
     }
 
 
@@ -43,6 +45,26 @@ def _read_yaml_file(path: Path) -> dict[str, Any]:
             f"config file not found: {path}. Run `homesrvctl config init` first."
         )
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _parse_profiles(data: Any) -> dict[str, RoutingProfile]:
+    if not data:
+        return {}
+    if not isinstance(data, dict):
+        raise typer.BadParameter("config field `profiles` must be a mapping of profile names to settings")
+    profiles: dict[str, RoutingProfile] = {}
+    for name, raw in data.items():
+        if not isinstance(raw, dict):
+            raise typer.BadParameter(f"config profile `{name}` must be a mapping")
+        if "docker_network" not in raw or "traefik_url" not in raw:
+            raise typer.BadParameter(
+                f"config profile `{name}` must define both `docker_network` and `traefik_url`"
+            )
+        profiles[str(name)] = RoutingProfile(
+            docker_network=str(raw["docker_network"]),
+            traefik_url=str(raw["traefik_url"]),
+        )
+    return profiles
 
 
 def load_config_details(path: Path | None = None) -> tuple[HomesrvctlConfig, dict[str, str]]:
@@ -59,6 +81,7 @@ def load_config_details(path: Path | None = None) -> tuple[HomesrvctlConfig, dic
         traefik_url=str(merged["traefik_url"]),
         cloudflared_config=Path(str(merged["cloudflared_config"])),
         cloudflare_api_token=api_token,
+        profiles=_parse_profiles(merged.get("profiles", {})),
     )
     sources = {field: ("file" if field in data else "default") for field in CONFIG_FIELDS}
     if file_api_token:
@@ -92,15 +115,30 @@ def load_stack_settings(config: HomesrvctlConfig, hostname: str) -> StackSetting
     stack_dir = config.hostname_dir(hostname)
     path = stack_config_path(stack_dir)
     data = load_stack_config_data(stack_dir)
+    profile_name = str(data["profile"]).strip() if "profile" in data and data["profile"] else None
+    if profile_name and profile_name not in config.profiles:
+        raise typer.BadParameter(
+            f"unknown routing profile `{profile_name}` for {hostname}. "
+            f"Configure it under `profiles` in the main config or remove the stack-local profile setting."
+        )
+    profile = config.profiles.get(profile_name) if profile_name else None
     merged = {
         "docker_network": config.docker_network,
         "traefik_url": config.traefik_url,
-        **(data or {}),
     }
+    if profile:
+        merged.update(
+            {
+                "docker_network": profile.docker_network,
+                "traefik_url": profile.traefik_url,
+            }
+        )
+    merged.update({key: value for key, value in (data or {}).items() if key in {"docker_network", "traefik_url"}})
     return StackSettings(
         hostname=hostname,
         stack_dir=stack_dir,
         config_path=path,
+        profile=profile_name,
         docker_network=str(merged["docker_network"]),
         traefik_url=str(merged["traefik_url"]),
         has_local_config=path.exists(),
@@ -122,6 +160,11 @@ def stack_settings_sources(
         "docker_network": "global-default",
         "traefik_url": "global-default",
     }
+    if settings.profile:
+        inherited_sources = {
+            "docker_network": f"profile:{settings.profile}",
+            "traefik_url": f"profile:{settings.profile}",
+        }
     if not settings.has_local_config:
         return {
             "docker_network": inherited_sources["docker_network"],
@@ -133,11 +176,27 @@ def stack_settings_sources(
     }
 
 
-def render_stack_settings(config: HomesrvctlConfig, docker_network: str, traefik_url: str) -> str:
+def render_stack_settings(
+    config: HomesrvctlConfig,
+    docker_network: str,
+    traefik_url: str,
+    profile: str | None = None,
+) -> str:
     overrides: dict[str, str] = {}
-    if docker_network != config.docker_network:
+    base_docker_network = config.docker_network
+    base_traefik_url = config.traefik_url
+    if profile:
+        if profile not in config.profiles:
+            raise typer.BadParameter(
+                f"unknown routing profile `{profile}`. Configure it under `profiles` in the main config first."
+            )
+        overrides["profile"] = profile
+        profile_settings = config.profiles[profile]
+        base_docker_network = profile_settings.docker_network
+        base_traefik_url = profile_settings.traefik_url
+    if docker_network != base_docker_network:
         overrides["docker_network"] = docker_network
-    if traefik_url != config.traefik_url:
+    if traefik_url != base_traefik_url:
         overrides["traefik_url"] = traefik_url
     if not overrides:
         return ""

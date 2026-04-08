@@ -81,6 +81,7 @@ This milestone is already done and serves as the current project baseline.
 ### Routing and stack-local overrides
 
 - Stack-local `homesrvctl.yml` overrides exist for:
+  - `profile`
   - `docker_network`
   - `traefik_url`
 - Scaffold commands can write stack-local overrides.
@@ -132,7 +133,7 @@ Subtasks:
 
 ### 1.2 Formalize the routing-profile model
 
-Status: planned
+Status: in progress
 
 Goal: evolve from two standalone override keys into a coherent routing model that can grow without turning the CLI into a pile of flags.
 
@@ -161,6 +162,12 @@ Subtasks:
   - all-default stack
   - stack with named profile
   - stack with one-off override
+
+Completed in this milestone so far:
+- Global config now supports named `profiles`.
+- Stack-local `homesrvctl.yml` now supports `profile`.
+- `site init` and `app init` support `--profile`.
+- Direct stack-local overrides still win over selected profile values.
 
 ### 1.3 Support more than one ingress target cleanly
 
