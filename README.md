@@ -50,8 +50,10 @@ pip install -e .
 From a tagged GitHub release:
 
 ```bash
-pip install "homectl @ https://github.com/Broda/homectl/archive/refs/tags/v0.1.0.tar.gz"
+pip install "homesrvctl @ https://github.com/Broda/homectl/archive/refs/tags/v0.1.0.tar.gz"
 ```
+
+The published Python distribution name is `homesrvctl`. The CLI command remains `homectl`.
 
 `homectl` currently uses GitHub releases as its public release channel. PyPI publishing is not enabled yet.
 

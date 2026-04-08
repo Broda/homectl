@@ -1,5 +1,7 @@
 # Releasing homectl
 
+The published Python distribution name is `homesrvctl`. The CLI command remains `homectl`.
+
 ## Source Of Truth
 
 - Package version lives in `pyproject.toml` under `project.version`.
