@@ -119,12 +119,14 @@ The TUI command wrapper follows the same rule: it should prefer orchestrating st
 - [`homesrvctl/tui`](homesrvctl/tui)
 
 Responsibilities:
-- load read-only dashboard data from the existing JSON command surface
-- render terminal dashboard views
+- host the Textual application and related screens/widgets
+- load dashboard and action data from the existing JSON command surface
+- render terminal dashboard views and guided flows
 - manage TUI-local selection and detail state
 - keep TUI-specific state and refresh behavior out of the command modules
 
 This layer should stay separate from CLI wiring so future dashboard/view growth does not bloat `homesrvctl/commands`.
+The current curses renderer is transitional; Textual is the planned long-term implementation for `homesrvctl tui`.
 
 ### Public contract changes should be deliberate
 

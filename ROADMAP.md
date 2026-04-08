@@ -434,83 +434,116 @@ Subtasks:
 - Evaluate whether tunnel metadata checks should be surfaced in a dedicated command.
 - Decide whether tunnel-management work belongs in `homesrvctl` scope at all.
 
-## Milestone 5: Terminal UI
+## Milestone 5: Terminal UI (Textual Migration)
 
 Status: in progress
 
-Goal: add a guided terminal UI that makes `homesrvctl` easier to operate interactively without introducing a separate web application or backend service.
+Goal: move `homesrvctl tui` to Textual before the current terminal dashboard grows much larger, while keeping the same CLI entrypoint and the same terminal-first operator model.
 
-### 5.1 Define the TUI architecture boundary
+Migration policy:
+- Textual is the planned long-term TUI implementation.
+- The current `curses` dashboard is transitional and should be retired after the first Textual dashboard reaches parity.
+- `homesrvctl tui` remains the public entrypoint throughout the migration.
+- The first Textual implementation should continue consuming existing `--json` command output rather than introducing a new backend service.
+
+### 5.1 Establish the Textual foundation
 
 Status: in progress
 
 Tasks:
-- Decide whether the TUI should live in the main repo and ship as part of the same package.
-- Keep the TUI as a terminal-first layer over the existing CLI rather than a new control plane.
-- Prefer consuming existing `--json` command output before introducing internal-only APIs.
+- Keep the TUI in the main repo and same package.
+- Make Textual the canonical implementation target for `homesrvctl tui`.
+- Keep the Textual app as a terminal-first layer over the existing CLI rather than a new control plane.
 
 Subtasks:
-- Decide whether the first implementation should:
+- Add Textual as a runtime dependency and document the packaging impact.
+- Define the initial Textual structure under `homesrvctl/tui/`, including:
+  - `app.py`
+  - screen/view modules
+  - widget modules
+  - shared data/action helpers
+- Keep the first implementation JSON-driven:
   - shell out to `homesrvctl ... --json`
-  - import Python functions directly
-  - use a hybrid approach
-- Define the rule for when new TUI needs justify expanding JSON output.
+  - only revisit direct Python integration if the JSON boundary becomes a maintenance problem
 - Keep the TUI out of scope for:
   - browser-based UI work
   - remote multi-user access
   - long-lived background services
 
 Current baseline:
-- `homesrvctl tui` now exists as a read-only dashboard in the main repo.
-- The first implementation shells out to existing `--json` commands for:
+- `homesrvctl tui` already exists in the main repo.
+- The current implementation shells out to existing `--json` commands for:
   - `list`
   - `cloudflared status`
   - `validate`
 
-### 5.2 Build a first dashboard
+### 5.2 Reach dashboard parity in Textual
 
 Status: in progress
 
 Tasks:
-- Add a home screen that gives operators immediate visibility into system state.
-- Reuse existing status/reporting surfaces rather than inventing new state models.
+- Reproduce the current dashboard capabilities in Textual before removing the old renderer.
+- Reuse existing status/reporting surfaces rather than inventing a new state model.
 
 Subtasks:
-- Show high-level summaries for:
+- Recreate the current home screen summaries for:
   - stacks
   - `cloudflared`
   - validation state
-  - recent domain issues
-- Add keyboard navigation between dashboard sections.
-- Add a focused detail pane so summaries are explorable without leaving the dashboard.
-- Add a footer/status line that explains the available controls and refresh mode.
-- Decide what “good default landing screen” means for a small homelab operator tool.
-- Keep the first dashboard read-only if that reduces implementation risk.
-
-Current baseline:
-- The first dashboard now shows:
-  - stack summary
-  - `cloudflared` runtime/config summary
-  - validation failure summary
-- The dashboard now supports section selection and a focused detail pane for:
+- Recreate the current detail views for:
   - stacks
   - `cloudflared`
   - validation
-- The stacks section now supports:
-  - stack selection with `a` and `d`
-  - direct `doctor`
-  - direct `up`
-  - direct `restart`
-  - direct `down`
-- Refresh is manual with `r` by default, with optional timed refresh via `--refresh-seconds`.
+- Recreate the current stack controls for the selected hostname:
+  - `site init`
+  - `doctor`
+  - `up`
+  - `restart`
+  - `down`
+- Recreate refresh behavior:
+  - manual `r`
+  - optional timed refresh via `--refresh-seconds`
+- Keep the first Textual dashboard functionally equivalent before adding net-new TUI behavior.
 
-### 5.3 Add guided flows for common operations
+Current baseline:
+- The current dashboard already provides the parity target:
+  - stack summary
+  - `cloudflared` runtime/config summary
+  - validation failure summary
+  - section selection
+  - focused detail panes
+  - selected-stack actions
+  - manual and timed refresh
+
+### 5.3 Improve layout and theming with Textual
 
 Status: in progress
 
 Tasks:
+- Use Textual to move beyond the compact curses layout and give the TUI a clearer long-term visual structure.
+- Keep the interface dense and operator-focused rather than decorative.
+
+Subtasks:
+- Define a stable Textual layout with:
+  - left summary/navigation pane
+  - main detail pane
+  - bottom status/action bar
+- Define visual states for:
+  - selected
+  - success
+  - warning
+  - error
+  - running/busy
+- Preserve the existing keyboard model where it still makes sense, but allow Textual-specific polish where it improves clarity.
+- Keep the theme intentional and readable on typical terminal backgrounds without introducing a second “brand system” separate from the CLI.
+
+### 5.4 Add guided flows for common operations
+
+Status: planned
+
+Tasks:
 - Make the common multi-step operations easier to run without memorizing command sequences.
-- Keep the TUI aligned with the existing CLI verbs and mutation behavior.
+- Keep the Textual app aligned with the existing CLI verbs and mutation behavior.
 
 Subtasks:
 - Add guided flows for:
@@ -519,7 +552,7 @@ Subtasks:
   - stack up/down/restart
   - doctor
   - repair
-- Decide how prompts should handle:
+- Decide how Textual prompts/screens should handle:
   - hostname
   - template selection
   - profile selection
@@ -527,15 +560,7 @@ Subtasks:
   - restart/reload choices
 - Keep all TUI-driven mutations understandable as ordinary `homesrvctl` operations underneath.
 
-Completed in this milestone so far:
-- The TUI can now drive stack actions directly for the selected hostname:
-  - `site init`
-  - `doctor`
-  - `up`
-  - `restart`
-  - `down`
-
-### 5.4 Make diagnostics explorable
+### 5.5 Make diagnostics explorable
 
 Status: planned
 
@@ -544,35 +569,42 @@ Tasks:
 - Preserve the current operator model where warnings and remediation hints remain explicit.
 
 Subtasks:
-- Add detail views for:
+ - Add detail views for:
   - effective config
   - domain status
   - doctor output
   - `cloudflared` status
-- Surface routing context clearly:
+ - Surface routing context clearly:
   - default target
   - effective target
   - profile
   - override source
-- Surface remediation hints directly for:
+ - Surface remediation hints directly for:
   - ingress warnings
   - domain repairability
   - config problems
 
-### 5.5 Keep the TUI testable and optional
+### 5.6 Retire curses and keep the Textual TUI testable
 
 Status: planned
 
 Tasks:
+- Remove the transitional curses implementation after the Textual dashboard reaches parity.
 - Avoid letting the TUI become the only supported operator path.
 - Keep the TUI layered cleanly enough that the CLI remains the source of truth.
 
 Subtasks:
 - Add tests for any new JSON/reporting contracts the TUI depends on.
+- Add Textual-focused tests for:
+  - screen composition
+  - keyboard handling
+  - action dispatch
+  - status/error rendering
 - Keep a non-interactive path for everything the TUI can launch.
-- Decide whether the TUI entrypoint should be:
-  - `homesrvctl tui`
-  - `homesrvctl dashboard`
+- Keep `homesrvctl tui` as the stable entrypoint; do not introduce `homesrvctl dashboard` as a second public command.
+- Remove the old curses renderer only after the Textual path covers the current dashboard and stack actions.
+- Document environment assumptions for the TUI, including terminal capabilities and local runtime access.
+- Update architecture, file-map, and wiki docs after the migration lands.
   - a separate console script
 - Document environment assumptions for the TUI, including terminal capabilities and local runtime access.
 

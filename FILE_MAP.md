@@ -32,7 +32,7 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/shell.py`](homesrvctl/shell.py)
   Shared subprocess execution helpers.
 - [`homesrvctl/tui`](homesrvctl/tui)
-  Terminal UI implementation, including dashboard rendering, section/detail navigation, and JSON-backed data loading.
+  Terminal UI implementation. This is the home for the transitional dashboard plus the planned Textual app, screens, widgets, and JSON-backed data/action loading.
 
 ## Cloudflare And Cloudflared Helpers
 
