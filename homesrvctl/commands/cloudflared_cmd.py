@@ -8,6 +8,7 @@ from homesrvctl.cloudflared import test_cloudflared_config
 from homesrvctl.cloudflared_service import (
     CloudflaredServiceError,
     detect_cloudflared_runtime,
+    reload_cloudflared_service,
     restart_cloudflared_service,
 )
 from homesrvctl.config import load_config
@@ -39,6 +40,8 @@ def cloudflared_status(
             success(detail)
             if runtime.restart_command:
                 info(f"restart command: {' '.join(runtime.restart_command)}")
+            if runtime.reload_command:
+                info(f"reload command: {' '.join(runtime.reload_command)}")
         else:
             warn(detail)
         if config_validation is not None:
@@ -96,6 +99,55 @@ def cloudflared_restart(
         typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=True, dry_run=False)), indent=2))
         return
     success(f"Restarted cloudflared via {runtime.mode}")
+
+
+@cloudflared_cli.command("reload")
+def cloudflared_reload(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the reload command without running it."),
+    json_output: bool = typer.Option(False, "--json", help="Print the reload result as JSON."),
+) -> None:
+    """Reload cloudflared when the detected runtime supports it."""
+    runtime = detect_cloudflared_runtime()
+    if dry_run:
+        if runtime.reload_command:
+            if json_output:
+                typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=True, dry_run=True)), indent=2))
+            else:
+                info(f"[dry-run] {' '.join(runtime.reload_command)}")
+                success(f"Dry-run complete for cloudflared reload via {runtime.mode}")
+            return
+        if json_output:
+            typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=False, dry_run=True)), indent=2))
+        else:
+            warn(f"[dry-run] {runtime.detail}; reload is not supported for this runtime")
+        raise typer.Exit(code=1)
+
+    try:
+        runtime = reload_cloudflared_service()
+    except CloudflaredServiceError as exc:
+        if json_output:
+            typer.echo(
+                json.dumps(
+                    with_json_schema({
+                        "ok": False,
+                        "dry_run": False,
+                        "mode": runtime.mode,
+                        "active": runtime.active,
+                        "detail": str(exc),
+                        "restart_command": runtime.restart_command,
+                        "reload_command": runtime.reload_command,
+                        "logs_command": runtime.logs_command,
+                    }),
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1) from exc
+        raise typer.Exit(code=_exit_with_error(str(exc))) from exc
+
+    if json_output:
+        typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=True, dry_run=False)), indent=2))
+        return
+    success(f"Reloaded cloudflared via {runtime.mode}")
 
 
 @cloudflared_cli.command("logs")
@@ -163,6 +215,7 @@ def _runtime_payload(runtime, ok: bool, dry_run: bool | None = None) -> dict[str
         "active": runtime.active,
         "detail": runtime.detail,
         "restart_command": runtime.restart_command,
+        "reload_command": runtime.reload_command,
         "logs_command": runtime.logs_command,
     }
     if dry_run is not None:

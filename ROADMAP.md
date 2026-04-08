@@ -52,6 +52,7 @@ This milestone is already done and serves as the current project baseline.
 - Operator commands exist for:
   - `cloudflared status`
   - `cloudflared restart`
+  - `cloudflared reload`
   - `cloudflared logs`
   - `cloudflared config-test`
 
@@ -171,6 +172,7 @@ Completed in this milestone so far:
 - Direct stack-local overrides still win over selected profile values.
 - `cloudflared status` and `cloudflared config-test` now surface non-fatal ingress shadowing warnings for risky wildcard ordering.
 - `domain status` and `doctor` now surface the same non-fatal ingress shadowing warnings when they affect hostname troubleshooting.
+- `cloudflared reload` now exists when the detected runtime provides a safe reload command.
 
 ### 1.3 Support more than one ingress target cleanly
 

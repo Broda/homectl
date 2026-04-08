@@ -18,6 +18,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added routing-context reporting to `doctor`, including routing profile plus default and effective ingress targets.
 - Added non-fatal `cloudflared` ingress warning reporting for risky wildcard shadowing in `cloudflared status` and `cloudflared config-test`.
 - Added the same non-fatal ingress shadowing warnings to `domain status` and `doctor`.
+- Added `cloudflared reload` for runtimes that expose a safe reload command.
 
 ## 0.2.0 - 2026-04-08
 

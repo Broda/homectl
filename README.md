@@ -189,6 +189,7 @@ homesrvctl list
 homesrvctl cloudflared status
 homesrvctl cloudflared config-test
 homesrvctl cloudflared logs
+homesrvctl cloudflared reload --dry-run
 homesrvctl validate
 homesrvctl doctor test.example.com
 ```
@@ -209,6 +210,8 @@ homesrvctl cloudflared config-test --json
 homesrvctl cloudflared logs --follow --json
 homesrvctl cloudflared restart --dry-run
 homesrvctl cloudflared restart --dry-run --json
+homesrvctl cloudflared reload --dry-run
+homesrvctl cloudflared reload --dry-run --json
 homesrvctl up example.com --dry-run --json
 homesrvctl down example.com --dry-run --json
 homesrvctl restart example.com --dry-run --json
@@ -238,6 +241,7 @@ homesrvctl up example.com --dry-run
 - `homesrvctl cloudflared config-test [--json]`
 - `homesrvctl cloudflared logs [--follow] [--json]`
 - `homesrvctl cloudflared restart [--dry-run] [--json]`
+- `homesrvctl cloudflared reload [--dry-run] [--json]`
 - `homesrvctl validate [--json]`
 - `homesrvctl doctor <hostname> [--json]`
 
@@ -260,6 +264,7 @@ homesrvctl up example.com --dry-run
 - `cloudflared status` now also surfaces non-fatal config warnings when the ingress file is structurally valid but risky, such as an earlier wildcard rule that may shadow a later hostname rule.
 - `cloudflared logs` prints the right `journalctl` or `docker logs` command for the detected runtime and supports `--follow` plus `--json`.
 - `cloudflared restart` also supports `--json` for automation-friendly dry-run and failure reporting.
+- `cloudflared reload` is available when the detected runtime exposes a safe reload command; today that is primarily a systemd capability check rather than a guaranteed cross-runtime feature.
 - `cloudflared config-test` now reports non-fatal warnings for risky ingress ordering even when the config is otherwise valid.
 - `doctor` now reports routing profile, default ingress target, and effective ingress target before the hostname-specific routing checks.
 - `doctor` now also includes `cloudflared ingress warnings` when the ingress file is structurally valid but risky.
