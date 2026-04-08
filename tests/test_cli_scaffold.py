@@ -297,6 +297,48 @@ def test_config_show_json_output_with_profile(monkeypatch, tmp_path: Path) -> No
     }
 
 
+def test_config_show_json_output_with_profile_and_direct_override(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    monkeypatch.setenv("HOME", str(home))
+    stack_dir = sites_root / "notes.example.com"
+    stack_dir.mkdir(parents=True)
+    (stack_dir / "homesrvctl.yml").write_text(
+        yaml.safe_dump({"profile": "edge", "traefik_url": "http://localhost:9001"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show", "--stack", "notes.example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["stack"]["profile"] == "edge"
+    assert payload["stack"]["effective"] == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9001",
+    }
+    assert payload["stack"]["effective_sources"] == {
+        "docker_network": "profile:edge",
+        "traefik_url": "stack-local",
+    }
+    assert payload["stack"]["local_overrides"] == {
+        "profile": "edge",
+        "traefik_url": "http://localhost:9001",
+    }
+
+
 def test_config_show_text_output_with_stack(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"

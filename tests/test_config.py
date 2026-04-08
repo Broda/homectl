@@ -11,6 +11,7 @@ from homesrvctl.config import (
     init_config,
     load_config,
     load_stack_settings,
+    stack_routing_context,
     stack_config_path,
     stack_settings_sources,
 )
@@ -154,6 +155,75 @@ def test_stack_settings_sources_reflect_profile_inheritance(tmp_path: Path) -> N
     assert sources == {
         "docker_network": "profile:edge",
         "traefik_url": "profile:edge",
+    }
+
+
+def test_stack_routing_context_covers_default_profile_and_override_stacks(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "sites_root": str(tmp_path / "sites"),
+                "docker_network": "web",
+                "traefik_url": "http://localhost:8081",
+                "profiles": {
+                    "edge": {
+                        "docker_network": "edge",
+                        "traefik_url": "http://localhost:9000",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+
+    default_dir = config.hostname_dir("default.example.com")
+    default_dir.mkdir(parents=True)
+
+    profile_dir = config.hostname_dir("profile.example.com")
+    profile_dir.mkdir(parents=True)
+    stack_config_path(profile_dir).write_text("profile: edge\n", encoding="utf-8")
+
+    override_dir = config.hostname_dir("override.example.com")
+    override_dir.mkdir(parents=True)
+    stack_config_path(override_dir).write_text(
+        yaml.safe_dump({"profile": "edge", "traefik_url": "http://localhost:9001"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    default_context = stack_routing_context(config, "default.example.com")
+    profile_context = stack_routing_context(config, "profile.example.com")
+    override_context = stack_routing_context(config, "override.example.com")
+
+    assert default_context["effective"] == {
+        "docker_network": "web",
+        "traefik_url": "http://localhost:8081",
+    }
+    assert default_context["effective_sources"] == {
+        "docker_network": "global-config",
+        "traefik_url": "global-config",
+    }
+
+    assert profile_context["profile"] == "edge"
+    assert profile_context["effective"] == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9000",
+    }
+    assert profile_context["effective_sources"] == {
+        "docker_network": "profile:edge",
+        "traefik_url": "profile:edge",
+    }
+
+    assert override_context["profile"] == "edge"
+    assert override_context["effective"] == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9001",
+    }
+    assert override_context["effective_sources"] == {
+        "docker_network": "profile:edge",
+        "traefik_url": "stack-local",
     }
 
 
