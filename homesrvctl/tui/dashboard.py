@@ -15,7 +15,7 @@ def run_dashboard(initial_snapshot: dict[str, object], refresh_seconds: float) -
 def render_dashboard(snapshot: dict[str, object], width: int = 100, selected: str = "stacks") -> str:
     lines: list[str] = []
     lines.append("homesrvctl dashboard")
-    lines.append("q quit | r refresh | tab/arrow move")
+    lines.append("q quit | r refresh | tab/arrow or w/s move")
     lines.append("")
     lines.extend(_render_summary(snapshot, width, selected))
     lines.append("")
@@ -61,10 +61,10 @@ def _run_dashboard(stdscr, snapshot: dict[str, object], refresh_seconds: float) 
             if refresh_seconds > 0:
                 next_refresh = time.monotonic() + refresh_seconds
             continue
-        if key in {9, curses.KEY_RIGHT, curses.KEY_DOWN, ord("j"), ord("J")}:
+        if key in {9, curses.KEY_RIGHT, curses.KEY_DOWN, ord("s"), ord("S")}:
             selected_index = (selected_index + 1) % len(SECTIONS)
             continue
-        if key in {curses.KEY_LEFT, curses.KEY_UP, ord("k"), ord("K")}:
+        if key in {curses.KEY_LEFT, curses.KEY_UP, ord("w"), ord("W")}:
             selected_index = (selected_index - 1) % len(SECTIONS)
             continue
         if key == -1 and refresh_seconds > 0:
@@ -93,7 +93,7 @@ def _render_detail(snapshot: dict[str, object], width: int, selected: str) -> li
 
 def _render_footer(refresh_mode: str | None) -> str:
     mode = refresh_mode or "manual refresh"
-    return f"controls: q quit | r refresh | tab/arrow move | mode: {mode}"
+    return f"controls: q quit | r refresh | tab/arrow or w/s move | mode: {mode}"
 
 
 def _summary_line(name: str, selected: str, detail: str) -> str:

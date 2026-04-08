@@ -89,7 +89,7 @@ def test_render_dashboard_includes_sections_and_failures() -> None:
     assert "Cloudflared: docker (active), 1 warning(s)" in rendered
     assert "Validate detail" in rendered
     assert "Traefik URL: unreachable" in rendered
-    assert "controls: q quit | r refresh | tab/arrow move | mode: manual refresh" in rendered
+    assert "controls: q quit | r refresh | tab/arrow or w/s move | mode: manual refresh" in rendered
 
 
 def test_render_dashboard_stack_detail_includes_stack_rows() -> None:
