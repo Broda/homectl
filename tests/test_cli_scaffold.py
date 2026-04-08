@@ -204,6 +204,58 @@ def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     assert "Replace app/main.py with your real Python application." in main_py
 
 
+def test_app_init_node_template_artifacts_stay_coherent(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "notes.example.com", "--template", "node"])
+
+    assert result.exit_code == 0, result.output
+    app_dir = sites_root / "notes.example.com"
+    compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile = (app_dir / "Dockerfile").read_text(encoding="utf-8")
+    readme = (app_dir / "README.md").read_text(encoding="utf-8")
+    env_example = (app_dir / ".env.example").read_text(encoding="utf-8")
+    server_js = (app_dir / "src" / "server.js").read_text(encoding="utf-8")
+
+    assert "PORT: ${PORT:-3000}" in compose
+    assert "loadbalancer.server.port=3000" in compose
+    assert "http://127.0.0.1:${PORT:-3000}/" in compose
+    assert "EXPOSE 3000" in dockerfile
+    assert "PORT=3000" in env_example
+    assert "port = Number.parseInt(process.env.PORT || \"3000\", 10)" in server_js
+    assert "https://notes.example.com/" in readme
+
+
+def test_app_init_python_template_artifacts_stay_coherent(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "api.example.com", "--template", "python"])
+
+    assert result.exit_code == 0, result.output
+    app_dir = sites_root / "api.example.com"
+    compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile = (app_dir / "Dockerfile").read_text(encoding="utf-8")
+    readme = (app_dir / "README.md").read_text(encoding="utf-8")
+    env_example = (app_dir / ".env.example").read_text(encoding="utf-8")
+    main_py = (app_dir / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert "PORT: ${PORT:-8000}" in compose
+    assert "loadbalancer.server.port=8000" in compose
+    assert "http://127.0.0.1:${PORT:-8000}/" in compose
+    assert "EXPOSE 8000" in dockerfile
+    assert "PORT=8000" in env_example
+    assert "PORT = int(os.environ.get(\"PORT\", \"8000\"))" in main_py
+    assert "https://api.example.com/" in readme
+
+
 def test_config_init_json_output(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
@@ -518,6 +570,52 @@ def test_app_init_python_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert payload["files"][-1].endswith("/api.example.com/app/main.py")
     assert payload["rendered_templates"][-1]["template"] == "app/python/app/main.py.j2"
+
+
+def test_app_init_node_json_output_lists_expected_templates(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "notes.example.com", "--template", "node", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    templates = {entry["template"] for entry in payload["rendered_templates"]}
+    assert templates == {
+        "app/node/docker-compose.yml.j2",
+        "app/node/env.example.j2",
+        "app/node/dockerignore.j2",
+        "app/node/Dockerfile.j2",
+        "app/node/README.md.j2",
+        "app/node/package.json.j2",
+        "app/node/src/server.js.j2",
+    }
+
+
+def test_app_init_python_json_output_lists_expected_templates(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "api.example.com", "--template", "python", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    templates = {entry["template"] for entry in payload["rendered_templates"]}
+    assert templates == {
+        "app/python/docker-compose.yml.j2",
+        "app/python/env.example.j2",
+        "app/python/dockerignore.j2",
+        "app/python/Dockerfile.j2",
+        "app/python/README.md.j2",
+        "app/python/requirements.txt.j2",
+        "app/python/app/main.py.j2",
+    }
 
 
 def test_app_init_json_reports_overwrite_error(monkeypatch, tmp_path: Path) -> None:

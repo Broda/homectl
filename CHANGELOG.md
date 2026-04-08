@@ -24,6 +24,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Made `cloudflared status` explicit about warning policy: structurally valid ingress warnings remain advisory and do not flip the status command to failure while the runtime is healthy.
 - Broadened mixed-routing regression coverage for default stacks, profile-backed stacks, and direct override stacks.
 - Added basic healthchecks to the generated `node` and `python` app templates so scaffolded containers verify their default root endpoints.
+- Expanded scaffold regression coverage so generated `node` and `python` artifacts stay consistent across ports, healthchecks, first-run docs, and rendered template manifests.
 
 ## 0.2.0 - 2026-04-08
 

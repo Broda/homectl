@@ -312,6 +312,7 @@ Subtasks:
   Current baseline: generated `node` and `python` READMEs now include explicit first-run and healthcheck guidance, and `.env.example` files now say they are optional unless you need overrides.
 - Review whether Dockerfiles use reasonable defaults without too much magic.
 - Review whether generated source files include only the minimum useful comments.
+  Current baseline: scaffold regression coverage now checks rendered template manifests plus port and healthcheck consistency across generated `node` and `python` artifacts.
   Current baseline: generated `node` and `python` app templates include container healthchecks against their default root endpoints.
 
 ### 3.2 Add a “static app plus API” pattern
