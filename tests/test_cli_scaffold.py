@@ -579,6 +579,56 @@ def test_cloudflared_status_json_output(monkeypatch) -> None:
         "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
         "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
     ]
+    assert payload["config_validation"]["has_warnings"] is True
+    assert payload["config_validation"]["warning_policy"] == "non-fatal"
+
+
+def test_cloudflared_status_text_reports_warning_policy(monkeypatch) -> None:
+    from homesrvctl.commands import cloudflared_cmd
+
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "detect_cloudflared_runtime",
+        lambda: CloudflaredRuntime(
+            mode="docker",
+            active=True,
+            detail="running container(s): cloudflared",
+            restart_command=["docker", "restart", "cloudflared"],
+            reload_command=None,
+        ),
+    )
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "load_config",
+        lambda: type("Config", (), {"cloudflared_config": Path("/tmp/cloudflared.yml")})(),
+    )
+    monkeypatch.setattr(
+        cloudflared_cmd,
+        "test_cloudflared_config",
+        lambda path: type(
+            "Validation",
+            (),
+            {
+                "ok": True,
+                "detail": "Everything OK",
+                "command": None,
+                "method": "structural",
+                "warnings": [
+                    "earlier ingress rule *.com -> http://localhost:9000 may shadow later hostname example.com at ingress index 1. "
+                    "Hint: move example.com above *.com, or narrow/remove the earlier rule so the specific hostname matches first"
+                ],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cloudflared", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "config warnings are advisory; cloudflared status remains healthy while the config stays valid"
+        in result.output
+    )
 
 
 def test_cloudflared_status_json_failure(monkeypatch) -> None:

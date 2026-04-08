@@ -21,6 +21,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added `cloudflared reload` for runtimes that expose a safe reload command.
 - Broadened `cloudflared` ingress warning detection to cover broad wildcard rules that may capture traffic intended for a narrower wildcard.
 - Made non-fatal `cloudflared` ingress warnings more remediation-oriented by embedding direct fix hints in the surfaced messages.
+- Made `cloudflared status` explicit about warning policy: structurally valid ingress warnings remain advisory and do not flip the status command to failure while the runtime is healthy.
 - Broadened mixed-routing regression coverage for default stacks, profile-backed stacks, and direct override stacks.
 
 ## 0.2.0 - 2026-04-08

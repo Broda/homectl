@@ -49,6 +49,8 @@ def cloudflared_status(
                 info(f"config: {config_validation.detail}")
                 for warning_message in config_validation.warnings or []:
                     warn(f"config warning: {warning_message}")
+                if config_validation.warnings:
+                    info("config warnings are advisory; cloudflared status remains healthy while the config stays valid")
             else:
                 warn(f"config: {config_validation.detail}")
     if not runtime.active:
@@ -224,12 +226,15 @@ def _runtime_payload(runtime, ok: bool, dry_run: bool | None = None) -> dict[str
 
 
 def _config_validation_payload(result) -> dict[str, object]:  # noqa: ANN001
+    warnings = result.warnings or []
     return {
         "ok": result.ok,
         "detail": result.detail,
         "method": result.method,
         "command": result.command,
-        "warnings": result.warnings or [],
+        "warnings": warnings,
+        "has_warnings": bool(warnings),
+        "warning_policy": "non-fatal" if result.ok and warnings else None,
     }
 
 

@@ -236,6 +236,7 @@ Subtasks:
   Current warnings now include direct fix hints for reordering or narrowing risky wildcard rules.
 - Improve messaging when the config file is valid YAML but semantically unsafe.
 - Decide whether `cloudflared status` should surface config warnings directly.
+  Current behavior keeps structurally valid ingress warnings advisory in `cloudflared status`.
 
 ### 2.2 Explore safe reload behavior
 
