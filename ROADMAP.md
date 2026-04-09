@@ -402,7 +402,7 @@ Subtasks:
 
 ### 3.5 Add a narrow Jekyll workflow without expanding the product boundary
 
-Status: planned
+Status: shipped
 
 Goal: support an existing Jekyll site as a first-class `app init` template while keeping `homesrvctl` focused on stack-local hosting baselines rather than content-publishing orchestration.
 
@@ -424,6 +424,11 @@ Subtasks:
 - Avoid new global config fields or new stack-local `homesrvctl.yml` keys in v1.
 - Add scaffold and JSON-output regression tests if implemented.
 
+Current baseline:
+- `app init --template jekyll` now exists as the public scaffold surface.
+- The generated stack uses a stack-local `site/` source tree, a Dockerized Jekyll build, and static serving through nginx behind Traefik.
+- The first slice keeps adoption manual: operators replace the generated `site/` contents with their existing Jekyll repo contents and keep the generated stack wiring.
+
 Decision notes:
 - This fits the current architecture because deploy commands already operate on any stack with a `docker-compose.yml`.
 - Jekyll should be treated as a specific framework exception that remains acceptable only while it stays a small build-plus-host baseline.
@@ -432,6 +437,37 @@ Decision notes:
   - CI publishing
   - external repo path management
   - a general build pipeline abstraction
+
+### 3.5.1 Clean up Jekyll template parity and release confidence
+
+Status: planned
+
+Goal: keep the shipped Jekyll scaffold aligned with the other app templates and safe to release without expanding the product boundary.
+
+Tasks:
+- Add parity-focused regression coverage for the shipped Jekyll scaffold.
+- Tighten manual-adoption guidance where the current first slice still relies on operator judgment.
+- Verify release packaging keeps the Jekyll template assets available in built distributions.
+
+Subtasks:
+- Add a dedicated Jekyll artifact-coherence test covering:
+  - compose labels and healthcheck behavior
+  - Dockerfile build flow assumptions
+  - starter `site/` files
+  - generated README adoption guidance
+- Add `app init --template jekyll` regression coverage for:
+  - `--profile`
+  - `--docker-network`
+  - `--traefik-url`
+- Add a release-oriented verification step or test that built artifacts include:
+  - `homesrvctl/templates/app/jekyll`
+  - all rendered Jekyll template files
+- Expand Jekyll adoption guidance for:
+  - which generated stack files operators should keep
+  - which `site/` contents operators should replace
+  - when native gem dependencies require Dockerfile edits
+  - the expectation that the adopted Jekyll source root lives directly under `site/`
+- Revisit `.dockerignore` coverage only if real adoption shows missing common Jekyll cache or bundle paths.
 
 ## Milestone 4: API Reliability and Cloudflare Coverage
 
