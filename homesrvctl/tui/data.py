@@ -59,11 +59,15 @@ def stack_sites(snapshot: dict[str, object]) -> list[dict[str, object]]:
     return [site for site in sites if isinstance(site, dict)]
 
 
-def run_stack_action(hostname: str, action: str) -> dict[str, object]:
+def run_stack_action(hostname: str, action: str, template: str | None = None) -> dict[str, object]:
     if action == "doctor":
         return run_json_subcommand(["doctor", hostname])
     if action == "init-site":
         return run_json_subcommand(["site", "init", hostname])
+    if action == "app-init":
+        if not template:
+            raise ValueError("template is required for app-init")
+        return run_json_subcommand(["app", "init", hostname, "--template", template])
     if action == "up":
         return run_json_subcommand(["up", hostname])
     if action == "restart":
@@ -85,24 +89,26 @@ def run_tool_action(tool: str, action: str) -> dict[str, object]:
 
 
 def summarize_stack_action(hostname: str, action: str, payload: dict[str, object]) -> str:
+    label = action_label(action)
     if payload.get("ok"):
-        action_label = "site init" if action == "init-site" else action
-        return f"{action_label} succeeded for {hostname}"
+        return f"{label} succeeded for {hostname}"
     checks = payload.get("checks")
     if isinstance(checks, list):
         failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
         if failing_checks:
             first_failure = failing_checks[0]
             error = f"{first_failure.get('name', 'check failed')}: {first_failure.get('detail', 'command failed')}"
-            action_label = "site init" if action == "init-site" else action
-            return f"{action_label} failed for {hostname}: {error}"
+            return f"{label} failed for {hostname}: {error}"
     error = str(payload.get("error") or payload.get("detail") or "command failed")
-    action_label = "site init" if action == "init-site" else action
-    return f"{action_label} failed for {hostname}: {error}"
+    return f"{label} failed for {hostname}: {error}"
 
 
 def action_label(action: str) -> str:
-    return "site init" if action == "init-site" else action
+    if action == "init-site":
+        return "site init"
+    if action == "app-init":
+        return "app init"
+    return action
 
 
 def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[str]:
@@ -117,6 +123,10 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
 
     if "dry_run" in payload:
         lines.append(f"dry run: {'yes' if payload.get('dry_run') else 'no'}")
+
+    template = payload.get("template")
+    if template:
+        lines.append(f"template: {template}")
 
     checks = payload.get("checks")
     if isinstance(checks, list):
@@ -155,6 +165,18 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
                 lines.append(f"stderr: {stderr.splitlines()[0]}")
         if len(commands) > 4:
             lines.append(f"... {len(commands) - 4} more")
+        return lines
+
+    files = payload.get("files")
+    if isinstance(files, list) and files:
+        lines.extend(["", f"files: {len(files)}", ""])
+        for output_path in files[:6]:
+            lines.append(f"- {output_path}")
+        if len(files) > 6:
+            lines.append(f"... {len(files) - 6} more")
+        target_dir = payload.get("target_dir")
+        if target_dir:
+            lines.extend(["", f"target dir: {target_dir}"])
         return lines
 
     error = payload.get("error")

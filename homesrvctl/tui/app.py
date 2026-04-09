@@ -15,6 +15,7 @@ from homesrvctl.tui.data import (
     summarize_stack_action,
     summarize_tool_action,
 )
+from homesrvctl.tui.prompts import AppInitTemplateScreen
 
 
 class HomesrvctlTextualApp(App[None]):
@@ -117,6 +118,32 @@ class HomesrvctlTextualApp(App[None]):
         background: #0fa697;
         color: #081014;
     }
+
+    AppInitTemplateScreen {
+        align: center middle;
+        background: rgba(3, 8, 10, 0.72);
+    }
+
+    #app_init_prompt {
+        width: 72;
+        max-width: 90%;
+        height: auto;
+        padding: 1 2;
+        background: #0b1419;
+        border: round #ffcf5a;
+        color: #d7fff7;
+    }
+
+    .prompt_title {
+        color: #ffcf5a;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    .prompt_help {
+        color: #8ccfc5;
+        margin-bottom: 1;
+    }
     """
 
     BINDINGS = [
@@ -124,6 +151,7 @@ class HomesrvctlTextualApp(App[None]):
         Binding("r", "refresh", "Refresh"),
         Binding("w,up", "previous_control", "Prev", show=False),
         Binding("s,down,tab", "next_control", "Next", show=False),
+        Binding("a", "app_init_prompt", "App Init", show=False),
         Binding("c", "cloudflared_config_test", "Config Test", show=False),
         Binding("l", "cloudflared_reload", "Reload", show=False),
         Binding("k", "cloudflared_restart", "Restart CF", show=False),
@@ -184,6 +212,15 @@ class HomesrvctlTextualApp(App[None]):
     def action_site_init(self) -> None:
         self._run_selected_stack_action("init-site")
 
+    def action_app_init_prompt(self) -> None:
+        item = self._selected_control_item()
+        if item.get("kind") != "stack":
+            self.status_message = "select a stack to scaffold an app"
+            self._render()
+            return
+        hostname = str(item.get("hostname", ""))
+        self.push_screen(AppInitTemplateScreen(), lambda template: self._complete_app_init_prompt(hostname, template))
+
     def action_cloudflared_config_test(self) -> None:
         self._run_selected_tool_action("cloudflared", "config-test")
 
@@ -225,7 +262,20 @@ class HomesrvctlTextualApp(App[None]):
             self._render()
             return
         hostname = str(item.get("hostname", ""))
-        payload = run_stack_action(hostname, action)
+        self._run_stack_action_for_hostname(hostname, action)
+
+    def _complete_app_init_prompt(self, hostname: str, template: str | None) -> None:
+        if template is None:
+            self.status_message = f"app init cancelled for {hostname}"
+            self._render()
+            return
+        self._run_stack_action_for_hostname(hostname, "app-init", template=template)
+
+    def _run_stack_action_for_hostname(self, hostname: str, action: str, template: str | None = None) -> None:
+        if template is None:
+            payload = run_stack_action(hostname, action)
+        else:
+            payload = run_stack_action(hostname, action, template=template)
         self.last_stack_actions[hostname] = {"action": action, "payload": payload}
         self.status_message = summarize_stack_action(hostname, action, payload)
         self.snapshot = build_dashboard_snapshot()
@@ -325,7 +375,7 @@ class HomesrvctlTextualApp(App[None]):
         mode = f"auto refresh {self.refresh_seconds:g}s" if self.refresh_seconds > 0 else "manual refresh"
         if item.get("kind") == "stack":
             focus = f"focus: {item.get('hostname', '<unknown>')}"
-            actions = "actions: i init | g doctor | u up | t restart | x down | r refresh | q quit"
+            actions = "actions: a app-init | i site-init | g doctor | u up | t restart | x down | r refresh | q quit"
         else:
             focus = f"focus: {item.get('label', 'Tool')}"
             if item.get("tool") == "cloudflared":
@@ -377,6 +427,7 @@ class HomesrvctlTextualApp(App[None]):
             f"compose file: {'yes' if compose else 'no'}",
             "",
             "This pane is the control surface for stack lifecycle work.",
+            "Use a to choose an app scaffold template for the focused hostname.",
             "Use i to scaffold a simple site if the hostname directory is empty.",
             "Use u to start the stack, g to run doctor, t to restart, or x to stop it.",
         ]

@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from homesrvctl.commands import tui_cmd
 from homesrvctl.main import app
 from homesrvctl.shell import CommandResult
-from homesrvctl.tui import app as textual_app, dashboard, data
+from homesrvctl.tui import app as textual_app, dashboard, data, prompts
 
 
 def test_run_json_command_parses_success_payload(monkeypatch) -> None:
@@ -113,6 +113,22 @@ def test_run_stack_action_dispatches_site_init(monkeypatch) -> None:
 
     assert payload["ok"] is True
     assert calls == [["site", "init", "example.com"]]
+
+
+def test_run_stack_action_dispatches_app_init(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "template": "node"}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_stack_action("example.com", "app-init", template="node")
+
+    assert payload["ok"] is True
+    assert payload["template"] == "node"
+    assert calls == [["app", "init", "example.com", "--template", "node"]]
 
 
 def test_run_tool_action_dispatches_to_existing_commands(monkeypatch) -> None:
@@ -221,6 +237,28 @@ def test_render_tool_action_detail_formats_cloudflared_result() -> None:
     assert "status: ok" in rendered
     assert "warnings: 1" in rendered
     assert "- earlier wildcard rule *.com may capture later hostname *.example.com" in rendered
+
+
+def test_render_stack_action_detail_formats_app_init_result() -> None:
+    lines = data.render_stack_action_detail(
+        "app-init",
+        {
+            "ok": True,
+            "template": "node",
+            "target_dir": "/srv/homesrvctl/sites/app.example.com",
+            "files": [
+                "/srv/homesrvctl/sites/app.example.com/docker-compose.yml",
+                "/srv/homesrvctl/sites/app.example.com/Dockerfile",
+            ],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "action: app init" in rendered
+    assert "template: node" in rendered
+    assert "files: 2" in rendered
+    assert "target dir: /srv/homesrvctl/sites/app.example.com" in rendered
 
 
 def test_render_dashboard_includes_sections_and_failures() -> None:
@@ -339,6 +377,35 @@ def test_textual_app_summary_and_stack_list_text() -> None:
     assert "> notes.example.com [compose=no]" in controls
     assert "hostname: notes.example.com" in detail
     assert "focus: notes.example.com" in command_bar
+
+
+def test_app_init_template_screen_renders_options() -> None:
+    screen = prompts.AppInitTemplateScreen()
+
+    rendered = screen._options_text()
+
+    assert "> 1. placeholder" in rendered
+    assert "2. static" in rendered
+    assert "5. python" in rendered
+
+
+def test_textual_app_app_init_prompt_pushes_modal(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": False}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 2
+    pushed: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
+
+    app.action_app_init_prompt()
+
+    assert len(pushed) == 1
+    assert isinstance(pushed[0][0], prompts.AppInitTemplateScreen)
 
 
 def test_textual_app_stack_detail_includes_last_action_result() -> None:
@@ -465,6 +532,58 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
     assert app.status_message == "up succeeded for example.com"
     assert app.snapshot["list"]["sites"][0]["compose"] is True
     assert app.last_stack_actions["example.com"]["action"] == "up"
+
+
+def test_textual_app_app_init_prompt_runs_selected_template(monkeypatch) -> None:
+    snapshots = [
+        {
+            "generated_at": "2026-04-08 12:00:00",
+            "list": {"ok": True, "sites": [{"hostname": "app.example.com", "compose": False}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+        {
+            "generated_at": "2026-04-08 12:01:00",
+            "list": {"ok": True, "sites": [{"hostname": "app.example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+    ]
+    calls: list[tuple[str, str, str | None]] = []
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = snapshots[0]
+    app.selected_control_index = 2
+
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_action",
+        lambda hostname, action, template=None: calls.append((hostname, action, template))
+        or {"ok": True, "template": template, "files": ["/srv/homesrvctl/sites/app.example.com/docker-compose.yml"]},
+    )
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._refresh_snapshot("dashboard ready")
+    app._complete_app_init_prompt("app.example.com", "node")
+
+    assert calls == [("app.example.com", "app-init", "node")]
+    assert app.status_message == "app init succeeded for app.example.com"
+    assert app.last_stack_actions["app.example.com"]["action"] == "app-init"
+
+
+def test_textual_app_app_init_prompt_cancel_updates_status(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {"ok": True, "sites": [{"hostname": "app.example.com", "compose": False}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._complete_app_init_prompt("app.example.com", None)
+
+    assert app.status_message == "app init cancelled for app.example.com"
 
 
 def test_textual_app_selected_tool_action_refreshes_status(monkeypatch) -> None:

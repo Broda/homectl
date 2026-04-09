@@ -35,6 +35,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Terminal UI implementation. This is the home for the transitional dashboard plus the planned Textual app, screens, widgets, and JSON-backed data/action loading.
 - [`homesrvctl/tui/app.py`](homesrvctl/tui/app.py)
   The current Textual app entrypoint for `homesrvctl tui`.
+- [`homesrvctl/tui/prompts.py`](homesrvctl/tui/prompts.py)
+  Small Textual prompt screens used by guided TUI flows such as template selection for scaffolding.
 
 ## Cloudflare And Cloudflared Helpers
 

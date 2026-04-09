@@ -591,6 +591,9 @@ Subtasks:
   - restart/reload choices
 - Keep all TUI-driven mutations understandable as ordinary `homesrvctl` operations underneath.
 
+Current baseline:
+- The Textual TUI now includes a first guided scaffold flow for `app init`, using a minimal template picker that still shells out to the existing CLI command underneath.
+
 ### 5.5 Make diagnostics explorable
 
 Status: planned
