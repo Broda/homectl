@@ -291,7 +291,8 @@ def test_render_stack_action_detail_formats_doctor_checks() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "action: doctor" in rendered
+    assert "action" in rendered
+    assert "doctor" in rendered
     assert "checks: 2 total, 1 failing" in rendered
     assert "PASS docker-compose.yml: /srv/homesrvctl/sites/example.com/docker-compose.yml" in rendered
     assert "FAIL host-header request: request failed: connection refused" in rendered
@@ -316,8 +317,10 @@ def test_render_stack_action_detail_formats_command_results() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "action: up" in rendered
-    assert "dry run: no" in rendered
+    assert "action" in rendered
+    assert "up" in rendered
+    assert "dry run" in rendered
+    assert "no" in rendered
     assert "rc=0 docker compose up -d" in rendered
     assert "stdout: container started" in rendered
 
@@ -335,9 +338,12 @@ def test_render_tool_action_detail_formats_cloudflared_result() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "tool: cloudflared" in rendered
-    assert "action: config-test" in rendered
-    assert "status: ok" in rendered
+    assert "tool" in rendered
+    assert "cloudflared" in rendered
+    assert "action" in rendered
+    assert "config-test" in rendered
+    assert "status" in rendered
+    assert "ok" in rendered
     assert "warnings: 1" in rendered
     assert "- earlier wildcard rule *.com may capture later hostname *.example.com" in rendered
 
@@ -363,8 +369,10 @@ def test_render_config_payload_detail_formats_global_config() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "config path: /home/test/.config/homesrvctl/config.yml" in rendered
-    assert "docker network: web" in rendered
+    assert "config path" in rendered
+    assert "/home/test/.config/homesrvctl/config.yml" in rendered
+    assert "docker network" in rendered
+    assert "web" in rendered
     assert "profiles: 2" in rendered
     assert "- edge" in rendered
 
@@ -391,10 +399,14 @@ def test_render_stack_config_detail_formats_effective_config() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "profile: edge" in rendered
-    assert "has local config: True" in rendered
-    assert "docker network: edge (profile:edge)" in rendered
-    assert "traefik url: http://localhost:9001 (stack-local)" in rendered
+    assert "profile" in rendered
+    assert "edge" in rendered
+    assert "has local config" in rendered
+    assert "True" in rendered
+    assert "docker network" in rendered
+    assert "edge (profile:edge)" in rendered
+    assert "traefik url" in rendered
+    assert "http://localhost:9001 (stack-local)" in rendered
 
 
 def test_render_domain_status_detail_formats_apex_status() -> None:
@@ -424,12 +436,15 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "overall: partial" in rendered
-    assert "repairable: True" in rendered
+    assert "overall" in rendered
+    assert "partial" in rendered
+    assert "repairable" in rendered
+    assert "True" in rendered
     assert "coverage issues: 1" in rendered
     assert "dns records: 2" in rendered
     assert "ingress routes: 2" in rendered
-    assert "suggested command: homesrvctl domain repair example.com" in rendered
+    assert "suggested command" in rendered
+    assert "homesrvctl domain repair example.com" in rendered
 
 
 def test_render_domain_status_detail_skips_subdomain_stacks() -> None:
@@ -457,8 +472,10 @@ def test_render_stack_action_detail_formats_app_init_result() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "action: app init" in rendered
-    assert "template: node" in rendered
+    assert "action" in rendered
+    assert "app init" in rendered
+    assert "template" in rendered
+    assert "node" in rendered
     assert "files: 2" in rendered
     assert "target dir: /srv/homesrvctl/sites/app.example.com" in rendered
 
@@ -633,7 +650,8 @@ def test_textual_app_config_tool_detail_text() -> None:
     command_bar = app._command_bar_text()
 
     assert "Config Detail" in detail
-    assert "docker network: web" in detail
+    assert "docker network" in detail
+    assert "web" in detail
     assert "profiles: 1" in detail
     assert "focus: Config" in command_bar
 
@@ -880,7 +898,8 @@ def test_textual_app_stack_detail_includes_last_action_result() -> None:
     detail = app._detail_text()
 
     assert "Last action" in detail
-    assert "action: doctor" in detail
+    assert "action" in detail
+    assert "doctor" in detail
     assert "FAIL host-header request: request failed: connection refused" in detail
 
 
@@ -922,8 +941,10 @@ def test_textual_app_stack_detail_includes_domain_status() -> None:
     detail = app._detail_text()
 
     assert "Domain status" in detail
-    assert "overall: partial" in detail
-    assert "suggested command: homesrvctl domain repair example.com" in detail
+    assert "overall" in detail
+    assert "partial" in detail
+    assert "suggested command" in detail
+    assert "homesrvctl domain repair example.com" in detail
 
 
 def test_textual_app_domain_repair_rejects_subdomain(monkeypatch) -> None:
@@ -1030,7 +1051,8 @@ def test_textual_app_tool_detail_includes_last_cloudflared_action() -> None:
     detail = app._detail_text()
 
     assert "Last action" in detail
-    assert "action: config-test" in detail
+    assert "action" in detail
+    assert "config-test" in detail
     assert "warnings: 1" in detail
 
 

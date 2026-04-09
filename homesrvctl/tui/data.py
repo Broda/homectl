@@ -143,16 +143,20 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
     lines = [
         "Last action",
         "",
-        f"action: {label}",
-        f"status: {status}",
+        *format_key_value_lines(
+            [
+                ("action", label),
+                ("status", status),
+            ]
+        ),
     ]
 
     if "dry_run" in payload:
-        lines.append(f"dry run: {'yes' if payload.get('dry_run') else 'no'}")
+        lines.extend(format_key_value_lines([("dry run", "yes" if payload.get("dry_run") else "no")]))
 
     template = payload.get("template")
     if template:
-        lines.append(f"template: {template}")
+        lines.extend(format_key_value_lines([("template", str(template))]))
 
     checks = payload.get("checks")
     if isinstance(checks, list):
@@ -225,17 +229,21 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
     lines = [
         "Last action",
         "",
-        f"tool: {tool}",
-        f"action: {action}",
-        f"status: {'ok' if payload.get('ok') else 'failed'}",
+        *format_key_value_lines(
+            [
+                ("tool", tool),
+                ("action", action),
+                ("status", "ok" if payload.get("ok") else "failed"),
+            ]
+        ),
     ]
 
     if "dry_run" in payload:
-        lines.append(f"dry run: {'yes' if payload.get('dry_run') else 'no'}")
+        lines.extend(format_key_value_lines([("dry run", "yes" if payload.get("dry_run") else "no")]))
 
     detail = payload.get("detail")
     if detail:
-        lines.extend(["", f"detail: {detail}"])
+        lines.extend(["", *format_key_value_lines([("detail", str(detail))])])
 
     warnings = payload.get("warnings")
     if isinstance(warnings, list):
@@ -250,8 +258,12 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
         lines.extend(
             [
                 "",
-                f"config ok: {config_validation.get('ok', False)}",
-                f"config detail: {config_validation.get('detail', 'unknown')}",
+                *format_key_value_lines(
+                    [
+                        ("config ok", str(config_validation.get("ok", False))),
+                        ("config detail", str(config_validation.get("detail", "unknown"))),
+                    ]
+                ),
             ]
         )
         validation_warnings = config_validation.get("warnings", [])
@@ -274,13 +286,17 @@ def render_config_payload_detail(payload: dict[str, object]) -> list[str]:
         return ["global config unavailable"]
 
     lines = [
-        f"config path: {payload.get('config_path', '<unknown>')}",
+        *format_key_value_lines([("config path", str(payload.get("config_path", "<unknown>")))]),
         "",
-        f"sites root: {global_config.get('sites_root', '<unknown>')}",
-        f"docker network: {global_config.get('docker_network', '<unknown>')}",
-        f"traefik url: {global_config.get('traefik_url', '<unknown>')}",
-        f"cloudflared config: {global_config.get('cloudflared_config', '<unknown>')}",
-        f"api token present: {global_config.get('cloudflare_api_token_present', False)}",
+        *format_key_value_lines(
+            [
+                ("sites root", str(global_config.get("sites_root", "<unknown>"))),
+                ("docker network", str(global_config.get("docker_network", "<unknown>"))),
+                ("traefik url", str(global_config.get("traefik_url", "<unknown>"))),
+                ("cloudflared config", str(global_config.get("cloudflared_config", "<unknown>"))),
+                ("api token present", str(global_config.get("cloudflare_api_token_present", False))),
+            ]
+        ),
     ]
 
     profiles = global_config.get("profiles")
@@ -307,11 +323,21 @@ def render_stack_config_detail(payload: dict[str, object]) -> list[str]:
     return [
         "Effective config",
         "",
-        f"profile: {stack.get('profile') or 'none'}",
-        f"has local config: {stack.get('has_local_config', False)}",
-        f"docker network: {effective.get('docker_network', '<unknown>')} ({effective_sources.get('docker_network', 'unknown')})",
-        f"traefik url: {effective.get('traefik_url', '<unknown>')} ({effective_sources.get('traefik_url', 'unknown')})",
-        f"stack config path: {stack.get('stack_config_path', '<unknown>')}",
+        *format_key_value_lines(
+            [
+                ("profile", str(stack.get("profile") or "none")),
+                ("has local config", str(stack.get("has_local_config", False))),
+                (
+                    "docker network",
+                    f"{effective.get('docker_network', '<unknown>')} ({effective_sources.get('docker_network', 'unknown')})",
+                ),
+                (
+                    "traefik url",
+                    f"{effective.get('traefik_url', '<unknown>')} ({effective_sources.get('traefik_url', 'unknown')})",
+                ),
+                ("stack config path", str(stack.get("stack_config_path", "<unknown>"))),
+            ]
+        ),
     ]
 
 
@@ -336,11 +362,15 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
     lines = [
         "Domain status",
         "",
-        f"overall: {payload.get('overall', 'unknown')}",
-        f"repairable: {payload.get('repairable', False)}",
-        f"manual fix required: {payload.get('manual_fix_required', False)}",
-        f"expected tunnel target: {payload.get('expected_tunnel_target', '<unknown>')}",
-        f"expected ingress service: {payload.get('expected_ingress_service', '<unknown>')}",
+        *format_key_value_lines(
+            [
+                ("overall", str(payload.get("overall", "unknown"))),
+                ("repairable", str(payload.get("repairable", False))),
+                ("manual fix required", str(payload.get("manual_fix_required", False))),
+                ("expected tunnel target", str(payload.get("expected_tunnel_target", "<unknown>"))),
+                ("expected ingress service", str(payload.get("expected_ingress_service", "<unknown>"))),
+            ]
+        ),
     ]
 
     coverage_issues = payload.get("coverage_issues")
@@ -379,6 +409,13 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
 
     suggested_command = payload.get("suggested_command")
     if suggested_command:
-        lines.extend(["", f"suggested command: {suggested_command}"])
+        lines.extend(["", *format_key_value_lines([("suggested command", str(suggested_command))])])
 
     return lines
+
+
+def format_key_value_lines(items: list[tuple[str, str]]) -> list[str]:
+    if not items:
+        return []
+    width = max(len(label) for label, _ in items)
+    return [f"{label.rjust(width)} : {value}" for label, value in items]
