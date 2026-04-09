@@ -11,6 +11,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 ### Fixed
 - Keep `--json` status and validation output free of probe noise so the terminal dashboard can consume `cloudflared status`, `validate`, and `doctor` reliably.
 - Tightened `domain status` diagnostics so DNS and ingress conflicts now distinguish missing records, wrong types, wrong targets, duplicate ingress entries, shadowing, and manual-cleanup cases more explicitly.
+- Refreshed the roadmap and repo docs so milestone status and current TUI/template baselines match the shipped implementation more closely.
 
 ### Added
 

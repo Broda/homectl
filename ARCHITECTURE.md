@@ -22,7 +22,7 @@ Responsibilities:
 - parse flags and arguments
 - format human-readable and JSON output
 - orchestrate lower-level helpers
-- host the read-only terminal dashboard entrypoint
+- host the terminal UI entrypoint
 
 Should not do:
 - embed Cloudflare request details directly
@@ -121,12 +121,15 @@ The TUI command wrapper follows the same rule: it should prefer orchestrating st
 Responsibilities:
 - host the Textual application and related screens/widgets
 - load dashboard and action data from the existing JSON command surface
-- render terminal dashboard views and guided flows
+- render terminal dashboard views, detail panes, and guided flows
 - manage TUI-local selection and detail state
 - keep TUI-specific state and refresh behavior out of the command modules
 
 This layer should stay separate from CLI wiring so future dashboard/view growth does not bloat `homesrvctl/commands`.
 The current curses renderer is transitional; Textual is the planned long-term implementation for `homesrvctl tui`.
+Today the repo still contains both:
+- the active Textual implementation in [`homesrvctl/tui/app.py`](homesrvctl/tui/app.py)
+- the older transitional curses renderer in [`homesrvctl/tui/dashboard.py`](homesrvctl/tui/dashboard.py)
 The command wrapper should import the Textual app lazily so the rest of the CLI can still start cleanly if the local environment has not yet been refreshed to include the new dependency.
 
 ### Public contract changes should be deliberate

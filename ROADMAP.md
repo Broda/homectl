@@ -75,6 +75,7 @@ This milestone is already done and serves as the current project baseline.
   - `domain remove`
   - `cloudflared status`
   - `cloudflared restart`
+  - `cloudflared reload`
   - `cloudflared logs`
   - `cloudflared config-test`
 - All JSON output uses a shared top-level `schema_version`.
@@ -197,7 +198,7 @@ Goal: make the tool safer to use interactively and easier to reason about when l
 
 ### 2.1 Improve `cloudflared` config safety messaging
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Add more domain-level diagnostics for unsafe or ambiguous `cloudflared` config states.
@@ -212,9 +213,19 @@ Subtasks:
 - Decide whether `cloudflared status` should surface config warnings directly.
   Current behavior keeps structurally valid ingress warnings advisory in `cloudflared status`.
 
+Current baseline:
+- `cloudflared status` and `cloudflared config-test` already surface non-fatal ingress warnings for risky wildcard ordering.
+- `domain status` and `doctor` already surface the same warnings when they affect hostname troubleshooting.
+- `domain status` now also distinguishes missing, duplicate, shadowed, and wrong-target ingress states more explicitly.
+- Parser and config-ordering errors already include direct remediation hints for:
+  - duplicate ingress entries
+  - fallback ordering
+  - missing fallback service
+  - malformed YAML/list structure
+
 ### 2.2 Explore safe reload behavior
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Decide whether `cloudflared reload` is safe and worth exposing.
@@ -228,6 +239,12 @@ Subtasks:
   - be used automatically by domain mutation flows
   - remain unsupported
 - Document the operator tradeoff if reload is not reliable across runtimes.
+
+Current baseline:
+- `cloudflared reload` now exists as a standalone command.
+- Systemd-managed `cloudflared` exposes `reload` only when `systemctl show cloudflared --property CanReload --value` reports support.
+- Docker-managed and process-managed runtimes currently do not expose reload.
+- Domain mutation flows still keep `restart` as the explicit operator path rather than switching to reload automatically.
 
 ### 2.3 Expand config introspection
 
@@ -278,7 +295,7 @@ Goal: make `app init` more useful without turning `homesrvctl` into a full frame
 
 ### 3.1 Mature the existing templates
 
-Status: planned
+Status: mostly shipped
 
 Tasks:
 - Review the current `node` and `python` scaffolds for the minimum polish needed to feel intentional.
@@ -300,7 +317,7 @@ Subtasks:
 
 ### 3.2 Add a “static app plus API” pattern
 
-Status: planned
+Status: mostly shipped
 
 Goal: support a common self-hosted pattern where one hostname serves static assets and proxies to a small app service.
 
@@ -416,7 +433,7 @@ Decision notes:
 
 ### 3.5.1 Clean up Jekyll template parity and release confidence
 
-Status: planned
+Status: in progress
 
 Goal: keep the shipped Jekyll scaffold aligned with the other app templates and safe to release without expanding the product boundary.
 
@@ -444,6 +461,17 @@ Subtasks:
   - when native gem dependencies require Dockerfile edits
   - the expectation that the adopted Jekyll source root lives directly under `site/`
 - Revisit `.dockerignore` coverage only if real adoption shows missing common Jekyll cache or bundle paths.
+
+Current baseline:
+- The Jekyll scaffold already has dedicated scaffold and JSON-output regression tests.
+- The generated scaffold README already documents:
+  - keeping the generated stack wiring files
+  - replacing the `site/` contents with the adopted Jekyll source tree
+  - extending the Dockerfile when native gem dependencies require more packages
+- Remaining follow-up is mainly:
+  - parity-style coherence coverage
+  - routing-override coverage
+  - built-distribution verification
 
 ## Milestone 4: API Reliability and Cloudflare Coverage
 
@@ -493,7 +521,7 @@ Migration policy:
 
 ### 5.1 Establish the Textual foundation
 
-Status: in progress
+Status: shipped
 
 Tasks:
 - Keep the TUI in the main repo and same package.
@@ -522,6 +550,9 @@ Current baseline:
   - `list`
   - `cloudflared status`
   - `validate`
+  - `config show`
+  - stack-focused `config show --stack`
+  - apex `domain status`
 
 ### 5.2 Reach dashboard parity in Textual
 
@@ -560,10 +591,14 @@ Current baseline:
   - focused detail panes
   - selected-stack actions
   - manual and timed refresh
+- The Textual dashboard now covers that baseline and extends it with:
+  - per-stack effective config detail
+  - apex-domain status detail
+  - cached last-action detail for stack and cloudflared actions
 
 ### 5.3 Improve layout and theming with Textual
 
-Status: in progress
+Status: shipped
 
 Tasks:
 - Use Textual to move beyond the compact curses layout and give the TUI a clearer long-term visual structure.
@@ -615,7 +650,7 @@ Current baseline:
 
 ### 5.4 Add guided flows for common operations
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Make the common multi-step operations easier to run without memorizing command sequences.
@@ -690,10 +725,24 @@ Current baseline:
 - The Textual TUI now includes a first guided scaffold flow for `app init`, using a minimal template picker that still shells out to the existing CLI command underneath.
 - Apex-focused stacks now also support guided confirmation prompts for `domain add` and `domain remove`.
 - Focused stacks now also have a guided stack action menu so the existing stack and apex-domain actions are discoverable without relying only on hotkeys.
+- Focused stacks can already launch:
+  - `site init`
+  - `app init`
+  - `up`
+  - `down`
+  - `restart`
+  - `doctor`
+  - `domain add`
+  - `domain repair`
+  - `domain remove`
+- Remaining guided-flow gaps are mostly around global tools such as:
+  - `config init`
+  - `cloudflared logs`
+  - richer prompt coverage for shared inputs beyond the current template picker and confirmations
 
 ### 5.5 Make diagnostics explorable
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Turn the existing rich status output into something easier to inspect interactively.
@@ -720,9 +769,21 @@ Subtasks:
   - domain repairability
   - config problems
 
+Current baseline:
+- The Textual TUI already exposes explorable detail views for:
+  - `list`
+  - `validate`
+  - `config show`
+  - per-stack `config show --stack`
+  - apex `domain status`
+  - cached doctor output
+  - `cloudflared status`
+  - cached `cloudflared config-test` output
+- The main remaining read-heavy gap in this milestone is `cloudflared logs`.
+
 ### 5.6 Retire curses and keep the Textual TUI testable
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Remove the transitional curses implementation after the Textual dashboard reaches parity.
@@ -745,6 +806,14 @@ Subtasks:
 - Update architecture, file-map, and wiki docs after the migration lands.
   - a separate console script
 - Document environment assumptions for the TUI, including terminal capabilities and local runtime access.
+
+Current baseline:
+- The Textual TUI already has focused tests for:
+  - snapshot/data loading
+  - prompt rendering
+  - keyboard-driven action dispatch
+  - status and detail rendering
+- The legacy curses renderer is still present, so this milestone remains open until retirement and final parity review are complete.
 
 ## Milestone 6: TUI Mouse Support
 
