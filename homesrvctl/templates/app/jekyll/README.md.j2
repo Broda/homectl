@@ -1,0 +1,29 @@
+# {{ hostname }} Jekyll Site
+
+This scaffold is a narrow Jekyll build-and-serve baseline for `{{ hostname }}`.
+
+## Files
+
+- `docker-compose.yml`: Traefik-connected nginx service built from the local Dockerfile
+- `Dockerfile`: multi-stage image that builds the Jekyll site and serves the generated output with nginx
+- `.dockerignore`: keeps build cache and generated site output out of the image context
+- `site/Gemfile`: starter Jekyll gem definition
+- `site/_config.yml`: starter Jekyll site config
+- `site/index.md`: starter page content
+- `README.md`: adoption notes for the scaffold
+
+## Local adjustments
+
+1. For a new site, edit the files under `site/` and build with `docker compose up --build`.
+2. To adopt an existing Jekyll repo, copy the repo contents into `site/` and keep the generated `docker-compose.yml` and `Dockerfile` in the stack root.
+3. Make sure the adopted `site/` tree includes the files Jekyll needs at its source root, such as `_config.yml`, `Gemfile`, pages, posts, collections, layouts, includes, and assets.
+4. Run `docker compose up --build`.
+5. Verify the container becomes healthy and that `https://{{ hostname }}/` serves the generated site.
+6. If your adopted site needs native gem dependencies beyond the starter baseline, extend the generated `Dockerfile` accordingly.
+
+## Runtime behavior
+
+- the image builds the Jekyll site from `./site`
+- nginx serves the generated static output on port `80`
+- Traefik forwards `{{ hostname }}` to nginx on port `80`
+- the generated compose service includes a container healthcheck against `http://127.0.0.1/`

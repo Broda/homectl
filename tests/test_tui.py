@@ -664,6 +664,7 @@ def test_app_init_template_screen_renders_options() -> None:
     assert "> 1. placeholder" in rendered
     assert "2. static" in rendered
     assert "5. python" in rendered
+    assert "6. jekyll" in rendered
 
 
 def test_confirm_action_screen_uses_supplied_copy() -> None:

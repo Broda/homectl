@@ -18,7 +18,7 @@ from homesrvctl.utils import (
 )
 
 app_cli = typer.Typer(help="Scaffold application service directories.")
-TemplateName = Literal["static", "static-api", "placeholder", "node", "python"]
+TemplateName = Literal["static", "static-api", "placeholder", "node", "python", "jekyll"]
 
 
 @app_cli.command("init")
@@ -185,6 +185,16 @@ def _template_outputs(target_dir, template: TemplateName) -> list[tuple]:  # noq
             (target_dir / "README.md", "app/python/README.md.j2"),
             (target_dir / "requirements.txt", "app/python/requirements.txt.j2"),
             (target_dir / "app" / "main.py", "app/python/app/main.py.j2"),
+        ]
+    if template == "jekyll":
+        return [
+            (target_dir / "docker-compose.yml", "app/jekyll/docker-compose.yml.j2"),
+            (target_dir / ".dockerignore", "app/jekyll/dockerignore.j2"),
+            (target_dir / "Dockerfile", "app/jekyll/Dockerfile.j2"),
+            (target_dir / "README.md", "app/jekyll/README.md.j2"),
+            (target_dir / "site" / "Gemfile", "app/jekyll/site.Gemfile.j2"),
+            (target_dir / "site" / "_config.yml", "app/jekyll/site._config.yml.j2"),
+            (target_dir / "site" / "index.md", "app/jekyll/site.index.md.j2"),
         ]
     return [
         (target_dir / "docker-compose.yml", "app/placeholder/docker-compose.yml.j2"),

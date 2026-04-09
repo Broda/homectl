@@ -13,6 +13,7 @@ APP_INIT_TEMPLATE_OPTIONS: list[tuple[str, str]] = [
     ("static-api", "Static site plus a small Python API."),
     ("node", "Node app scaffold with healthcheck."),
     ("python", "Python app scaffold with healthcheck."),
+    ("jekyll", "Jekyll build plus static serving baseline."),
 ]
 
 
@@ -61,11 +62,13 @@ class AppInitTemplateScreen(ModalScreen[str | None]):
         self._render()
 
     def on_key(self, event: Key) -> None:
-        if event.character and event.character in {"1", "2", "3", "4", "5"}:
-            self.selected_index = int(event.character) - 1
-            self._render()
-            self.action_select_template()
-            event.stop()
+        if event.character and event.character.isdigit():
+            index = int(event.character) - 1
+            if 0 <= index < len(APP_INIT_TEMPLATE_OPTIONS):
+                self.selected_index = index
+                self._render()
+                self.action_select_template()
+                event.stop()
 
     def action_previous_template(self) -> None:
         self.selected_index = (self.selected_index - 1) % len(APP_INIT_TEMPLATE_OPTIONS)

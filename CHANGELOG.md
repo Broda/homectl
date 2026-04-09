@@ -13,7 +13,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Added
 
-- Documented the planned Jekyll template direction in the roadmap and project-context docs: first-class `app` template, stack-local source, manual adoption first, and no new orchestration layer in the initial slice.
+- Added a first `jekyll` app template that builds a stack-local Jekyll site into an nginx-served image for manual adoption of an existing Jekyll repo.
 - Added Textual as the new TUI dependency and introduced a first Textual app foundation behind `homesrvctl tui`.
 - Added a first read-only `homesrvctl tui` dashboard that reuses the existing JSON command surface for stack, `cloudflared`, and validation summaries.
 - Expanded the initial TUI dashboard with keyboard selection, a focused detail pane, and a footer that shows controls plus refresh mode.

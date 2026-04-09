@@ -299,6 +299,47 @@ def test_app_init_python_template_creates_scaffold(monkeypatch, tmp_path: Path) 
     assert "Replace app/main.py with your real Python application." in main_py
 
 
+def test_app_init_jekyll_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "blog.example.com", "--template", "jekyll"])
+
+    assert result.exit_code == 0, result.output
+    app_dir = sites_root / "blog.example.com"
+    assert (app_dir / "docker-compose.yml").exists()
+    assert (app_dir / ".dockerignore").exists()
+    assert (app_dir / "Dockerfile").exists()
+    assert (app_dir / "README.md").exists()
+    assert (app_dir / "site" / "Gemfile").exists()
+    assert (app_dir / "site" / "_config.yml").exists()
+    assert (app_dir / "site" / "index.md").exists()
+    compose = (app_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerignore = (app_dir / ".dockerignore").read_text(encoding="utf-8")
+    dockerfile = (app_dir / "Dockerfile").read_text(encoding="utf-8")
+    readme = (app_dir / "README.md").read_text(encoding="utf-8")
+    gemfile = (app_dir / "site" / "Gemfile").read_text(encoding="utf-8")
+    config_yml = (app_dir / "site" / "_config.yml").read_text(encoding="utf-8")
+    index_md = (app_dir / "site" / "index.md").read_text(encoding="utf-8")
+    assert "dockerfile: Dockerfile" in compose
+    assert "loadbalancer.server.port=80" in compose
+    assert "http://127.0.0.1/" in compose
+    assert "site/_site" in dockerignore
+    assert "site/.jekyll-cache" in dockerignore
+    assert "FROM ruby:3.3-alpine AS build" in dockerfile
+    assert "bundle exec jekyll build" in dockerfile
+    assert "FROM nginx:alpine" in dockerfile
+    assert "docker compose up --build" in readme
+    assert "copy the repo contents into `site/`" in readme
+    assert "Gemfile" in readme
+    assert 'gem "jekyll"' in gemfile
+    assert 'title: "blog.example.com"' in config_yml
+    assert "blog.example.com" in index_md
+
+
 def test_app_init_node_template_artifacts_stay_coherent(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -741,6 +782,36 @@ def test_app_init_python_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert payload["files"][-1].endswith("/api.example.com/app/main.py")
     assert payload["rendered_templates"][-1]["template"] == "app/python/app/main.py.j2"
+
+
+def test_app_init_jekyll_json_output(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "blog.example.com", "--template", "jekyll", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "app_init"
+    assert payload["hostname"] == "blog.example.com"
+    assert payload["template"] == "jekyll"
+    assert payload["dry_run"] is True
+    assert payload["ok"] is True
+    assert payload["files"][-1].endswith("/blog.example.com/site/index.md")
+    templates = {entry["template"] for entry in payload["rendered_templates"]}
+    assert templates == {
+        "app/jekyll/docker-compose.yml.j2",
+        "app/jekyll/dockerignore.j2",
+        "app/jekyll/Dockerfile.j2",
+        "app/jekyll/README.md.j2",
+        "app/jekyll/site.Gemfile.j2",
+        "app/jekyll/site._config.yml.j2",
+        "app/jekyll/site.index.md.j2",
+    }
 
 
 def test_app_init_node_json_output_lists_expected_templates(monkeypatch, tmp_path: Path) -> None:

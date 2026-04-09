@@ -74,6 +74,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Node app scaffold.
 - [`homesrvctl/templates/app/python`](homesrvctl/templates/app/python)
   Python app scaffold.
+- [`homesrvctl/templates/app/jekyll`](homesrvctl/templates/app/jekyll)
+  Jekyll build-and-serve app scaffold.
 - [`homesrvctl/templates/site`](homesrvctl/templates/site)
   Static site scaffold assets.
 

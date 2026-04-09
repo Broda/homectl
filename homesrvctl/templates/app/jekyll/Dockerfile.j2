@@ -1,0 +1,16 @@
+FROM ruby:3.3-alpine AS build
+
+RUN apk add --no-cache build-base libffi-dev linux-headers yaml-dev zlib-dev
+
+WORKDIR /src
+
+COPY site/ /src/
+
+RUN test -f Gemfile
+RUN bundle config set path vendor/bundle \
+    && bundle install \
+    && bundle exec jekyll build --source /src --destination /out
+
+FROM nginx:alpine
+
+COPY --from=build /out/ /usr/share/nginx/html/
