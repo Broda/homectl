@@ -101,75 +101,54 @@ This milestone is already done and serves as the current project baseline.
 
 ## Milestone 1: Domain and Routing Hardening
 
-Status: next
+Status: shipped
 
 Goal: make non-default routing setups and ambiguous domain state easier to understand and safer to operate.
 
 ### 1.1 Refresh status and repair diagnostics
 
-Status: in progress
+Status: shipped
 
-Tasks:
-- Tighten non-JSON error paths so they stay short and actionable.
-- Make ambiguous state messages more explicit about what `repair` can fix automatically.
-- Make ambiguous state messages more explicit about what requires manual cleanup.
-- Review domain mutation failure paths for wording consistency across:
-  - `add`
-  - `status`
-  - `repair`
-  - `remove`
-
-Subtasks:
-- Audit `domain_cmd.py` error messages for duplicate phrasing or inconsistent terminology.
-- Standardize “repairable” versus “manual fix required” wording.
-- Ensure DNS conflict messages distinguish:
+Completed in this milestone:
+- `domain status` now distinguishes DNS states more explicitly:
   - missing record
   - wrong type
   - wrong target
   - multiple conflicting records
-- Ensure ingress conflict messages distinguish:
-  - missing entry
-  - duplicate entry
+- `domain status` now distinguishes ingress states more explicitly:
+  - exact entry missing
+  - duplicate exact entry
   - shadowed entry
-  - invalid fallback ordering
+  - wrong target
+- Repairability messaging is now consistent about what `homesrvctl domain repair` can fix automatically versus when manual cleanup is required first.
+- Domain mutation failures now keep non-JSON error output short and actionable for duplicate ingress and conflicting DNS cases.
 
 ### 1.2 Formalize the routing-profile model
 
-Status: in progress
+Status: shipped
 
 Goal: evolve from two standalone override keys into a coherent routing model that can grow without turning the CLI into a pile of flags.
 
-Tasks:
-- Define what a routing profile is in global config.
-- Define how a stack opts into a non-default routing profile.
-- Decide how profile selection interacts with direct per-stack overrides.
-- Decide whether direct override keys remain first-class or become an escape hatch.
-
-Subtasks:
-- Document the current implicit default profile:
-  - one shared `traefik_url`
-  - one shared `docker_network`
-- Design a profile shape such as:
-  - `profiles.default`
-  - `profiles.internal`
-  - `profiles.edge-b`
-- Define stack-local config shape for:
-  - `profile`
-  - optional direct override values
-- Decide precedence order between:
+Decision:
+- Top-level `docker_network` and `traefik_url` remain the implicit default routing profile.
+- Global named profiles live under `profiles`.
+- A stack opts into a non-default profile with stack-local `profile`.
+- Direct stack-local `docker_network` and `traefik_url` keys remain first-class for one-off exceptions.
+- Precedence is:
   - global defaults
-  - named profile values
-  - stack-local direct overrides
-- Add documentation examples for:
-  - all-default stack
-  - stack with named profile
-  - stack with one-off override
+  - selected profile values
+  - direct stack-local overrides
 
-Completed in this milestone so far:
+Completed in this milestone:
 - Global config now supports named `profiles`.
 - Stack-local `homesrvctl.yml` now supports `profile`.
 - `site init` and `app init` support `--profile`.
 - Direct stack-local overrides still win over selected profile values.
+- The README now documents:
+  - the implicit default profile
+  - named profile selection
+  - one-off direct overrides
+  - precedence across all three layers
 - `cloudflared status` and `cloudflared config-test` now surface non-fatal ingress shadowing warnings for risky wildcard ordering.
 - `domain status` and `doctor` now surface the same non-fatal ingress shadowing warnings when they affect hostname troubleshooting.
 - `cloudflared reload` now exists when the detected runtime provides a safe reload command.
@@ -199,19 +178,16 @@ Current baseline:
 
 ### 1.4 Broaden non-default routing tests
 
-Status: planned
+Status: shipped
 
-Tasks:
-- Add product-focused tests for non-default routing setups.
-- Keep local verification aligned with CI as the routing matrix grows.
-
-Subtasks:
-- Add tests for alternate `docker_network` only.
-- Add tests for alternate `traefik_url` only.
-- Add tests for both overrides together.
-- Add tests for stacks with no override file next to stacks with overrides.
-- Add tests for domain commands against mixed default-versus-overridden stacks.
-- Add tests for JSON output so effective routing data stays stable.
+Completed in this milestone:
+- Product-focused routing tests now cover:
+  - alternate `docker_network` only
+  - alternate `traefik_url` only
+  - both overrides together
+  - stacks with no override file next to stacks with overrides
+  - domain commands against mixed default-versus-overridden stacks
+  - JSON output where effective routing data must stay stable
 
 ## Milestone 2: Operator UX and Config Safety
 

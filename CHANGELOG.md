@@ -10,6 +10,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Fixed
 - Keep `--json` status and validation output free of probe noise so the terminal dashboard can consume `cloudflared status`, `validate`, and `doctor` reliably.
+- Tightened `domain status` diagnostics so DNS and ingress conflicts now distinguish missing records, wrong types, wrong targets, duplicate ingress entries, shadowing, and manual-cleanup cases more explicitly.
 
 ### Added
 
@@ -40,6 +41,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Made non-fatal `cloudflared` ingress warnings more remediation-oriented by embedding direct fix hints in the surfaced messages.
 - Made `cloudflared status` explicit about warning policy: structurally valid ingress warnings remain advisory and do not flip the status command to failure while the runtime is healthy.
 - Broadened mixed-routing regression coverage for default stacks, profile-backed stacks, and direct override stacks.
+- Broadened routing regression coverage for scaffold flows so `site init` and `app init` now cover profile selection, one-off `traefik_url` overrides, and combined override cases more explicitly.
 - Added basic healthchecks to the generated `node` and `python` app templates so scaffolded containers verify their default root endpoints.
 - Added dedicated `/healthz` endpoints to the generated `node` and `python` apps so healthchecks no longer probe the user-facing root response.
 - Tightened generated Dockerfile defaults so the Node scaffold installs runtime dependencies and the Python scaffold sets standard runtime environment flags before installing requirements.
@@ -55,6 +57,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 - Reworked the Textual dashboard layout into a roomy warm-console design with a top summary strip, a unified left control pane, a right operational detail pane, and a persistent command/status bar.
 - Replaced the old section-plus-stack split navigation model in the Textual dashboard with a single vertical control cursor through `Tools` and `Stacks`.
+- Clarified the routing-profile model in the docs: top-level routing keys are the implicit default profile, stacks opt in with `profile`, and direct stack-local overrides remain first-class and win last.
 
 ## 0.2.0 - 2026-04-08
 

@@ -11,8 +11,8 @@ from homesrvctl.cloudflared import (
     apply_domain_ingress_removal,
     collect_cloudflared_config_warnings,
     describe_cloudflared_config_error,
-    find_exact_hostname_route,
     inspect_hostname_route,
+    list_exact_hostname_routes,
     plan_domain_ingress,
     plan_domain_ingress_removal,
 )
@@ -266,7 +266,8 @@ def domain_status(
                 {
                     "hostname": status["hostname"],
                     "probe_hostname": status["probe_hostname"],
-                    "exists": status["service"] is not None,
+                    "exists": status["exists"],
+                    "duplicate": status["duplicate"],
                     "service": status["service"],
                     "matches_expected": status["matches_expected"],
                     "effective_hostname": status["effective_hostname"],
@@ -537,24 +538,35 @@ def _build_domain_ingress_statuses(config_path, domain: str, expected_service: s
         (domain, domain),
         (f"*.{domain}", wildcard_probe),
     ):
-        configured_service = find_exact_hostname_route(config_path, target_hostname)
+        exact_routes = list_exact_hostname_routes(config_path, target_hostname)
+        duplicate = len(exact_routes) > 1
+        configured_service = exact_routes[0].service if exact_routes else None
         effective_match = inspect_hostname_route(config_path, probe_hostname)
         effective_hostname = effective_match.hostname if effective_match else None
         effective_service = effective_match.service if effective_match else None
         shadowed = effective_match is not None and effective_hostname != target_hostname
+        exact_exists = bool(exact_routes)
 
-        if configured_service is None:
+        if duplicate:
+            detail = (
+                "duplicate exact ingress entries configured: "
+                + ", ".join(f"{route.hostname} -> {route.service}" for route in exact_routes)
+            )
+        elif configured_service is None:
             if shadowed:
-                detail = f"shadowed by earlier rule {effective_hostname} -> {effective_service}"
+                detail = f"exact entry missing; shadowed by earlier rule {effective_hostname} -> {effective_service}"
             else:
-                detail = "entry missing"
+                detail = "exact entry missing"
         elif shadowed:
             detail = f"shadowed by earlier rule {effective_hostname} -> {effective_service}"
+        elif configured_service != expected_service:
+            detail = f"wrong target {configured_service}; expected {expected_service}"
         else:
             detail = configured_service
 
         matches_expected = (
-            configured_service == expected_service
+            not duplicate
+            and configured_service == expected_service
             and effective_hostname == target_hostname
             and effective_service == expected_service
         )
@@ -562,6 +574,8 @@ def _build_domain_ingress_statuses(config_path, domain: str, expected_service: s
             {
                 "hostname": target_hostname,
                 "probe_hostname": probe_hostname,
+                "exists": exact_exists,
+                "duplicate": duplicate,
                 "service": configured_service,
                 "matches_expected": matches_expected,
                 "effective_hostname": effective_hostname,
@@ -577,20 +591,21 @@ def _overall_domain_status(dns_statuses, ingress_statuses, expected_service: str
     dns_exists = [status.exists for status in dns_statuses]
     dns_matches = [status.matches_expected for status in dns_statuses]
     dns_conflicts = [getattr(status, "multiple_records", False) for status in dns_statuses]
-    ingress_exists = [status["service"] is not None for status in ingress_statuses]
+    ingress_exists = [status["exists"] for status in ingress_statuses]
     ingress_matches = [status["matches_expected"] for status in ingress_statuses]
+    ingress_conflicts = [status["duplicate"] for status in ingress_statuses]
     dns_wrong = [
         status.exists and not status.matches_expected and not getattr(status, "multiple_records", False)
         for status in dns_statuses
     ]
     ingress_wrong = [
-        status["service"] is not None and not status["matches_expected"]
+        status["exists"] and not status["matches_expected"] and not status["duplicate"]
         for status in ingress_statuses
     ]
 
     if all(dns_matches) and all(ingress_matches):
         return "ok"
-    if any(dns_conflicts) or any(dns_wrong) or any(ingress_wrong):
+    if any(dns_conflicts) or any(dns_wrong) or any(ingress_conflicts) or any(ingress_wrong):
         return "misconfigured"
     if any(dns_exists) or any(ingress_exists):
         return "partial"
@@ -603,8 +618,22 @@ def _exit_with_error(message: str) -> int:
 
 
 def _format_domain_error(error: Exception) -> str:
-    if isinstance(error, (CloudflaredConfigError, typer.BadParameter)):
+    if isinstance(error, CloudflaredConfigError):
         return describe_cloudflared_config_error(error)
+    if isinstance(error, typer.BadParameter):
+        message = str(error)
+        if "cloudflared" in message:
+            return describe_cloudflared_config_error(error)
+        return message
+    if isinstance(error, CloudflareApiError):
+        message = str(error)
+        if message.startswith("multiple DNS records exist for "):
+            record_name = message.removeprefix("multiple DNS records exist for ").split(";", 1)[0].strip()
+            return (
+                f"DNS conflict for {record_name}: multiple conflicting records exist; "
+                "clean them up manually before retrying"
+            )
+        return message
     return str(error)
 
 
@@ -612,6 +641,8 @@ def _domain_status_repairability(overall: str, dns_statuses, ingress_statuses) -
     if overall not in {"partial", "misconfigured"}:
         return False
     if any(getattr(status, "multiple_records", False) for status in dns_statuses):
+        return False
+    if any(status["duplicate"] for status in ingress_statuses):
         return False
     return not any(status["shadowed"] for status in ingress_statuses)
 
@@ -624,8 +655,8 @@ def _coverage_issues(dns_statuses, ingress_statuses) -> list[str]:  # noqa: ANN0
     issues: list[str] = []
     apex_dns_exists = dns_statuses[0].exists
     wildcard_dns_exists = dns_statuses[1].exists
-    apex_ingress_exists = ingress_statuses[0]["service"] is not None
-    wildcard_ingress_exists = ingress_statuses[1]["service"] is not None
+    apex_ingress_exists = ingress_statuses[0]["exists"]
+    wildcard_ingress_exists = ingress_statuses[1]["exists"]
 
     if apex_dns_exists and not wildcard_dns_exists:
         issues.append("DNS coverage is apex-only; wildcard DNS is missing")

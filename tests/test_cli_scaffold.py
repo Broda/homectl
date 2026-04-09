@@ -139,6 +139,94 @@ def test_site_init_with_docker_network_override_only_writes_network_override(mon
     assert overrides == {"docker_network": "edge"}
 
 
+def test_site_init_with_traefik_override_only_writes_traefik_override(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["site", "init", "test.example.com", "--traefik-url", "http://localhost:9000"])
+
+    assert result.exit_code == 0, result.output
+    stack_config = sites_root / "test.example.com" / "homesrvctl.yml"
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {"traefik_url": "http://localhost:9000"}
+
+
+def test_app_init_with_profile_writes_profile_selection(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(
+        home,
+        sites_root,
+        profiles={
+            "edge": {
+                "docker_network": "edge",
+                "traefik_url": "http://localhost:9000",
+            }
+        },
+    )
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "init", "app.example.com", "--template", "node", "--profile", "edge"])
+
+    assert result.exit_code == 0, result.output
+    stack_config = sites_root / "app.example.com" / "homesrvctl.yml"
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {"profile": "edge"}
+
+
+def test_app_init_with_traefik_override_only_writes_traefik_override(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["app", "init", "app.example.com", "--template", "node", "--traefik-url", "http://localhost:9000"],
+    )
+
+    assert result.exit_code == 0, result.output
+    stack_config = sites_root / "app.example.com" / "homesrvctl.yml"
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {"traefik_url": "http://localhost:9000"}
+
+
+def test_app_init_with_both_overrides_writes_both_overrides(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "app",
+            "init",
+            "app.example.com",
+            "--template",
+            "python",
+            "--docker-network",
+            "edge",
+            "--traefik-url",
+            "http://localhost:9000",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    stack_config = sites_root / "app.example.com" / "homesrvctl.yml"
+    overrides = yaml.safe_load(stack_config.read_text(encoding="utf-8"))
+    assert overrides == {
+        "docker_network": "edge",
+        "traefik_url": "http://localhost:9000",
+    }
+
+
 def test_app_init_node_template_creates_scaffold(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -2353,7 +2441,7 @@ def test_domain_status_reports_partial(monkeypatch, tmp_path: Path) -> None:
 
     assert result.exit_code == 1, result.output
     assert "FAIL DNS *.example.com: record missing" in result.output
-    assert "FAIL ingress *.example.com: entry missing" in result.output
+    assert "FAIL ingress *.example.com: exact entry missing" in result.output
     assert "Overall status for example.com: partial" in result.output
     assert "DNS coverage is apex-only; wildcard DNS is missing" in result.output
     assert "Ingress coverage is apex-only; wildcard ingress is missing" in result.output
@@ -2411,6 +2499,12 @@ def test_domain_status_reports_misconfigured(monkeypatch, tmp_path: Path) -> Non
                     "content": content,
                     "proxied": True,
                     "matches_expected": record_name != "example.com",
+                    "detail": (
+                        "wrong target CNAME -> wrong-target.example.com (proxied); expected CNAME -> "
+                        "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+                        if record_name == "example.com"
+                        else f"CNAME -> {expected_content} (proxied)"
+                    ),
                 },
             )()
 
@@ -2425,8 +2519,11 @@ def test_domain_status_reports_misconfigured(monkeypatch, tmp_path: Path) -> Non
     result = runner.invoke(app, ["domain", "status", "example.com"])
 
     assert result.exit_code == 1, result.output
-    assert "FAIL DNS example.com: CNAME -> wrong-target.example.com (proxied)" in result.output
-    assert "FAIL ingress example.com: http://localhost:9000" in result.output
+    assert (
+        "FAIL DNS example.com: wrong target CNAME -> wrong-target.example.com (proxied); expected CNAME -> "
+        "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+    ) in result.output
+    assert "FAIL ingress example.com: wrong target http://localhost:9000; expected http://localhost:8081" in result.output
     assert "Overall status for example.com: misconfigured" in result.output
     assert "Repairable by homesrvctl: yes" in result.output
 
@@ -2482,7 +2579,7 @@ def test_domain_status_reports_multiple_dns_records_as_manual_fix(monkeypatch, t
                         "matches_expected": False,
                         "multiple_records": True,
                         "record_count": 2,
-                        "detail": "multiple DNS records exist: CNAME -> wrong-target.example.com (proxied), A -> 192.0.2.10",
+                        "detail": "multiple conflicting records exist: CNAME -> wrong-target.example.com (proxied), A -> 192.0.2.10",
                         "records": [
                             {"type": "CNAME", "content": "wrong-target.example.com", "proxied": True},
                             {"type": "A", "content": "192.0.2.10", "proxied": False},
@@ -2513,8 +2610,93 @@ def test_domain_status_reports_multiple_dns_records_as_manual_fix(monkeypatch, t
     result = runner.invoke(app, ["domain", "status", "example.com"])
 
     assert result.exit_code == 1, result.output
-    assert "FAIL DNS example.com: multiple DNS records exist:" in result.output
+    assert "FAIL DNS example.com: multiple conflicting records exist:" in result.output
     assert "Repairable by homesrvctl: no; manual cleanup is likely required first" in result.output
+
+
+def test_domain_status_reports_wrong_dns_type_with_explicit_detail(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            if record_name == "example.com":
+                return type(
+                    "Status",
+                    (),
+                    {
+                        "record_name": record_name,
+                        "exists": True,
+                        "record_type": "A",
+                        "content": "192.0.2.10",
+                        "proxied": True,
+                        "matches_expected": False,
+                        "detail": (
+                            "wrong type A -> 192.0.2.10 (proxied); expected CNAME -> "
+                            "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+                        ),
+                    },
+                )()
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com"])
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "FAIL DNS example.com: wrong type A -> 192.0.2.10 (proxied); expected CNAME -> "
+        "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+    ) in result.output
 
 
 def test_domain_status_json_reports_wrong_dns_type(monkeypatch, tmp_path: Path) -> None:
@@ -2566,7 +2748,10 @@ def test_domain_status_json_reports_wrong_dns_type(monkeypatch, tmp_path: Path) 
                         "content": "192.0.2.10",
                         "proxied": True,
                         "matches_expected": False,
-                        "detail": "A -> 192.0.2.10 (proxied)",
+                        "detail": (
+                            "wrong type A -> 192.0.2.10 (proxied); expected CNAME -> "
+                            "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+                        ),
                     },
                 )()
             return type(
@@ -2598,7 +2783,10 @@ def test_domain_status_json_reports_wrong_dns_type(monkeypatch, tmp_path: Path) 
     assert payload["repairable"] is True
     assert payload["manual_fix_required"] is False
     assert payload["dns"][0]["record_type"] == "A"
-    assert payload["dns"][0]["detail"] == "A -> 192.0.2.10 (proxied)"
+    assert (
+        payload["dns"][0]["detail"] == "wrong type A -> 192.0.2.10 (proxied); expected CNAME -> "
+        "11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
+    )
     assert payload["dns"][0]["multiple_records"] is False
 
 
@@ -3150,6 +3338,145 @@ def test_domain_status_json_reports_shadowed_ingress_as_manual_fix(monkeypatch, 
     assert payload["ingress"][0]["shadowed"] is True
     assert payload["ingress"][0]["effective_hostname"] == "*.com"
     assert payload["ingress"][1]["shadowed"] is True
+
+
+def test_domain_status_reports_duplicate_ingress_entries_as_manual_fix(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "example.com", "service": "http://localhost:9000"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com"])
+
+    assert result.exit_code == 1, result.output
+    assert "FAIL ingress example.com: duplicate exact ingress entries configured:" in result.output
+    assert "Repairable by homesrvctl: no; manual cleanup is likely required first" in result.output
+
+
+def test_domain_status_json_reports_duplicate_ingress_entries_as_manual_fix(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "example.com", "service": "http://localhost:9000"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["overall"] == "misconfigured"
+    assert payload["repairable"] is False
+    assert payload["manual_fix_required"] is True
+    assert payload["ingress"][0]["exists"] is True
+    assert payload["ingress"][0]["duplicate"] is True
+    assert payload["ingress"][0]["detail"].startswith("duplicate exact ingress entries configured:")
 def test_domain_repair_reports_duplicate_ingress_hint(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import domain_cmd
 
@@ -3204,6 +3531,50 @@ def test_domain_repair_reports_duplicate_ingress_hint(monkeypatch, tmp_path: Pat
     assert result.exit_code == 1, result.output
     assert "duplicate ingress hostname entry found: example.com" in result.output
     assert "Hint: remove the duplicate 'example.com' ingress entry" in result.output
+
+
+def test_domain_repair_reports_dns_conflict_with_manual_cleanup_hint(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            assert zone_name == "example.com"
+            return {"id": "zone-123"}
+
+        def apply_dns_record(self, zone_id: str, record_name: str, content: str):  # noqa: ANN202
+            raise domain_cmd.CloudflareApiError(
+                "multiple DNS records exist for example.com; clean them up manually before retrying"
+            )
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "repair", "example.com"])
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "DNS conflict for example.com: multiple conflicting records exist; clean them up manually before retrying"
+        in result.output
+    )
 
 
 def test_domain_status_reports_fallback_order_hint(monkeypatch, tmp_path: Path) -> None:

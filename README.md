@@ -99,6 +99,8 @@ cloudflared_config: /etc/cloudflared/config.yml
 cloudflare_api_token: ""
 ```
 
+The top-level `docker_network` and `traefik_url` values are the implicit default routing profile for stacks that do not opt into anything else.
+
 Optional routing profiles may also be defined in the main config:
 
 ```yaml
@@ -126,6 +128,33 @@ Supported stack-local keys:
 profile: edge
 docker_network: edge
 traefik_url: http://localhost:9000
+```
+
+Routing model and precedence:
+
+1. Global defaults come from the top-level `docker_network` and `traefik_url` config keys.
+2. A stack may opt into a named routing profile by writing `profile: <name>` in its stack-local `homesrvctl.yml`, or by passing `--profile` to `site init` or `app init`.
+3. Stack-local `docker_network` and `traefik_url` keys remain first-class one-off overrides and win over the selected profile when both are present.
+
+Examples:
+
+All-default stack, no stack-local config needed:
+
+```yaml
+# no /srv/homesrvctl/sites/example.com/homesrvctl.yml file
+```
+
+Stack that opts into a named profile:
+
+```yaml
+profile: edge
+```
+
+Stack that uses a profile plus one direct one-off override:
+
+```yaml
+profile: edge
+traefik_url: http://localhost:9001
 ```
 
 ## Usage
@@ -273,7 +302,7 @@ homesrvctl up example.com --dry-run
 - `config init --json` reports whether the config file was created or overwritten.
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
 - stack-local config may select a named routing profile with `profile`, and direct stack-local overrides still win over profile-provided values.
-- `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is being shadowed by an earlier ingress rule, whether Cloudflare DNS is ambiguous or of the wrong type, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
+- `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is missing, duplicated, shadowed by an earlier ingress rule, or pointed at the wrong target, whether Cloudflare DNS is missing, of the wrong type, pointed at the wrong target, or ambiguous because multiple conflicting records exist, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
 - `domain status` also reports routing context for the apex stack, including the default ingress target, effective ingress target, selected profile, and source attribution for the effective target.
 - `domain status` now also surfaces non-fatal ingress warnings when the configured `cloudflared` ingress file contains risky wildcard precedence, including earlier wildcard rules that may shadow later hostnames or capture traffic intended for a narrower wildcard.
 - Those ingress warnings now include direct remediation hints, such as moving a narrower rule above a broader wildcard or removing an unused catch-all rule.

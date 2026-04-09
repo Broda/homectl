@@ -182,7 +182,7 @@ class CloudflareApiClient:
                 matches_expected=False,
                 multiple_records=True,
                 record_count=len(existing),
-                detail=f"multiple DNS records exist: {', '.join(rendered_records)}",
+                detail=f"multiple conflicting records exist: {', '.join(rendered_records)}",
                 records=_records_to_status_records(existing),
             )
 
@@ -191,9 +191,11 @@ class CloudflareApiClient:
         content = str(record.get("content", "")).strip()
         proxied = bool(record.get("proxied"))
         matches_expected = record_type == "CNAME" and content == expected_content and proxied
-        detail = f"{record_type} -> {content}"
-        if proxied:
-            detail += " (proxied)"
+        detail = (
+            _describe_single_dns_record(record_type, content, proxied)
+            if matches_expected
+            else _dns_mismatch_detail(record_type, content, proxied, expected_content)
+        )
         return DnsRecordStatus(
             record_name=record_name,
             exists=True,
@@ -284,6 +286,25 @@ def _render_dns_record(record: dict[str, object]) -> str:
     if bool(record.get("proxied")):
         detail += " (proxied)"
     return detail
+
+
+def _describe_single_dns_record(record_type: str, content: str, proxied: bool) -> str:
+    detail = f"{record_type} -> {content}"
+    if proxied:
+        detail += " (proxied)"
+    return detail
+
+
+def _dns_mismatch_detail(record_type: str, content: str, proxied: bool, expected_content: str) -> str:
+    current = _describe_single_dns_record(record_type, content, proxied)
+    expected = f"CNAME -> {expected_content} (proxied)"
+    if record_type != "CNAME":
+        return f"wrong type {current}; expected {expected}"
+    if content != expected_content:
+        return f"wrong target {current}; expected {expected}"
+    if not proxied:
+        return f"wrong proxy setting {current}; expected {expected}"
+    return current
 
 
 def _records_to_status_records(records: list[dict[str, object]]) -> list[dict[str, object]]:

@@ -209,15 +209,26 @@ def inspect_hostname_route(config_path: Path, hostname: str) -> IngressRouteMatc
 
 
 def find_exact_hostname_route(config_path: Path, hostname: str) -> str | None:
+    routes = list_exact_hostname_routes(config_path, hostname)
+    return routes[0].service if routes else None
+
+
+def list_exact_hostname_routes(config_path: Path, hostname: str) -> list[IngressRouteMatch]:
     parsed = _load_config(config_path)
     ingress = _normalize_ingress(parsed, config_path)
     wanted = hostname.strip().lower()
+    matches: list[IngressRouteMatch] = []
 
     for entry in ingress[:-1]:
         entry_hostname = str(entry.get("hostname", "")).strip().lower()
         if entry_hostname == wanted:
-            return str(entry.get("service", "")).strip()
-    return None
+            matches.append(
+                IngressRouteMatch(
+                    hostname=entry_hostname,
+                    service=str(entry.get("service", "")).strip(),
+                )
+            )
+    return matches
 
 
 def _reconcile_ingress(ingress: list[dict[str, object]], domain: str, service_url: str) -> list[IngressChange]:
