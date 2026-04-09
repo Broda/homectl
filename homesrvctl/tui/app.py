@@ -5,7 +5,13 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Static
 
-from homesrvctl.tui.data import build_dashboard_snapshot, run_stack_action, stack_sites, summarize_stack_action
+from homesrvctl.tui.data import (
+    build_dashboard_snapshot,
+    render_stack_action_detail,
+    run_stack_action,
+    stack_sites,
+    summarize_stack_action,
+)
 
 
 class HomesrvctlTextualApp(App[None]):
@@ -128,6 +134,7 @@ class HomesrvctlTextualApp(App[None]):
         self.snapshot: dict[str, object] = {}
         self.selected_control_index = 0
         self.status_message = "dashboard starting"
+        self.last_stack_actions: dict[str, dict[str, object]] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -203,6 +210,7 @@ class HomesrvctlTextualApp(App[None]):
             return
         hostname = str(item.get("hostname", ""))
         payload = run_stack_action(hostname, action)
+        self.last_stack_actions[hostname] = {"action": action, "payload": payload}
         self.status_message = summarize_stack_action(hostname, action, payload)
         self.snapshot = build_dashboard_snapshot()
         items = self._control_items()
@@ -336,6 +344,12 @@ class HomesrvctlTextualApp(App[None]):
             "Use i to scaffold a simple site if the hostname directory is empty.",
             "Use u to start the stack, g to run doctor, t to restart, or x to stop it.",
         ]
+        cached = self.last_stack_actions.get(hostname)
+        if isinstance(cached, dict):
+            action = cached.get("action")
+            payload = cached.get("payload")
+            if isinstance(action, str) and isinstance(payload, dict):
+                lines.extend(["", *render_stack_action_detail(action, payload)])
         return "\n".join(lines)
 
     def _cloudflared_detail_text(self) -> str:

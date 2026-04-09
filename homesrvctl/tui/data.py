@@ -88,3 +88,66 @@ def summarize_stack_action(hostname: str, action: str, payload: dict[str, object
     error = str(payload.get("error") or payload.get("detail") or "command failed")
     action_label = "site init" if action == "init-site" else action
     return f"{action_label} failed for {hostname}: {error}"
+
+
+def action_label(action: str) -> str:
+    return "site init" if action == "init-site" else action
+
+
+def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[str]:
+    label = action_label(action)
+    status = "ok" if payload.get("ok") else "failed"
+    lines = [
+        "Last action",
+        "",
+        f"action: {label}",
+        f"status: {status}",
+    ]
+
+    if "dry_run" in payload:
+        lines.append(f"dry run: {'yes' if payload.get('dry_run') else 'no'}")
+
+    checks = payload.get("checks")
+    if isinstance(checks, list):
+        failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
+        lines.extend(
+            [
+                "",
+                f"checks: {len(checks)} total, {len(failing_checks)} failing",
+                "",
+            ]
+        )
+        for check in checks[:8]:
+            if not isinstance(check, dict):
+                continue
+            marker = "PASS" if check.get("ok") else "FAIL"
+            lines.append(f"{marker} {check.get('name', '<unknown>')}: {check.get('detail', '')}")
+        if len(checks) > 8:
+            lines.append(f"... {len(checks) - 8} more")
+        return lines
+
+    commands = payload.get("commands")
+    if isinstance(commands, list) and commands:
+        lines.extend(["", f"commands: {len(commands)}", ""])
+        for command_result in commands[:4]:
+            if not isinstance(command_result, dict):
+                continue
+            command = command_result.get("command", [])
+            rendered_command = " ".join(str(part) for part in command) if isinstance(command, list) else str(command)
+            returncode = command_result.get("returncode", "?")
+            lines.append(f"rc={returncode} {rendered_command}")
+            stdout = str(command_result.get("stdout", "")).strip()
+            stderr = str(command_result.get("stderr", "")).strip()
+            if stdout:
+                lines.append(f"stdout: {stdout.splitlines()[0]}")
+            if stderr:
+                lines.append(f"stderr: {stderr.splitlines()[0]}")
+        if len(commands) > 4:
+            lines.append(f"... {len(commands) - 4} more")
+        return lines
+
+    error = payload.get("error")
+    detail = payload.get("detail")
+    if error or detail:
+        lines.extend(["", f"detail: {error or detail}"])
+    return lines

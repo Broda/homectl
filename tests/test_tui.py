@@ -143,6 +143,51 @@ def test_summarize_stack_action_labels_site_init() -> None:
     assert summary == "site init failed for example.com: file exists"
 
 
+def test_render_stack_action_detail_formats_doctor_checks() -> None:
+    lines = data.render_stack_action_detail(
+        "doctor",
+        {
+            "ok": False,
+            "checks": [
+                {"name": "docker-compose.yml", "ok": True, "detail": "/srv/homesrvctl/sites/example.com/docker-compose.yml"},
+                {"name": "host-header request", "ok": False, "detail": "request failed: connection refused"},
+            ],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "action: doctor" in rendered
+    assert "checks: 2 total, 1 failing" in rendered
+    assert "PASS docker-compose.yml: /srv/homesrvctl/sites/example.com/docker-compose.yml" in rendered
+    assert "FAIL host-header request: request failed: connection refused" in rendered
+
+
+def test_render_stack_action_detail_formats_command_results() -> None:
+    lines = data.render_stack_action_detail(
+        "up",
+        {
+            "ok": True,
+            "dry_run": False,
+            "commands": [
+                {
+                    "command": ["docker", "compose", "up", "-d"],
+                    "returncode": 0,
+                    "stdout": "container started\nsecond line",
+                    "stderr": "",
+                }
+            ],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "action: up" in rendered
+    assert "dry run: no" in rendered
+    assert "rc=0 docker compose up -d" in rendered
+    assert "stdout: container started" in rendered
+
+
 def test_render_dashboard_includes_sections_and_failures() -> None:
     snapshot = {
         "generated_at": "2026-04-08 12:00:00",
@@ -261,6 +306,33 @@ def test_textual_app_summary_and_stack_list_text() -> None:
     assert "focus: notes.example.com" in command_bar
 
 
+def test_textual_app_stack_detail_includes_last_action_result() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 2
+    app.last_stack_actions["example.com"] = {
+        "action": "doctor",
+        "payload": {
+            "ok": False,
+            "checks": [
+                {"name": "docker-compose.yml", "ok": True, "detail": "/srv/homesrvctl/sites/example.com/docker-compose.yml"},
+                {"name": "host-header request", "ok": False, "detail": "request failed: connection refused"},
+            ],
+        },
+    }
+
+    detail = app._detail_text()
+
+    assert "Last action" in detail
+    assert "action: doctor" in detail
+    assert "FAIL host-header request: request failed: connection refused" in detail
+
+
 def test_textual_app_tool_detail_and_command_bar_text() -> None:
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = {
@@ -326,3 +398,4 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
     assert calls == [("example.com", "up")]
     assert app.status_message == "up succeeded for example.com"
     assert app.snapshot["list"]["sites"][0]["compose"] is True
+    assert app.last_stack_actions["example.com"]["action"] == "up"

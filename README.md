@@ -281,6 +281,7 @@ homesrvctl up example.com --dry-run
 - `tui` now launches a Textual app; reinstall the package or refresh the local dev venv after upgrading so the new dependency is present.
 - The JSON forms of `cloudflared status`, `validate`, and `doctor` stay quiet so they can be consumed directly by scripts and the terminal dashboard.
 - The dashboard now uses a roomy warm-console layout with a full-width summary strip, a left control pane, a right detail pane, and a persistent command/status bar.
+- After you run a stack action from the TUI, the focused stack detail pane keeps the last action result visible, including `doctor` checks and compose command results where available.
 - The summary strip is informational only; the left control pane is the primary navigation surface.
 - The left control pane groups a small `Tools` section above the larger `Stacks` section and uses a unified vertical cursor.
 - TUI navigation uses `tab`, arrow keys, or `w`/`s` to move through the control pane.

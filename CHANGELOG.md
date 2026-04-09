@@ -18,6 +18,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Expanded the initial TUI dashboard with keyboard selection, a focused detail pane, and a footer that shows controls plus refresh mode.
 - Added first stack controls to the TUI so the selected hostname can run `doctor`, `up`, `restart`, and `down` directly from the dashboard.
 - Added `site init` as a TUI stack action so an empty hostname can be scaffolded directly from the dashboard.
+- Added cached stack-action detail in the Textual TUI so the focused stack pane now shows the last `doctor`, `site init`, `up`, `restart`, or `down` result instead of only a footer status line.
 - Added [`FILE_MAP.md`](FILE_MAP.md) as a repository orientation guide.
 - Reorganized [`ROADMAP.md`](ROADMAP.md) into milestone-based planning with tasks and subtasks.
 - Added `config show` with text and JSON output for global config inspection and effective stack-local override inspection.
