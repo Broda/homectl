@@ -73,6 +73,17 @@ def run_stack_action(hostname: str, action: str) -> dict[str, object]:
     raise ValueError(f"unsupported stack action: {action}")
 
 
+def run_tool_action(tool: str, action: str) -> dict[str, object]:
+    if tool == "cloudflared":
+        if action == "config-test":
+            return run_json_subcommand(["cloudflared", "config-test"])
+        if action == "reload":
+            return run_json_subcommand(["cloudflared", "reload"])
+        if action == "restart":
+            return run_json_subcommand(["cloudflared", "restart"])
+    raise ValueError(f"unsupported tool action: {tool} {action}")
+
+
 def summarize_stack_action(hostname: str, action: str, payload: dict[str, object]) -> str:
     if payload.get("ok"):
         action_label = "site init" if action == "init-site" else action
@@ -150,4 +161,57 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
     detail = payload.get("detail")
     if error or detail:
         lines.extend(["", f"detail: {error or detail}"])
+    return lines
+
+
+def summarize_tool_action(tool: str, action: str, payload: dict[str, object]) -> str:
+    tool_label = str(tool)
+    label = str(action)
+    if payload.get("ok"):
+        return f"{tool_label} {label} succeeded"
+    error = str(payload.get("error") or payload.get("detail") or "command failed")
+    return f"{tool_label} {label} failed: {error}"
+
+
+def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]) -> list[str]:
+    lines = [
+        "Last action",
+        "",
+        f"tool: {tool}",
+        f"action: {action}",
+        f"status: {'ok' if payload.get('ok') else 'failed'}",
+    ]
+
+    if "dry_run" in payload:
+        lines.append(f"dry run: {'yes' if payload.get('dry_run') else 'no'}")
+
+    detail = payload.get("detail")
+    if detail:
+        lines.extend(["", f"detail: {detail}"])
+
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list):
+        lines.extend(["", f"warnings: {len(warnings)}", ""])
+        for warning in warnings[:5]:
+            lines.append(f"- {warning}")
+        if len(warnings) > 5:
+            lines.append(f"... {len(warnings) - 5} more")
+
+    config_validation = payload.get("config_validation")
+    if isinstance(config_validation, dict):
+        lines.extend(
+            [
+                "",
+                f"config ok: {config_validation.get('ok', False)}",
+                f"config detail: {config_validation.get('detail', 'unknown')}",
+            ]
+        )
+        validation_warnings = config_validation.get("warnings", [])
+        if isinstance(validation_warnings, list):
+            lines.extend(["", f"config warnings: {len(validation_warnings)}", ""])
+            for warning in validation_warnings[:5]:
+                lines.append(f"- {warning}")
+            if len(validation_warnings) > 5:
+                lines.append(f"... {len(validation_warnings) - 5} more")
+
     return lines

@@ -115,6 +115,21 @@ def test_run_stack_action_dispatches_site_init(monkeypatch) -> None:
     assert calls == [["site", "init", "example.com"]]
 
 
+def test_run_tool_action_dispatches_to_existing_commands(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_tool_action("cloudflared", "config-test")
+
+    assert payload["ok"] is True
+    assert calls == [["cloudflared", "config-test"]]
+
+
 def test_summarize_stack_action_reports_failure_detail() -> None:
     summary = data.summarize_stack_action("example.com", "up", {"ok": False, "error": "missing docker-compose.yml"})
 
@@ -186,6 +201,26 @@ def test_render_stack_action_detail_formats_command_results() -> None:
     assert "dry run: no" in rendered
     assert "rc=0 docker compose up -d" in rendered
     assert "stdout: container started" in rendered
+
+
+def test_render_tool_action_detail_formats_cloudflared_result() -> None:
+    lines = data.render_tool_action_detail(
+        "cloudflared",
+        "config-test",
+        {
+            "ok": True,
+            "detail": "fallback service http_status:404",
+            "warnings": ["earlier wildcard rule *.com may capture later hostname *.example.com"],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "tool: cloudflared" in rendered
+    assert "action: config-test" in rendered
+    assert "status: ok" in rendered
+    assert "warnings: 1" in rendered
+    assert "- earlier wildcard rule *.com may capture later hostname *.example.com" in rendered
 
 
 def test_render_dashboard_includes_sections_and_failures() -> None:
@@ -355,7 +390,38 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
     assert "Cloudflared Detail" in detail
     assert "runtime: systemd" in detail
     assert "focus: Cloudflared" in command_bar
-    assert "actions: w/s move | r refresh | q quit" in command_bar
+    assert "actions: c config-test | l reload | k restart | r refresh | q quit" in command_bar
+
+
+def test_textual_app_tool_detail_includes_last_cloudflared_action() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {
+            "ok": True,
+            "mode": "systemd",
+            "active": True,
+            "detail": "systemd service is active",
+            "config_validation": {"ok": True, "detail": "Validating rules\nOK", "warnings": []},
+        },
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 0
+    app.last_tool_actions["cloudflared"] = {
+        "action": "config-test",
+        "payload": {
+            "ok": True,
+            "detail": "fallback service http_status:404",
+            "warnings": ["earlier wildcard rule *.com may capture later hostname *.example.com"],
+        },
+    }
+
+    detail = app._detail_text()
+
+    assert "Last action" in detail
+    assert "action: config-test" in detail
+    assert "warnings: 1" in detail
 
 
 def test_textual_app_uses_human_readable_title() -> None:
@@ -399,3 +465,45 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
     assert app.status_message == "up succeeded for example.com"
     assert app.snapshot["list"]["sites"][0]["compose"] is True
     assert app.last_stack_actions["example.com"]["action"] == "up"
+
+
+def test_textual_app_selected_tool_action_refreshes_status(monkeypatch) -> None:
+    snapshots = [
+        {
+            "generated_at": "2026-04-08 12:00:00",
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+        {
+            "generated_at": "2026-04-08 12:01:00",
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+            "cloudflared": {
+                "ok": True,
+                "mode": "systemd",
+                "active": True,
+                "detail": "systemd service is active",
+                "config_validation": {"ok": True, "detail": "Validating rules\nOK", "warnings": []},
+            },
+            "validate": {"ok": True, "checks": []},
+        },
+    ]
+    calls: list[tuple[str, str]] = []
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = snapshots[0]
+    app.selected_control_index = 0
+
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
+    monkeypatch.setattr(
+        textual_app,
+        "run_tool_action",
+        lambda tool, action: calls.append((tool, action)) or {"ok": True, "detail": "validated", "warnings": []},
+    )
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._refresh_snapshot("dashboard ready")
+    app._run_selected_tool_action("cloudflared", "config-test")
+
+    assert calls == [("cloudflared", "config-test")]
+    assert app.status_message == "cloudflared config-test succeeded"
+    assert app.last_tool_actions["cloudflared"]["action"] == "config-test"

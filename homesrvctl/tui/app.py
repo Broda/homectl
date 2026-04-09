@@ -7,10 +7,13 @@ from textual.widgets import Header, Static
 
 from homesrvctl.tui.data import (
     build_dashboard_snapshot,
+    render_tool_action_detail,
     render_stack_action_detail,
     run_stack_action,
+    run_tool_action,
     stack_sites,
     summarize_stack_action,
+    summarize_tool_action,
 )
 
 
@@ -121,6 +124,9 @@ class HomesrvctlTextualApp(App[None]):
         Binding("r", "refresh", "Refresh"),
         Binding("w,up", "previous_control", "Prev", show=False),
         Binding("s,down,tab", "next_control", "Next", show=False),
+        Binding("c", "cloudflared_config_test", "Config Test", show=False),
+        Binding("l", "cloudflared_reload", "Reload", show=False),
+        Binding("k", "cloudflared_restart", "Restart CF", show=False),
         Binding("i", "site_init", "Init Site", show=False),
         Binding("g", "doctor", "Doctor", show=False),
         Binding("u", "up", "Up", show=False),
@@ -135,6 +141,7 @@ class HomesrvctlTextualApp(App[None]):
         self.selected_control_index = 0
         self.status_message = "dashboard starting"
         self.last_stack_actions: dict[str, dict[str, object]] = {}
+        self.last_tool_actions: dict[str, dict[str, object]] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -177,6 +184,15 @@ class HomesrvctlTextualApp(App[None]):
     def action_site_init(self) -> None:
         self._run_selected_stack_action("init-site")
 
+    def action_cloudflared_config_test(self) -> None:
+        self._run_selected_tool_action("cloudflared", "config-test")
+
+    def action_cloudflared_reload(self) -> None:
+        self._run_selected_tool_action("cloudflared", "reload")
+
+    def action_cloudflared_restart(self) -> None:
+        self._run_selected_tool_action("cloudflared", "restart")
+
     def action_doctor(self) -> None:
         self._run_selected_stack_action("doctor")
 
@@ -212,6 +228,23 @@ class HomesrvctlTextualApp(App[None]):
         payload = run_stack_action(hostname, action)
         self.last_stack_actions[hostname] = {"action": action, "payload": payload}
         self.status_message = summarize_stack_action(hostname, action, payload)
+        self.snapshot = build_dashboard_snapshot()
+        items = self._control_items()
+        if items:
+            self.selected_control_index = min(self.selected_control_index, len(items) - 1)
+        else:
+            self.selected_control_index = 0
+        self._render()
+
+    def _run_selected_tool_action(self, tool: str, action: str) -> None:
+        item = self._selected_control_item()
+        if item.get("kind") != "tool" or item.get("tool") != tool:
+            self.status_message = f"select {tool} to run {action}"
+            self._render()
+            return
+        payload = run_tool_action(tool, action)
+        self.last_tool_actions[tool] = {"action": action, "payload": payload}
+        self.status_message = summarize_tool_action(tool, action, payload)
         self.snapshot = build_dashboard_snapshot()
         items = self._control_items()
         if items:
@@ -295,7 +328,10 @@ class HomesrvctlTextualApp(App[None]):
             actions = "actions: i init | g doctor | u up | t restart | x down | r refresh | q quit"
         else:
             focus = f"focus: {item.get('label', 'Tool')}"
-            actions = "actions: w/s move | r refresh | q quit"
+            if item.get("tool") == "cloudflared":
+                actions = "actions: c config-test | l reload | k restart | r refresh | q quit"
+            else:
+                actions = "actions: w/s move | r refresh | q quit"
         return "\n".join([focus, actions, f"status: {self.status_message} | mode: {mode}"])
 
     def _stacks_summary(self) -> str:
@@ -379,6 +415,12 @@ class HomesrvctlTextualApp(App[None]):
                 lines.extend(f"- {warning}" for warning in warnings[:5])
             else:
                 lines.append("warnings: none")
+        cached = self.last_tool_actions.get("cloudflared")
+        if isinstance(cached, dict):
+            action = cached.get("action")
+            payload = cached.get("payload")
+            if isinstance(action, str) and isinstance(payload, dict):
+                lines.extend(["", *render_tool_action_detail("cloudflared", action, payload)])
         lines.extend(["", "This is a global tool item. Refresh here to re-check runtime and ingress health."])
         return "\n".join(lines)
 
