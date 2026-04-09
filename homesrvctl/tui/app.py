@@ -8,9 +8,11 @@ from textual.widgets import Header, Static
 from homesrvctl.tui.data import (
     build_dashboard_snapshot,
     render_config_payload_detail,
+    render_domain_status_detail,
     render_tool_action_detail,
     render_stack_config_detail,
     render_stack_action_detail,
+    run_stack_domain_status,
     run_stack_action,
     run_stack_config_view,
     run_tool_action,
@@ -173,6 +175,7 @@ class HomesrvctlTextualApp(App[None]):
         self.status_message = "dashboard starting"
         self.last_stack_actions: dict[str, dict[str, object]] = {}
         self.stack_config_views: dict[str, dict[str, object]] = {}
+        self.stack_domain_views: dict[str, dict[str, object]] = {}
         self.last_tool_actions: dict[str, dict[str, object]] = {}
 
     def compose(self) -> ComposeResult:
@@ -252,6 +255,7 @@ class HomesrvctlTextualApp(App[None]):
     def _refresh_snapshot(self, status_message: str) -> None:
         self.snapshot = build_dashboard_snapshot()
         self.stack_config_views = {}
+        self.stack_domain_views = {}
         items = self._control_items()
         if items:
             self.selected_control_index = max(0, min(self.selected_control_index, len(items) - 1))
@@ -285,6 +289,7 @@ class HomesrvctlTextualApp(App[None]):
         self.status_message = summarize_stack_action(hostname, action, payload)
         self.snapshot = build_dashboard_snapshot()
         self.stack_config_views = {}
+        self.stack_domain_views = {}
         items = self._control_items()
         if items:
             self.selected_control_index = min(self.selected_control_index, len(items) - 1)
@@ -303,6 +308,7 @@ class HomesrvctlTextualApp(App[None]):
         self.status_message = summarize_tool_action(tool, action, payload)
         self.snapshot = build_dashboard_snapshot()
         self.stack_config_views = {}
+        self.stack_domain_views = {}
         items = self._control_items()
         if items:
             self.selected_control_index = min(self.selected_control_index, len(items) - 1)
@@ -436,6 +442,10 @@ class HomesrvctlTextualApp(App[None]):
         if config_view is None:
             config_view = run_stack_config_view(hostname)
             self.stack_config_views[hostname] = config_view
+        domain_view = self.stack_domain_views.get(hostname)
+        if domain_view is None:
+            domain_view = run_stack_domain_status(hostname)
+            self.stack_domain_views[hostname] = domain_view
         lines = [
             "Stack Detail",
             "",
@@ -443,6 +453,8 @@ class HomesrvctlTextualApp(App[None]):
             f"compose file: {'yes' if compose else 'no'}",
             "",
             *render_stack_config_detail(config_view),
+            "",
+            *render_domain_status_detail(hostname, domain_view),
             "",
             "This pane is the control surface for stack lifecycle work.",
             "Use a to choose an app scaffold template for the focused hostname.",

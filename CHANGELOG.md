@@ -22,6 +22,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added first `Cloudflared` tool actions to the Textual TUI so the focused tool pane can run `config-test`, `reload`, and `restart` and keep the last result visible in the detail pane.
 - Added a first guided scaffold flow to the Textual TUI: focused stacks can now open an `app init` template picker and run the selected scaffold without leaving the dashboard.
 - Added `config show` coverage to the Textual TUI via a new global `Config` tool item plus effective per-stack config detail in the focused stack pane.
+- Added `domain status` coverage to the Textual TUI for apex stacks so the focused stack pane now surfaces domain-level DNS and ingress status, repairability, and suggested remediation.
 - Added [`FILE_MAP.md`](FILE_MAP.md) as a repository orientation guide.
 - Reorganized [`ROADMAP.md`](ROADMAP.md) into milestone-based planning with tasks and subtasks.
 - Added `config show` with text and JSON output for global config inspection and effective stack-local override inspection.

@@ -175,6 +175,21 @@ def test_run_stack_config_view_dispatches_to_existing_command(monkeypatch) -> No
     assert calls == [["config", "show", "--stack", "example.com"]]
 
 
+def test_run_stack_domain_status_dispatches_to_existing_command(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "domain": "example.com"}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_stack_domain_status("example.com")
+
+    assert payload["ok"] is True
+    assert calls == [["domain", "status", "example.com"]]
+
+
 def test_summarize_stack_action_reports_failure_detail() -> None:
     summary = data.summarize_stack_action("example.com", "up", {"ok": False, "error": "missing docker-compose.yml"})
 
@@ -321,6 +336,50 @@ def test_render_stack_config_detail_formats_effective_config() -> None:
     assert "has local config: True" in rendered
     assert "docker network: edge (profile:edge)" in rendered
     assert "traefik url: http://localhost:9001 (stack-local)" in rendered
+
+
+def test_render_domain_status_detail_formats_apex_status() -> None:
+    lines = data.render_domain_status_detail(
+        "example.com",
+        {
+            "ok": False,
+            "domain": "example.com",
+            "overall": "partial",
+            "repairable": True,
+            "manual_fix_required": False,
+            "expected_tunnel_target": "1234.cfargotunnel.com",
+            "expected_ingress_service": "http://localhost:8081",
+            "coverage_issues": ["Ingress coverage is apex-only; wildcard ingress is missing"],
+            "ingress_warnings": ["earlier ingress rule *.com may shadow later hostname example.com"],
+            "dns": [
+                {"record_name": "example.com", "matches_expected": True, "detail": "CNAME -> 1234.cfargotunnel.com (proxied)"},
+                {"record_name": "*.example.com", "matches_expected": False, "detail": "record missing"},
+            ],
+            "ingress": [
+                {"hostname": "example.com", "matches_expected": True, "detail": "http://localhost:8081"},
+                {"hostname": "*.example.com", "matches_expected": False, "detail": "entry missing"},
+            ],
+            "suggested_command": "homesrvctl domain repair example.com",
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "overall: partial" in rendered
+    assert "repairable: True" in rendered
+    assert "coverage issues: 1" in rendered
+    assert "dns records: 2" in rendered
+    assert "ingress routes: 2" in rendered
+    assert "suggested command: homesrvctl domain repair example.com" in rendered
+
+
+def test_render_domain_status_detail_skips_subdomain_stacks() -> None:
+    lines = data.render_domain_status_detail("notes.example.com", {"ok": False, "error": "not bare"})
+
+    rendered = "\n".join(lines)
+
+    assert "Domain status" in rendered
+    assert "Not available for subdomain stacks." in rendered
 
 
 def test_render_stack_action_detail_formats_app_init_result() -> None:
@@ -471,6 +530,7 @@ def test_textual_app_summary_and_stack_list_text() -> None:
             "stack_config_path": "/srv/homesrvctl/sites/notes.example.com/homesrvctl.yml",
         },
     }
+    app.stack_domain_views["notes.example.com"] = {"ok": False, "error": "not bare"}
 
     controls = app._control_list_text()
     detail = app._detail_text()
@@ -484,6 +544,7 @@ def test_textual_app_summary_and_stack_list_text() -> None:
     assert "> notes.example.com [compose=no]" in controls
     assert "hostname: notes.example.com" in detail
     assert "Effective config" in detail
+    assert "Domain status" in detail
     assert "focus: notes.example.com" in command_bar
 
 
@@ -568,6 +629,19 @@ def test_textual_app_stack_detail_includes_last_action_result() -> None:
             "stack_config_path": "/srv/homesrvctl/sites/example.com/homesrvctl.yml",
         },
     }
+    app.stack_domain_views["example.com"] = {
+        "ok": True,
+        "domain": "example.com",
+        "overall": "ok",
+        "repairable": False,
+        "manual_fix_required": False,
+        "expected_tunnel_target": "1234.cfargotunnel.com",
+        "expected_ingress_service": "http://localhost:8081",
+        "coverage_issues": [],
+        "ingress_warnings": [],
+        "dns": [],
+        "ingress": [],
+    }
     app.last_stack_actions["example.com"] = {
         "action": "doctor",
         "payload": {
@@ -584,6 +658,48 @@ def test_textual_app_stack_detail_includes_last_action_result() -> None:
     assert "Last action" in detail
     assert "action: doctor" in detail
     assert "FAIL host-header request: request failed: connection refused" in detail
+
+
+def test_textual_app_stack_detail_includes_domain_status() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 3
+    app.stack_config_views["example.com"] = {
+        "ok": True,
+        "stack": {
+            "profile": None,
+            "has_local_config": False,
+            "effective": {"docker_network": "web", "traefik_url": "http://localhost:8081"},
+            "effective_sources": {"docker_network": "global-config", "traefik_url": "global-config"},
+            "stack_config_path": "/srv/homesrvctl/sites/example.com/homesrvctl.yml",
+        },
+    }
+    app.stack_domain_views["example.com"] = {
+        "ok": False,
+        "domain": "example.com",
+        "overall": "partial",
+        "repairable": True,
+        "manual_fix_required": False,
+        "expected_tunnel_target": "1234.cfargotunnel.com",
+        "expected_ingress_service": "http://localhost:8081",
+        "coverage_issues": ["Ingress coverage is apex-only; wildcard ingress is missing"],
+        "ingress_warnings": [],
+        "dns": [],
+        "ingress": [],
+        "suggested_command": "homesrvctl domain repair example.com",
+    }
+
+    detail = app._detail_text()
+
+    assert "Domain status" in detail
+    assert "overall: partial" in detail
+    assert "suggested command: homesrvctl domain repair example.com" in detail
 
 
 def test_textual_app_tool_detail_and_command_bar_text() -> None:

@@ -5,6 +5,7 @@ import sys
 import time
 
 from homesrvctl.shell import run_command
+from homesrvctl.utils import validate_bare_domain
 
 
 def build_dashboard_snapshot(run_json_command=None) -> dict[str, object]:  # noqa: ANN001
@@ -95,6 +96,10 @@ def run_tool_action(tool: str, action: str) -> dict[str, object]:
 
 def run_stack_config_view(hostname: str) -> dict[str, object]:
     return run_json_subcommand(["config", "show", "--stack", hostname])
+
+
+def run_stack_domain_status(hostname: str) -> dict[str, object]:
+    return run_json_subcommand(["domain", "status", hostname])
 
 
 def summarize_stack_action(hostname: str, action: str, payload: dict[str, object]) -> str:
@@ -296,3 +301,72 @@ def render_stack_config_detail(payload: dict[str, object]) -> list[str]:
         f"traefik url: {effective.get('traefik_url', '<unknown>')} ({effective_sources.get('traefik_url', 'unknown')})",
         f"stack config path: {stack.get('stack_config_path', '<unknown>')}",
     ]
+
+
+def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> list[str]:
+    try:
+        validate_bare_domain(hostname)
+    except Exception:
+        return [
+            "Domain status",
+            "",
+            "Not available for subdomain stacks.",
+            "Focus the apex hostname to inspect domain-level DNS and ingress state.",
+        ]
+
+    if not payload.get("ok") and "domain" not in payload:
+        return [
+            "Domain status",
+            "",
+            f"error: {payload.get('error', 'unknown error')}",
+        ]
+
+    lines = [
+        "Domain status",
+        "",
+        f"overall: {payload.get('overall', 'unknown')}",
+        f"repairable: {payload.get('repairable', False)}",
+        f"manual fix required: {payload.get('manual_fix_required', False)}",
+        f"expected tunnel target: {payload.get('expected_tunnel_target', '<unknown>')}",
+        f"expected ingress service: {payload.get('expected_ingress_service', '<unknown>')}",
+    ]
+
+    coverage_issues = payload.get("coverage_issues")
+    if isinstance(coverage_issues, list):
+        lines.extend(["", f"coverage issues: {len(coverage_issues)}"])
+        for issue in coverage_issues[:4]:
+            lines.append(f"- {issue}")
+        if len(coverage_issues) > 4:
+            lines.append(f"... {len(coverage_issues) - 4} more")
+
+    ingress_warnings = payload.get("ingress_warnings")
+    if isinstance(ingress_warnings, list):
+        lines.extend(["", f"ingress warnings: {len(ingress_warnings)}"])
+        for warning in ingress_warnings[:3]:
+            lines.append(f"- {warning}")
+        if len(ingress_warnings) > 3:
+            lines.append(f"... {len(ingress_warnings) - 3} more")
+
+    dns = payload.get("dns")
+    if isinstance(dns, list):
+        lines.extend(["", f"dns records: {len(dns)}"])
+        for item in dns[:2]:
+            if not isinstance(item, dict):
+                continue
+            status = "ok" if item.get("matches_expected") else "mismatch"
+            lines.append(f"- {item.get('record_name', '<unknown>')}: {status} | {item.get('detail', '')}")
+
+    ingress = payload.get("ingress")
+    if isinstance(ingress, list):
+        lines.extend(["", f"ingress routes: {len(ingress)}"])
+        for item in ingress[:2]:
+            if not isinstance(item, dict):
+                continue
+            status = "ok" if item.get("matches_expected") else "mismatch"
+            lines.append(f"- {item.get('hostname', '<unknown>')}: {status} | {item.get('detail', '')}")
+
+    suggested_command = payload.get("suggested_command")
+    if suggested_command:
+        lines.extend(["", f"suggested command: {suggested_command}"])
+
+    return lines
