@@ -1971,3 +1971,135 @@ def test_summary_card_click_focuses_control_row(monkeypatch) -> None:
 
     result = asyncio.run(_run())
     assert result == 2  # Validate is index 2
+
+
+def test_mixed_keyboard_and_mouse_navigation(monkeypatch) -> None:
+    """ROADMAP 6.5: mixed keyboard-plus-mouse interaction sequences.
+
+    Keyboard focus (via w/s) and mouse click should converge on the same
+    selected_control_index — not drift into separate tracks.
+    """
+    import asyncio
+
+    async def _run() -> list[int]:
+        snapshot = {
+            "generated_at": "2026-04-08 12:00:00",
+            "config": {"ok": True, "global": {"profiles": {}}},
+            "list": {"ok": True, "sites": [
+                {"hostname": "example.com", "compose": True},
+                {"hostname": "notes.example.com", "compose": False},
+            ]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
+            "validate": {"ok": True, "checks": []},
+        }
+
+        def fake_build_snapshot():  # noqa: ANN202
+            return snapshot
+
+        monkeypatch.setattr(data, "build_dashboard_snapshot", fake_build_snapshot)
+
+        trace: list[int] = []
+        app = textual_app.HomesrvctlTextualApp()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            trace.append(app.selected_control_index)  # initial (0)
+
+            # Keyboard: move down twice → index 2 (Validate)
+            await pilot.press("s")
+            await pilot.press("s")
+            await pilot.pause()
+            trace.append(app.selected_control_index)
+
+            # Click a stack row to jump to it
+            rows = list(app.query(textual_app.ControlRowWidget))
+            target = [r for r in rows if r.row_index == 4]  # second stack
+            if target:
+                await pilot.click(target[0])
+                await pilot.pause()
+                trace.append(app.selected_control_index)
+
+            # Keyboard: move up once → index 3 (first stack)
+            await pilot.press("w")
+            await pilot.pause()
+            trace.append(app.selected_control_index)
+
+        return trace
+
+    trace = asyncio.run(_run())
+    assert trace == [0, 2, 4, 3]
+
+
+def test_click_selection_applies_selected_class(monkeypatch) -> None:
+    """ROADMAP 6.5: the --selected CSS class should track both keyboard
+    and mouse focus (single source of truth for the highlight).
+    """
+    import asyncio
+
+    async def _run() -> tuple[bool, bool]:
+        snapshot = {
+            "generated_at": "2026-04-08 12:00:00",
+            "config": {"ok": True, "global": {"profiles": {}}},
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
+            "validate": {"ok": True, "checks": []},
+        }
+
+        def fake_build_snapshot():  # noqa: ANN202
+            return snapshot
+
+        monkeypatch.setattr(data, "build_dashboard_snapshot", fake_build_snapshot)
+
+        app = textual_app.HomesrvctlTextualApp()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            rows = list(app.query(textual_app.ControlRowWidget))
+            target = [r for r in rows if r.row_index == 2][0]  # Validate
+            await pilot.click(target)
+            await pilot.pause()
+            # After click, the Validate row should carry --selected
+            rows_after = list(app.query(textual_app.ControlRowWidget))
+            validate_selected = any(
+                r.row_index == 2 and "--selected" in r.classes for r in rows_after
+            )
+            config_not_selected = all(
+                "--selected" not in r.classes for r in rows_after if r.row_index == 0
+            )
+            return validate_selected, config_not_selected
+
+    validate_selected, config_not_selected = asyncio.run(_run())
+    assert validate_selected
+    assert config_not_selected
+
+
+def test_click_driven_prompt_then_cancel_keyboard(monkeypatch) -> None:
+    """Click opens prompt; keyboard can still cancel it (mixed sequence)."""
+    import asyncio
+    from textual.app import App, ComposeResult
+    from textual.widgets import Static as TStatic
+
+    dismissed: list[object] = []
+
+    async def _run() -> None:
+        screen = prompts.StackActionMenuScreen("example.com", is_apex_domain=True)
+
+        class WrapperApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TStatic("")
+
+            def on_mount(self) -> None:
+                self.push_screen(screen, lambda result: dismissed.append(result))
+
+        wrapper = WrapperApp()
+        async with wrapper.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            # Click first option row to highlight it
+            rows = list(wrapper.screen.query(prompts.OptionRowWidget))
+            if rows:
+                await pilot.click(rows[0])
+                await pilot.pause()
+            # Cancel via keyboard
+            await pilot.press("escape")
+            await pilot.pause()
+
+    asyncio.run(_run())
+    assert dismissed == [None]

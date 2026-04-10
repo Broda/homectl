@@ -133,6 +133,7 @@ This layer should stay separate from CLI wiring so future dashboard/view growth 
 Textual is now the active and only retained implementation for `homesrvctl tui`.
 The command wrapper should import the Textual app lazily so the rest of the CLI can still start cleanly if the local environment has not yet been refreshed to include the new dependency.
 The shipped TUI now covers the public CLI surface with a mix of guided mutation flows, focused tool menus, and read-only detail views instead of relying on a separate backend model.
+The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-prompt buttons, and the detail-pane action button strip are real Textual widgets that accept both keyboard and mouse input. Mouse and keyboard selection share a single `--selected` class on the same row widget, so the two input modes cannot drift into separate tracks; click targets are additive rather than replacements for the underlying keyboard bindings.
 
 ### Public contract changes should be deliberate
 

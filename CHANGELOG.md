@@ -8,6 +8,10 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ## Unreleased
 
+### Added
+- TUI mouse support: the control pane rows, summary cards, modal option lists, confirm prompts, and a new detail-pane action button strip are now real Textual widgets that respond to clicks. Mouse and keyboard selection share the same highlighted row, every click target is also reachable by keyboard, and clicks are quietly ignored on terminals that do not report mouse events.
+- TUI visual polish: status ok / warning / error values, PASS/FAIL/WARN check markers, domain overall status, DNS/ingress match state, and cloudflared active/inactive are now color-coded via Rich markup; detail section headers use the accent color; the detail pane title updates to reflect the focused stack or tool; and per-pane help prose was replaced with a single compact hint line.
+
 ### Fixed
 - Keep `--json` status and validation output free of probe noise so the terminal dashboard can consume `cloudflared status`, `validate`, and `doctor` reliably.
 - Tightened `domain status` diagnostics so DNS and ingress conflicts now distinguish missing records, wrong types, wrong targets, duplicate ingress entries, shadowing, and manual-cleanup cases more explicitly.

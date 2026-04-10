@@ -927,7 +927,7 @@ Completed in this milestone:
 
 ## Milestone 6: TUI Mouse Support
 
-Status: planned
+Status: complete
 
 Goal: add deliberate mouse support to the Textual TUI without weakening keyboard-first operation or turning the interface into a separate product.
 
@@ -939,7 +939,7 @@ Principles:
 
 ### 6.1 Make the control pane clickable
 
-Status: planned
+Status: complete
 
 Tasks:
 - Replace the plain-text left control pane with clickable Textual widgets.
@@ -977,7 +977,7 @@ Subtasks:
 
 ### 6.2 Make modal prompts clickable
 
-Status: planned
+Status: complete
 
 Tasks:
 - Convert guided prompt screens from text-only option lists into clickable option rows or buttons.
@@ -1004,7 +1004,7 @@ Subtasks:
 
 ### 6.3 Add clickable action surfaces in the detail pane
 
-Status: planned
+Status: complete
 
 Tasks:
 - Let the focused detail pane expose clickable actions for the current item instead of relying only on hotkeys and menu prompts.
@@ -1041,7 +1041,7 @@ Subtasks:
 
 ### 6.4 Decide whether summary cards should be clickable
 
-Status: planned
+Status: complete
 
 Tasks:
 - Decide whether the top summary strip should remain informational only or support click-to-focus behavior.
@@ -1076,7 +1076,7 @@ Subtasks:
 
 ### 6.6 Integrate visual polish during widget migration
 
-Status: planned
+Status: complete
 
 Goal: apply visual improvements that are not directly about clickability but belong in the same implementation pass as the widget migration. Patching the string-rendering layer before M6 would create throwaway work — these changes should land together with 6.1–6.4.
 
@@ -1122,7 +1122,7 @@ Subtasks:
 
 ### 6.5 Keep mouse support testable and accessible
 
-Status: planned
+Status: complete
 
 Tasks:
 - Add proper Textual interaction coverage for mouse-driven behavior.
