@@ -334,7 +334,7 @@ Goal: make `app init` more useful without turning `homesrvctl` into a full frame
 
 ### 3.1 Mature the existing templates
 
-Status: mostly shipped
+Status: shipped
 
 Tasks:
 - Review the current `node` and `python` scaffolds for the minimum polish needed to feel intentional.
@@ -354,9 +354,16 @@ Subtasks:
   Current baseline: generated `node` and `python` sources now expose a dedicated `/healthz` endpoint for container healthchecks.
   Current baseline: generated `node` and `python` sources now return explicit `405` responses for unsupported methods instead of falling back to runtime-specific defaults.
 
+Completed in this milestone:
+- Tightened the generated `node` and `python` READMEs into a consistent structure covering endpoints, runtime inputs, first-run behavior, and health verification.
+- Reduced the generated `node` and `python` `.env.example` files to real runtime inputs and clarified that they are optional unless operators need overrides.
+- Improved the generated Dockerfile defaults so the Node scaffold installs runtime dependencies during the image build and the Python scaffold sets standard runtime environment flags before installing requirements.
+- Kept the generated source baselines small and explicit by adding `/healthz`, returning `405` for unsupported methods, and avoiding extra framework-style scaffolding.
+- Added scaffold regression coverage that locks down rendered template manifests plus port and healthcheck consistency across the shipped `node` and `python` templates.
+
 ### 3.2 Add a “static app plus API” pattern
 
-Status: mostly shipped
+Status: shipped
 
 Goal: support a common self-hosted pattern where one hostname serves static assets and proxies to a small app service.
 
@@ -381,6 +388,17 @@ Subtasks:
   - runtime-agnostic layout
 - Add template-specific tests if implemented.
   Current baseline: the template now has dedicated scaffold and JSON-output tests.
+
+Decision:
+- The combined static-plus-app pattern is a first-class `app init` template named `static-api`.
+- The shipped baseline uses nginx plus a small Python API container behind one hostname.
+- The template remains intentionally narrow: basic static assets, a small `/api` service, generated operator guidance, and no frontend build pipeline or framework stack.
+
+Completed in this milestone:
+- Added `app init --template static` as the richer static-site app baseline alongside the narrower `site init` scaffold.
+- Added `app init --template static-api` as the shipped site-plus-API pattern with a static nginx frontend and a small Python API routed on `/api`.
+- Kept the template runtime choice explicit by shipping the first implementation as Python-based rather than introducing multiple runtime variants.
+- Added template-specific scaffold and JSON-output regression coverage for the shipped static-site and `static-api` flows.
 
 ### 3.3 Decide the philosophy boundary for scaffolds
 
