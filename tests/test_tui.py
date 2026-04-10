@@ -205,6 +205,36 @@ def test_run_tool_action_dispatches_to_existing_commands(monkeypatch) -> None:
     assert calls == [["cloudflared", "config-test"]]
 
 
+def test_run_tool_action_dispatches_cloudflared_logs_follow(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "logs_command": ["journalctl", "-u", "cloudflared", "-f"]}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_tool_action("cloudflared", "logs", follow=True)
+
+    assert payload["ok"] is True
+    assert calls == [["cloudflared", "logs", "--follow"]]
+
+
+def test_run_tool_action_dispatches_config_init_force(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "action": "config_init"}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_tool_action("config", "init", force=True)
+
+    assert payload["ok"] is True
+    assert calls == [["config", "init", "--force"]]
+
+
 def test_run_stack_config_view_dispatches_to_existing_command(monkeypatch) -> None:
     calls: list[list[str]] = []
 
@@ -364,6 +394,28 @@ def test_render_tool_action_detail_formats_cloudflared_result() -> None:
     assert "warnings: 1" in rendered
     assert "issues: 1 total, 0 blocking, 1 advisory" in rendered
     assert "- earlier wildcard rule *.com may capture later hostname *.example.com" in rendered
+
+
+def test_render_tool_action_detail_formats_logs_guidance() -> None:
+    lines = data.render_tool_action_detail(
+        "cloudflared",
+        "logs",
+        {
+            "ok": True,
+            "follow": True,
+            "detail": "journalctl guidance available",
+            "logs_command": ["journalctl", "-u", "cloudflared", "-f"],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "action" in rendered
+    assert "logs" in rendered
+    assert "follow" in rendered
+    assert "yes" in rendered
+    assert "logs command" in rendered
+    assert "journalctl -u cloudflared -f" in rendered
 
 
 def test_render_config_payload_detail_formats_global_config() -> None:
@@ -641,6 +693,14 @@ def test_confirm_action_screen_uses_supplied_copy() -> None:
     assert screen.body == "Run domain add for example.com?"
 
 
+def test_tool_action_options_include_config_and_cloudflared_actions() -> None:
+    config_options = prompts.tool_action_options("config")
+    cloudflared_options = prompts.tool_action_options("cloudflared")
+
+    assert [label for _, label, _ in config_options] == ["config show", "config init"]
+    assert [label for _, label, _ in cloudflared_options] == ["config-test", "logs", "reload", "restart"]
+
+
 def test_stack_action_options_include_domain_actions_for_apex() -> None:
     options = prompts.stack_action_options(is_apex_domain=True)
 
@@ -669,6 +729,25 @@ def test_stack_action_menu_screen_renders_options() -> None:
     assert "> 1. app init" in rendered
     assert "domain add" in rendered
     assert "domain remove" in rendered
+
+
+def test_tool_action_menu_screen_renders_options() -> None:
+    screen = prompts.ToolActionMenuScreen("cloudflared")
+
+    rendered = screen._options_text()
+
+    assert "> 1. config-test" in rendered
+    assert "2. logs" in rendered
+    assert "4. restart" in rendered
+
+
+def test_cloudflared_logs_mode_screen_renders_options() -> None:
+    screen = prompts.CloudflaredLogsModeScreen()
+
+    rendered = screen._options_text()
+
+    assert "> 1. standard" in rendered
+    assert "2. follow" in rendered
 
 
 def test_textual_app_app_init_prompt_pushes_modal(monkeypatch) -> None:
@@ -711,7 +790,7 @@ def test_textual_app_stack_action_menu_pushes_modal(monkeypatch) -> None:
     assert isinstance(pushed[0][0], prompts.StackActionMenuScreen)
 
 
-def test_textual_app_stack_action_menu_rejects_tool_focus(monkeypatch) -> None:
+def test_textual_app_tool_action_menu_pushes_modal(monkeypatch) -> None:
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = {
         "generated_at": "2026-04-08 12:00:00",
@@ -720,12 +799,32 @@ def test_textual_app_stack_action_menu_rejects_tool_focus(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 0
+    app.selected_control_index = 1
+    pushed: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
+
+    app.action_stack_action_menu()
+
+    assert len(pushed) == 1
+    assert isinstance(pushed[0][0], prompts.ToolActionMenuScreen)
+
+
+def test_textual_app_stack_action_menu_rejects_unsupported_tool_focus(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 2
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app.action_stack_action_menu()
 
-    assert app.status_message == "select a stack to open the action menu"
+    assert app.status_message == "no guided actions for Validate"
 
 
 def test_textual_app_domain_add_prompt_pushes_modal(monkeypatch) -> None:
@@ -817,6 +916,15 @@ def test_textual_app_stack_action_menu_cancel_updates_status(monkeypatch) -> Non
     app._complete_stack_action_menu("example.com", None)
 
     assert app.status_message == "stack action menu cancelled for example.com"
+
+
+def test_textual_app_tool_action_menu_cancel_updates_status(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._complete_tool_action_menu("cloudflared", None)
+
+    assert app.status_message == "tool action menu cancelled for cloudflared"
 
 
 def test_textual_app_stack_detail_includes_last_action_result() -> None:
@@ -994,7 +1102,7 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
     assert "Cloudflared Detail" in detail
     assert "runtime: systemd" in detail
     assert "focus: Cloudflared" in command_bar
-    assert "actions: c config-test | l reload | k restart | r refresh | q quit" in command_bar
+    assert "actions: enter open-menu | c config-test | l reload | k restart | r refresh | q quit" in command_bar
 
 
 def test_textual_app_tool_detail_includes_last_cloudflared_action() -> None:
@@ -1042,6 +1150,80 @@ def test_textual_app_tool_detail_includes_last_cloudflared_action() -> None:
     assert "config-test" in detail
     assert "warnings: 1" in detail
     assert "issues: 1 total, 0 blocking, 1 advisory" in detail
+
+
+def test_textual_app_tool_detail_includes_last_cloudflared_logs_action() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {
+            "ok": True,
+            "mode": "systemd",
+            "active": True,
+            "detail": "systemd service is active",
+            "config_validation": {
+                "ok": True,
+                "detail": "Validating rules\nOK",
+                "warnings": [],
+                "issues": [],
+                "max_severity": None,
+            },
+        },
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 1
+    app.last_tool_actions["cloudflared"] = {
+        "action": "logs",
+        "payload": {
+            "ok": True,
+            "follow": True,
+            "detail": "journalctl guidance available",
+            "logs_command": ["journalctl", "-u", "cloudflared", "-f"],
+        },
+    }
+
+    detail = app._detail_text()
+
+    assert "logs command" in detail
+    assert "journalctl -u cloudflared -f" in detail
+
+
+def test_textual_app_config_detail_includes_last_config_action() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {
+            "ok": True,
+            "config_path": "/home/test/.config/homesrvctl/config.yml",
+            "global": {
+                "sites_root": "/srv/homesrvctl/sites",
+                "docker_network": "web",
+                "traefik_url": "http://localhost:8081",
+                "cloudflared_config": "/etc/cloudflared/config.yml",
+                "cloudflare_api_token_present": False,
+                "profiles": {},
+            },
+        },
+        "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 0
+    app.last_tool_actions["config"] = {
+        "action": "init",
+        "payload": {
+            "ok": True,
+            "detail": "starter config written",
+            "config_path": "/home/test/.config/homesrvctl/config.yml",
+        },
+    }
+
+    detail = app._detail_text()
+
+    assert "Last action" in detail
+    assert "init" in detail
 
 
 def test_textual_app_uses_human_readable_title() -> None:
@@ -1296,7 +1478,7 @@ def test_textual_app_selected_tool_action_refreshes_status(monkeypatch) -> None:
     monkeypatch.setattr(
         textual_app,
         "run_tool_action",
-        lambda tool, action: calls.append((tool, action)) or {"ok": True, "detail": "validated", "warnings": []},
+        lambda tool, action, **kwargs: calls.append((tool, action)) or {"ok": True, "detail": "validated", "warnings": []},
     )
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
@@ -1306,3 +1488,92 @@ def test_textual_app_selected_tool_action_refreshes_status(monkeypatch) -> None:
     assert calls == [("cloudflared", "config-test")]
     assert app.status_message == "cloudflared config-test succeeded"
     assert app.last_tool_actions["cloudflared"]["action"] == "config-test"
+
+
+def test_textual_app_cloudflared_tool_menu_routes_logs_prompt(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    pushed: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
+
+    app._complete_tool_action_menu("cloudflared", "logs")
+
+    assert len(pushed) == 1
+    assert isinstance(pushed[0][0], prompts.CloudflaredLogsModeScreen)
+
+
+def test_textual_app_complete_cloudflared_logs_mode_runs_action(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    calls: list[tuple[str, str, bool]] = []
+
+    monkeypatch.setattr(
+        textual_app.HomesrvctlTextualApp,
+        "_run_selected_tool_action",
+        lambda self, tool, action, follow=False: calls.append((tool, action, follow)),
+    )
+
+    app._complete_cloudflared_logs_mode(True)
+
+    assert calls == [("cloudflared", "logs", True)]
+
+
+def test_textual_app_complete_cloudflared_logs_mode_cancel_updates_status(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._complete_cloudflared_logs_mode(None)
+
+    assert app.status_message == "cloudflared logs cancelled"
+
+
+def test_textual_app_run_config_init_prompts_overwrite_when_config_exists(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": False, "error": "config file not found"},
+        "list": {"ok": True, "sites": []},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    pushed: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(
+        textual_app,
+        "run_tool_action",
+        lambda tool, action, **kwargs: {
+            "ok": False,
+            "action": "config_init",
+            "config_path": "/home/test/.config/homesrvctl/config.yml",
+            "error": "config already exists: /home/test/.config/homesrvctl/config.yml. Use --force to overwrite.",
+        },
+    )
+    monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
+
+    app._run_config_init()
+
+    assert len(pushed) == 1
+    assert isinstance(pushed[0][0], prompts.ConfirmActionScreen)
+
+
+def test_textual_app_complete_config_init_overwrite_runs_force(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    calls: list[bool] = []
+
+    monkeypatch.setattr(
+        textual_app.HomesrvctlTextualApp,
+        "_run_config_init",
+        lambda self, force=False: calls.append(force),
+    )
+
+    app._complete_config_init_overwrite(True)
+
+    assert calls == [True]
+
+
+def test_textual_app_complete_config_init_overwrite_cancel_updates_status(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._complete_config_init_overwrite(False)
+
+    assert app.status_message == "config init cancelled"

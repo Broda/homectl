@@ -86,13 +86,29 @@ def run_stack_action(hostname: str, action: str, template: str | None = None) ->
     raise ValueError(f"unsupported stack action: {action}")
 
 
-def run_tool_action(tool: str, action: str) -> dict[str, object]:
+def run_tool_action(
+    tool: str,
+    action: str,
+    *,
+    force: bool = False,
+    follow: bool = False,
+) -> dict[str, object]:
     if tool == "config":
+        if action == "init":
+            args = ["config", "init"]
+            if force:
+                args.append("--force")
+            return run_json_subcommand(args)
         if action == "show":
             return run_json_subcommand(["config", "show"])
     if tool == "cloudflared":
         if action == "config-test":
             return run_json_subcommand(["cloudflared", "config-test"])
+        if action == "logs":
+            args = ["cloudflared", "logs"]
+            if follow:
+                args.append("--follow")
+            return run_json_subcommand(args)
         if action == "reload":
             return run_json_subcommand(["cloudflared", "reload"])
         if action == "restart":
@@ -245,9 +261,17 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
     if "dry_run" in payload:
         lines.extend(format_key_value_lines([("dry run", "yes" if payload.get("dry_run") else "no")]))
 
+    if "follow" in payload:
+        lines.extend(format_key_value_lines([("follow", "yes" if payload.get("follow") else "no")]))
+
     detail = payload.get("detail")
     if detail:
         lines.extend(["", *format_key_value_lines([("detail", str(detail))])])
+
+    logs_command = payload.get("logs_command")
+    if isinstance(logs_command, list) and logs_command:
+        rendered_command = " ".join(str(part) for part in logs_command)
+        lines.extend(["", *format_key_value_lines([("logs command", rendered_command)])])
 
     warnings = payload.get("warnings")
     if isinstance(warnings, list):

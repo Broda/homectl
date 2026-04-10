@@ -20,7 +20,13 @@ from homesrvctl.tui.data import (
     summarize_stack_action,
     summarize_tool_action,
 )
-from homesrvctl.tui.prompts import AppInitTemplateScreen, ConfirmActionScreen, StackActionMenuScreen
+from homesrvctl.tui.prompts import (
+    AppInitTemplateScreen,
+    CloudflaredLogsModeScreen,
+    ConfirmActionScreen,
+    StackActionMenuScreen,
+    ToolActionMenuScreen,
+)
 from homesrvctl.utils import validate_bare_domain
 
 
@@ -256,8 +262,16 @@ class HomesrvctlTextualApp(App[None]):
 
     def action_stack_action_menu(self) -> None:
         item = self._selected_control_item()
+        if item.get("kind") == "tool":
+            tool = str(item.get("tool", ""))
+            if tool not in {"config", "cloudflared"}:
+                self.status_message = f"no guided actions for {item.get('label', 'this tool')}"
+                self._render()
+                return
+            self.push_screen(ToolActionMenuScreen(tool), lambda selected_action: self._complete_tool_action_menu(tool, selected_action))
+            return
         if item.get("kind") != "stack":
-            self.status_message = "select a stack to open the action menu"
+            self.status_message = "select a stack or supported tool to open the action menu"
             self._render()
             return
         hostname = str(item.get("hostname", ""))
@@ -372,6 +386,67 @@ class HomesrvctlTextualApp(App[None]):
             return
         self._run_stack_action_for_hostname(hostname, selected_action)
 
+    def _complete_tool_action_menu(self, tool: str, selected_action: str | None) -> None:
+        if selected_action is None:
+            self.status_message = f"tool action menu cancelled for {tool}"
+            self._render()
+            return
+        if tool == "config":
+            if selected_action == "show":
+                self._refresh_snapshot("config detail refreshed")
+                return
+            if selected_action == "init":
+                self._run_config_init()
+                return
+        if tool == "cloudflared":
+            if selected_action == "logs":
+                self.push_screen(CloudflaredLogsModeScreen(), self._complete_cloudflared_logs_mode)
+                return
+            self._run_selected_tool_action("cloudflared", selected_action)
+            return
+        self.status_message = f"unsupported tool action: {tool} {selected_action}"
+        self._render()
+
+    def _complete_cloudflared_logs_mode(self, follow: bool | None) -> None:
+        if follow is None:
+            self.status_message = "cloudflared logs cancelled"
+            self._render()
+            return
+        self._run_selected_tool_action("cloudflared", "logs", follow=follow)
+
+    def _run_config_init(self, *, force: bool = False) -> None:
+        payload = run_tool_action("config", "init", force=force)
+        if (
+            not payload.get("ok")
+            and not force
+            and "config already exists" in str(payload.get("error", ""))
+        ):
+            config_path = str(payload.get("config_path", "the default config path"))
+            body = f"A config file already exists at {config_path}. Overwrite it?"
+            self.push_screen(
+                ConfirmActionScreen(title="Confirm Config Overwrite", body=body),
+                self._complete_config_init_overwrite,
+            )
+            return
+        self.last_tool_actions["config"] = {"action": "init", "payload": payload}
+        self.status_message = summarize_tool_action("config", "init", payload)
+        self.snapshot = build_dashboard_snapshot()
+        self.stack_config_views = {}
+        self.stack_domain_views = {}
+        items = self._control_items()
+        if items:
+            self.selected_control_index = min(self.selected_control_index, len(items) - 1)
+        else:
+            self.selected_control_index = 0
+        self._render()
+
+    def _complete_config_init_overwrite(self, confirmed: bool) -> None:
+        if not confirmed:
+            self.status_message = "config init cancelled"
+            self._render()
+            return
+        self._run_config_init(force=True)
+
     def _push_domain_confirmation(self, action: str, title: str, hostname: str | None = None) -> None:
         if hostname is None:
             item = self._selected_control_item()
@@ -414,13 +489,13 @@ class HomesrvctlTextualApp(App[None]):
             self.selected_control_index = 0
         self._render()
 
-    def _run_selected_tool_action(self, tool: str, action: str) -> None:
+    def _run_selected_tool_action(self, tool: str, action: str, *, follow: bool = False) -> None:
         item = self._selected_control_item()
         if item.get("kind") != "tool" or item.get("tool") != tool:
             self.status_message = f"select {tool} to run {action}"
             self._render()
             return
-        payload = run_tool_action(tool, action)
+        payload = run_tool_action(tool, action, follow=follow)
         self.last_tool_actions[tool] = {"action": action, "payload": payload}
         self.status_message = summarize_tool_action(tool, action, payload)
         self.snapshot = build_dashboard_snapshot()
@@ -512,9 +587,9 @@ class HomesrvctlTextualApp(App[None]):
         else:
             focus = f"focus: {item.get('label', 'Tool')}"
             if item.get("tool") == "config":
-                actions = "actions: r refresh | q quit"
+                actions = "actions: enter open-menu | r refresh | q quit"
             elif item.get("tool") == "cloudflared":
-                actions = "actions: c config-test | l reload | k restart | r refresh | q quit"
+                actions = "actions: enter open-menu | c config-test | l reload | k restart | r refresh | q quit"
             else:
                 actions = "actions: w/s move | r refresh | q quit"
         return "\n".join([focus, actions, f"status: {self.status_message} | mode: {mode}"])
@@ -642,7 +717,7 @@ class HomesrvctlTextualApp(App[None]):
             payload = cached.get("payload")
             if isinstance(action, str) and isinstance(payload, dict):
                 lines.extend(["", *render_tool_action_detail("cloudflared", action, payload)])
-        lines.extend(["", "This is a global tool item. Refresh here to re-check runtime and ingress health."])
+        lines.extend(["", "This is a global tool item. Use Enter to open the guided tool menu, including logs guidance."])
         return "\n".join(lines)
 
     def _config_detail_text(self) -> str:
@@ -650,7 +725,13 @@ class HomesrvctlTextualApp(App[None]):
         if not isinstance(payload, dict):
             return "Config detail unavailable"
         lines = ["Config Detail", "", *render_config_payload_detail(payload)]
-        lines.extend(["", "This is a global tool item. Use it to inspect base homesrvctl configuration."])
+        cached = self.last_tool_actions.get("config")
+        if isinstance(cached, dict):
+            action = cached.get("action")
+            action_payload = cached.get("payload")
+            if isinstance(action, str) and isinstance(action_payload, dict):
+                lines.extend(["", *render_tool_action_detail("config", action, action_payload)])
+        lines.extend(["", "This is a global tool item. Use Enter to open the guided tool menu for config actions."])
         return "\n".join(lines)
 
     def _validate_detail_text(self) -> str:
