@@ -70,6 +70,8 @@ The published Python distribution name is `homesrvctl`. The CLI command is also 
 - Getting started: `https://github.com/Broda/homesrvctl/wiki/Getting-Started`
 - Configuration: `https://github.com/Broda/homesrvctl/wiki/Configuration`
 - Domain workflow: `https://github.com/Broda/homesrvctl/wiki/Domain-Workflow`
+- Tunnel inspection: `https://github.com/Broda/homesrvctl/wiki/Tunnel-Inspection`
+- Terminal dashboard: `https://github.com/Broda/homesrvctl/wiki/Terminal-Dashboard`
 - Release process: `https://github.com/Broda/homesrvctl/wiki/Release-Process`
 
 ## Configuration
