@@ -236,7 +236,7 @@ class HomesrvctlTextualApp(App[None]):
     #detail_buttons Button {
         margin: 0 1 0 0;
         min-width: 10;
-        height: 1;
+        height: 3;
         border: tall #1fd6c1;
         background: #0d1e26;
         color: #1fd6c1;
