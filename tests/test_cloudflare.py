@@ -16,7 +16,6 @@ from homesrvctl.cloudflare import (
     tunnel_cname_target_for_account,
 )
 from homesrvctl.models import HomesrvctlConfig
-from homesrvctl.shell import CommandResult
 
 
 class _FakeResponse:
@@ -142,9 +141,7 @@ def test_tunnel_cname_target_uses_cloudflared_config_uuid(tmp_path: Path) -> Non
     assert tunnel_cname_target(config) == "11111111-2222-4333-8444-555555555555.cfargotunnel.com"
 
 
-def test_tunnel_cname_target_falls_back_to_cloudflared_info(monkeypatch, tmp_path: Path) -> None:
-    from homesrvctl import cloudflare
-
+def test_tunnel_cname_target_errors_without_local_uuid(tmp_path: Path) -> None:
     config = HomesrvctlConfig(
         tunnel_name="homesrvctl-tunnel",
         sites_root=tmp_path / "sites",
@@ -154,13 +151,8 @@ def test_tunnel_cname_target_falls_back_to_cloudflared_info(monkeypatch, tmp_pat
         cloudflare_api_token="token",
     )
 
-    monkeypatch.setattr(
-        cloudflare,
-        "run_command",
-        lambda command: CommandResult(command, 0, "NAME: homesrvctl-tunnel\nID: 11111111-2222-4333-8444-555555555555\n", ""),
-    )
-
-    assert tunnel_cname_target(config) == "11111111-2222-4333-8444-555555555555.cfargotunnel.com"
+    with pytest.raises(typer.BadParameter, match="could not resolve local tunnel ID for homesrvctl-tunnel"):
+        tunnel_cname_target(config)
 
 
 def test_account_id_from_zone_returns_nested_account_id() -> None:
@@ -323,6 +315,24 @@ def test_inspect_configured_tunnel_uses_credentials_api_lookup(monkeypatch, tmp_
     assert inspection.resolution_source == "credentials+api"
     assert inspection.api_status is not None
     assert inspection.api_status.status == "healthy"
+
+
+def test_inspect_configured_tunnel_errors_without_local_uuid_or_api_context(tmp_path: Path) -> None:
+    config = HomesrvctlConfig(
+        tunnel_name="homesrvctl-tunnel",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=tmp_path / "missing.yml",
+    )
+
+    inspection = inspect_configured_tunnel(config)
+
+    assert inspection.resolved_tunnel_id is None
+    assert inspection.resolution_source is None
+    assert inspection.api_available is False
+    assert inspection.resolution_error is not None
+    assert "unable to read cloudflared config" in inspection.resolution_error
 
 
 def test_client_requires_api_token() -> None:

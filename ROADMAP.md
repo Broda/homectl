@@ -578,7 +578,7 @@ Goal: decide whether more Cloudflare interactions should move from CLI-assisted 
 
 ### 4.1 Audit remaining CLI-dependent Cloudflare flows
 
-Status: planned
+Status: shipped
 
 Tasks:
 - Review whether any remaining `cloudflared` CLI usage is fragile enough to justify API replacements.
@@ -590,6 +590,11 @@ Subtasks:
   - runtime/process control concerns
   - Cloudflare control-plane concerns
 - Identify which flows are unreliable because of environment assumptions rather than API gaps.
+
+Completed in this milestone:
+- Audited the remaining Cloudflare control-plane tunnel-resolution path.
+- Kept `cloudflared` CLI usage for local runtime/process concerns, not Cloudflare control-plane tunnel inspection.
+- Removed the last `cloudflared tunnel info` fallback from tunnel inspection helpers so unresolved tunnel IDs now require either a local UUID source or account-scoped API context.
 
 ### 4.2 Evaluate broader tunnel inspection or management coverage
 
@@ -611,6 +616,7 @@ Current baseline:
   - resolved tunnel UUID
   - resolution source
   - API tunnel status when account-scoped lookup is available
+- The remaining tunnel-resolution model is now explicit: local UUID in config first, then account-scoped API lookup when credentials context exists; there is no `cloudflared tunnel info` fallback.
 
 Completed in this milestone:
 - Added a first `tunnel status` command instead of burying tunnel inspection only inside `domain` and `validate`.

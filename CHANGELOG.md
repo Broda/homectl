@@ -20,6 +20,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Normalized `cloudflared` ingress issue severity so blocking semantic-danger states now fail health checks while broader wildcard-precedence risks remain advisory.
 - Reduced domain tunnel-target lookup dependence on local `cloudflared tunnel info` by resolving the tunnel UUID through the Cloudflare API when local UUID sources are unavailable.
 - Reduced `validate` tunnel-reference dependence on local `cloudflared tunnel info` by resolving the configured tunnel through the Cloudflare API when the local `cloudflared` config includes tunnel credentials context.
+- Removed the remaining `cloudflared tunnel info` fallback from tunnel inspection helpers so tunnel resolution now stays explicit: local UUID sources first, then account-scoped API lookup when credentials context exists.
 - Refreshed the roadmap and repo docs so milestone status and current TUI/template baselines match the shipped implementation more closely.
 - Removed the dead curses dashboard module and its obsolete tests now that `homesrvctl tui` is fully on the Textual path.
 

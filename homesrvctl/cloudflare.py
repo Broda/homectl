@@ -12,9 +12,6 @@ import typer
 import yaml
 
 from homesrvctl.models import HomesrvctlConfig
-from homesrvctl.shell import run_command
-
-
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
@@ -293,7 +290,12 @@ class CloudflareApiClient:
 
 
 def tunnel_cname_target(config: HomesrvctlConfig) -> str:
-    tunnel_id = _resolve_tunnel_id(config)
+    tunnel_id = _resolve_local_tunnel_id(config)
+    if tunnel_id is None:
+        raise typer.BadParameter(
+            f"could not resolve local tunnel ID for {config.tunnel_name}; "
+            "configure a tunnel UUID locally or use an account-scoped API lookup"
+        )
     return f"{tunnel_id}.cfargotunnel.com"
 
 
@@ -341,13 +343,12 @@ def inspect_configured_tunnel(config: HomesrvctlConfig) -> TunnelInspection:
                 except CloudflareApiError as exc:
                     api_error = str(exc)
 
+    resolution_error = None
     if resolved_tunnel_id is None:
-        cli_tunnel_id = _tunnel_id_from_cloudflared_cli(config)
-        if cli_tunnel_id is not None:
-            resolved_tunnel_id = cli_tunnel_id
-            resolution_source = "cloudflared-cli"
-
-    resolution_error = None if resolved_tunnel_id else (api_error or f"could not resolve tunnel ID for {configured_tunnel}")
+        resolution_error = api_error or (
+            f"could not resolve tunnel ID for {configured_tunnel}: "
+            "no local UUID found and account-scoped API lookup unavailable"
+        )
     return TunnelInspection(
         configured_tunnel=configured_tunnel,
         resolved_tunnel_id=resolved_tunnel_id,
@@ -407,27 +408,6 @@ def account_id_from_cloudflared_config(config_path: Path) -> str:
     if not account_id:
         raise CloudflareApiError(f"cloudflared credentials missing AccountTag: {credentials_path}")
     return account_id
-
-
-def _resolve_tunnel_id(config: HomesrvctlConfig) -> str:
-    tunnel_id = _resolve_local_tunnel_id(config)
-    if tunnel_id is not None:
-        return tunnel_id
-
-    result = run_command(["cloudflared", "tunnel", "info", config.tunnel_name])
-    if not result.ok:
-        detail = result.stderr or result.stdout or "no output"
-        raise typer.BadParameter(f"could not resolve tunnel ID for {config.tunnel_name}: {detail}")
-
-    for line in result.stdout.splitlines():
-        if line.startswith("ID:"):
-            tunnel_id = line.split(":", 1)[1].strip()
-            if UUID_RE.match(tunnel_id):
-                return tunnel_id.lower()
-
-    raise typer.BadParameter(f"could not parse tunnel ID from cloudflared tunnel info for {config.tunnel_name}")
-
-
 def _resolve_tunnel_id_for_account(
     config: HomesrvctlConfig,
     *,
@@ -467,20 +447,6 @@ def _tunnel_id_from_config_file(config_path: Path) -> str | None:
     if UUID_RE.match(tunnel_value):
         return tunnel_value.lower()
     return None
-
-
-def _tunnel_id_from_cloudflared_cli(config: HomesrvctlConfig) -> str | None:
-    result = run_command(["cloudflared", "tunnel", "info", config.tunnel_name], quiet=True)
-    if not result.ok:
-        return None
-    for line in result.stdout.splitlines():
-        if line.startswith("ID:"):
-            tunnel_id = line.split(":", 1)[1].strip()
-            if UUID_RE.match(tunnel_id):
-                return tunnel_id.lower()
-    return None
-
-
 def _load_cloudflared_yaml(config_path: Path) -> dict[str, object]:
     try:
         parsed = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
