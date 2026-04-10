@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Click
 from textual.widget import Widget
-from textual.widgets import Header, Label, Static
+from textual.widgets import Button, Header, Label, Static
 
 from homesrvctl.tui.data import (
     build_dashboard_snapshot,
@@ -178,6 +178,38 @@ class HomesrvctlTextualApp(App[None]):
         padding: 1 2;
         background: #091116;
         border: round #0fa697;
+        layout: vertical;
+    }
+
+    #detail_scroll {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #detail_buttons {
+        height: auto;
+        padding: 1 0 0 0;
+        border-top: solid #13bfae;
+    }
+
+    #detail_buttons Button {
+        margin: 0 1 0 0;
+        min-width: 10;
+        height: 1;
+        border: tall #1fd6c1;
+        background: #0d1e26;
+        color: #1fd6c1;
+    }
+
+    #detail_buttons Button:hover {
+        background: #0d2a38;
+        border: tall #ffcf5a;
+        color: #ffcf5a;
+    }
+
+    #detail_buttons Button:focus {
+        border: tall #ffcf5a;
+        color: #ffcf5a;
     }
 
     .pane_title {
@@ -186,7 +218,7 @@ class HomesrvctlTextualApp(App[None]):
         margin-bottom: 1;
     }
 
-    #detail_box, #command_bar {
+    #command_bar {
         padding: 0 1;
     }
 
@@ -196,7 +228,7 @@ class HomesrvctlTextualApp(App[None]):
     }
 
     #detail_box {
-        height: 1fr;
+        height: auto;
     }
 
     #command_bar {
@@ -317,7 +349,10 @@ class HomesrvctlTextualApp(App[None]):
                 yield Vertical(id="controls_box")
             with Vertical(id="detail_pane"):
                 yield Static("Detail", id="detail_pane_title", classes="pane_title")
-                yield Static("", id="detail_box")
+                with VerticalScroll(id="detail_scroll"):
+                    yield Static("", id="detail_box")
+                with Horizontal(id="detail_buttons"):
+                    pass
         with Horizontal(id="command_bar"):
             yield Static("", id="command_bar_text")
 
@@ -601,7 +636,47 @@ class HomesrvctlTextualApp(App[None]):
         self._rebuild_controls()
         self.query_one("#detail_pane_title", Static).update(self._detail_pane_title())
         self.query_one("#detail_box", Static).update(self._detail_text())
+        self._rebuild_detail_buttons()
         self.query_one("#command_bar_text", Static).update(self._command_bar_text())
+
+    #: Maps detail button label → action method name; rebuilt each render.
+    _detail_button_actions: dict[str, str]
+
+    def _rebuild_detail_buttons(self) -> None:
+        buttons_bar = self.query_one("#detail_buttons", Horizontal)
+        buttons_bar.remove_children()
+        item = self._selected_control_item()
+        if item.get("kind") == "stack":
+            specs = [
+                ("Up", "up"),
+                ("Down", "down"),
+                ("Restart", "restart"),
+                ("Doctor", "doctor"),
+                ("Actions", "stack_action_menu"),
+            ]
+        elif item.get("tool") == "cloudflared":
+            specs = [
+                ("Config Test", "cloudflared_config_test"),
+                ("Reload", "cloudflared_reload"),
+                ("Restart CF", "cloudflared_restart"),
+            ]
+        else:
+            specs = [
+                ("Refresh", "refresh"),
+            ]
+        self._detail_button_actions = {}
+        for label, action in specs:
+            btn = Button(label)
+            self._detail_button_actions[label] = action
+            buttons_bar.mount(btn)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        label = str(event.button.label)
+        action_name = getattr(self, "_detail_button_actions", {}).get(label)
+        if action_name:
+            action_method = getattr(self, f"action_{action_name}", None)
+            if callable(action_method):
+                action_method()
 
     def _rebuild_controls(self) -> None:
         controls_box = self.query_one("#controls_box", Vertical)
@@ -703,20 +778,8 @@ class HomesrvctlTextualApp(App[None]):
         return self._stack_detail_text(str(item.get("hostname", "")), bool(item.get("compose")))
 
     def _command_bar_text(self) -> str:
-        item = self._selected_control_item()
         mode = f"auto refresh {self.refresh_seconds:g}s" if self.refresh_seconds > 0 else "manual refresh"
-        if item.get("kind") == "stack":
-            focus = f"focus: {item.get('hostname', '<unknown>')}"
-            actions = "actions: enter open-menu | a app-init | n domain-add | p domain-repair | m domain-remove | i site-init | g doctor | u up | t restart | x down | r refresh | q quit"
-        else:
-            focus = f"focus: {item.get('label', 'Tool')}"
-            if item.get("tool") == "config":
-                actions = "actions: enter open-menu | r refresh | q quit"
-            elif item.get("tool") == "cloudflared":
-                actions = "actions: enter open-menu | c config-test | l reload | k restart | r refresh | q quit"
-            else:
-                actions = "actions: w/s move | r refresh | q quit"
-        return "\n".join([focus, actions, f"status: {self.status_message} | mode: {mode}"])
+        return f"w/s navigate  ·  r refresh  ·  q quit  ·  status: {self.status_message}  ·  {mode}"
 
     def _stacks_summary(self) -> str:
         payload = self.snapshot.get("list")
