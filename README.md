@@ -347,16 +347,19 @@ homesrvctl up example.com --dry-run
 - All generated Compose files join the external Docker network configured in `docker_network`.
 - `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
 - `site init` and `app init` can also write a stack-local `profile` selection when you pass `--profile`.
+- `site init` remains the narrow two-file static scaffold for quick hostname bootstrapping, while `app init --template static` is the richer static-site app baseline with nginx starter assets and operator guidance.
 - `app init --template static` now generates a real boring-static-website scaffold with nginx, `html/index.html`, `html/favicon.svg`, `html/assets/css/main.css`, `html/assets/js/main.js`, `html/assets/images/`, and a small generated README instead of the old placeholder stub.
-- `app init --template static-api` now generates a two-service scaffold with a static nginx site plus a small Python API routed on `/api` behind the same hostname.
+- `app init --template static-api` now generates a two-service scaffold with a static nginx site plus a small Python API routed on `/api` behind the same hostname, and includes a root `.dockerignore` because the API image builds from the stack root.
 - The `node` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `package.json`, `.env.example`, and `src/server.js`.
 - The `python` app template now generates a runnable multi-file scaffold with `docker-compose.yml`, `Dockerfile`, `requirements.txt`, `.env.example`, and `app/main.py`.
 - The `jekyll` app template now generates a stack-local `site/` source tree plus a Dockerized Jekyll-to-nginx build baseline intended for manual adoption of an existing Jekyll site.
 - To adopt an existing Jekyll repo, scaffold `--template jekyll`, copy the repo contents into `site/`, keep the generated `docker-compose.yml` and `Dockerfile`, then run `docker compose up --build`.
+- The shipped app-template catalog now drives CLI validation, TUI template selection, rendered-template manifests, and release packaging checks from one module so those surfaces do not drift independently.
 - The `node` and `python` app templates now include a basic container healthcheck that probes the generated root endpoint on the app’s internal port.
 - The `node` and `python` app templates now expose a dedicated `/healthz` endpoint, and the generated healthchecks probe that endpoint instead of the user-facing root response.
 - The generated `node` and `python` app READMEs now include explicit first-run steps for `docker compose up --build`, health verification, and when you actually need a `.env` file.
 - Scaffold regression tests now assert that the rendered `node` and `python` artifacts stay internally consistent across ports, healthchecks, and rendered template manifests.
+- Scaffold artifact-coherence coverage now also locks down the shipped `site init`, `static`, `static-api`, `placeholder`, and `jekyll` scaffolds so template manifests, healthcheck expectations, and guidance do not drift silently.
 - The generated Dockerfiles now use slightly more realistic defaults: the Node scaffold installs runtime dependencies, and the Python scaffold sets the standard runtime environment flags before installing requirements.
 - The generated `node` and `python` sources now document and implement a clearer runtime baseline: `GET /`, `GET /healthz`, explicit environment-variable inputs, and `405` responses for unsupported methods.
 - The generated `node` and `python` `.env.example` files now include only real runtime overrides used by the scaffolded apps, instead of extra metadata-style keys.

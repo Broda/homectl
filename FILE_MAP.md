@@ -33,6 +33,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Shared filesystem and rendering helpers.
 - [`homesrvctl/templates.py`](homesrvctl/templates.py)
   Template rendering utilities.
+- [`homesrvctl/template_catalog.py`](homesrvctl/template_catalog.py)
+  Shipped scaffold catalog and rendered-template manifest definitions used by CLI scaffolds, the TUI template picker, and packaging checks.
 - [`homesrvctl/shell.py`](homesrvctl/shell.py)
   Shared subprocess execution helpers.
 - [`homesrvctl/tui`](homesrvctl/tui)

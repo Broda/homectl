@@ -17,7 +17,9 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Added
 
-- Added release-oriented regression coverage that builds fresh wheel and sdist artifacts and verifies the shipped Jekyll template assets are present in both distributions.
+- Added a shared scaffold catalog module so app-template names, descriptions, rendered file manifests, TUI template choices, and release packaging checks now come from one source of truth.
+- Added parity-style artifact-coherence coverage for the shipped `site init`, `static`, `static-api`, and `placeholder` scaffold families so template manifests, compose wiring, and operator guidance stay aligned.
+- Added release-oriented regression coverage that builds fresh wheel and sdist artifacts and verifies the full shipped template asset catalog is present in both distributions.
 - Added a first `jekyll` app template that builds a stack-local Jekyll site into an nginx-served image for manual adoption of an existing Jekyll repo.
 - Added Textual as the new TUI dependency and introduced a first Textual app foundation behind `homesrvctl tui`.
 - Added a first read-only `homesrvctl tui` dashboard that reuses the existing JSON command surface for stack, `cloudflared`, and validation summaries.
@@ -59,6 +61,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Changed
 
+- Broadened release-packaging verification from Jekyll-only coverage to the full shipped template asset catalog.
+- Added a root `.dockerignore` to the `static-api` scaffold so its stack-root Python image build follows the same build-context convention as the other image-building app templates.
 - Tightened the generated Jekyll scaffold guidance so adoption instructions now spell out which root-level stack files to keep, which `site/` contents to replace, how the adopted source tree should sit under `site/`, and when native gem dependencies require Dockerfile edits.
 - Expanded Jekyll scaffold regression coverage to lock down compose labels, healthcheck behavior, build flow assumptions, starter files, and stack-local routing override output.
 - Reworked the Textual dashboard layout into a roomy warm-console design with a top summary strip, a unified left control pane, a right operational detail pane, and a persistent command/status bar.

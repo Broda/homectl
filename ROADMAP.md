@@ -328,7 +328,7 @@ Completed in this milestone:
 
 ## Milestone 3: Scaffold and Template Expansion
 
-Status: in progress
+Status: shipped
 
 Goal: make `app init` more useful without turning `homesrvctl` into a full framework generator.
 
@@ -418,7 +418,7 @@ Applied examples:
 
 ### 3.4 Keep template layout scalable
 
-Status: ongoing
+Status: shipped
 
 Tasks:
 - Preserve the per-template directory layout under `homesrvctl/templates/app/`.
@@ -457,11 +457,18 @@ Subtasks:
   - rendered-template manifest stability in `--json` output
 
 Current baseline:
-- App template names and file outputs are currently hardcoded in `homesrvctl/commands/app_cmd.py`.
-- The TUI template picker currently maintains its own template list and descriptions.
+- App template names, descriptions, and rendered file manifests now live in `homesrvctl/template_catalog.py`.
+- The TUI template picker now reads its shipped app-template choices from the shared scaffold catalog.
 - `site init` uses a separate top-level template family from `app init --template static`.
-- Artifact-coherence coverage currently exists for `node`, `python`, and `jekyll`, but not for every shipped scaffold family.
-- Release-packaging verification currently checks Jekyll template assets, not the full template catalog.
+- Artifact-coherence coverage now exists for `site init`, `static`, `static-api`, `placeholder`, `node`, `python`, and `jekyll`.
+- Release-packaging verification now checks the full shipped template catalog instead of only Jekyll assets.
+
+Completed in this milestone:
+- Added a shared scaffold catalog module so app-template names, operator-facing descriptions, rendered file manifests, and TUI template choices stay aligned.
+- Kept the `site init` versus `app init --template static` split explicit in code and docs rather than silently drifting into two overlapping static scaffold families.
+- Added parity-style artifact-coherence coverage for the remaining shipped scaffold families: `site init`, `static`, `static-api`, and `placeholder`.
+- Broadened release-oriented packaging verification from Jekyll-only coverage to the full shipped template asset set.
+- Added a root `.dockerignore` to `static-api` so all build-context-based app templates follow the same packaging convention.
 
 ### 3.5 Add a narrow Jekyll workflow without expanding the product boundary
 
@@ -1146,6 +1153,40 @@ Subtasks:
   - `CHANGELOG.md`
   - release-note templates
   - issue labels tied to release notes
+
+## Milestone 8: Scaffold Surface Consolidation
+
+Status: later
+
+Goal: revisit whether the scaffold catalog should grow from the current lightweight app-template registry into a broader unified scaffold registry without changing public command surfaces casually.
+
+### 8.1 Decide whether scaffold registration should unify further
+
+Status: planned
+
+Tasks:
+- Evaluate whether `site init` and `app init` should eventually share one broader scaffold registry.
+- Keep any registry expansion narrower than a product-surface redesign.
+
+Subtasks:
+- Review whether a single registry would materially reduce maintenance beyond the shipped `template_catalog.py` app-template catalog.
+- Decide whether site-template metadata should join the same registry shape as app templates.
+- Avoid forcing this refactor unless it simplifies tests, docs, and release verification clearly.
+
+### 8.2 Revisit the static-site command split deliberately
+
+Status: planned
+
+Tasks:
+- Decide whether the current split between `site init` and `app init --template static` should remain permanent.
+- Avoid accidental convergence or deprecation without an explicit user-facing decision.
+
+Subtasks:
+- Review whether the two static scaffold families still serve distinct operator needs.
+- If unification becomes worthwhile, decide whether to:
+  - keep both public commands with shared internals
+  - deprecate one command surface in a later major slice
+  - keep both and document the difference permanently
 
 ## Cross-Cutting Working Rules
 
