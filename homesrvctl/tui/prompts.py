@@ -7,14 +7,9 @@ from textual.events import Key
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-APP_INIT_TEMPLATE_OPTIONS: list[tuple[str, str]] = [
-    ("placeholder", "Smallest possible app scaffold."),
-    ("static", "nginx static site with starter assets."),
-    ("static-api", "Static site plus a small Python API."),
-    ("node", "Node app scaffold with healthcheck."),
-    ("python", "Python app scaffold with healthcheck."),
-    ("jekyll", "Jekyll build plus static serving baseline."),
-]
+from homesrvctl.template_catalog import app_template_options
+
+APP_INIT_TEMPLATE_OPTIONS: list[tuple[str, str]] = app_template_options()
 
 
 def stack_action_options(is_apex_domain: bool) -> list[tuple[str, str, str]]:

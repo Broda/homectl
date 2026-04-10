@@ -6,6 +6,7 @@ import typer
 
 from homesrvctl.config import load_config, render_stack_settings, stack_config_path
 from homesrvctl.models import RenderContext
+from homesrvctl.template_catalog import SITE_TEMPLATE_SPEC
 from homesrvctl.templates import render_template
 from homesrvctl.utils import (
     ensure_directory,
@@ -49,14 +50,9 @@ def site_init(
         profile_settings.traefik_url if profile_settings else config.traefik_url
     )
 
-    files = [
-        str(target_dir / "docker-compose.yml"),
-        str(html_dir / "index.html"),
-    ]
-    rendered_templates = [
-        {"output": str(target_dir / "docker-compose.yml"), "template": "static/docker-compose.yml.j2"},
-        {"output": str(html_dir / "index.html"), "template": "static/index.html.j2"},
-    ]
+    outputs = SITE_TEMPLATE_SPEC.render_targets(target_dir)
+    files = [str(path) for path, _ in outputs]
+    rendered_templates = [{"output": str(path), "template": template_name} for path, template_name in outputs]
     stack_settings_content = render_stack_settings(config, effective_docker_network, effective_traefik_url, profile)
     if stack_settings_content.strip():
         files.append(str(stack_config_path(target_dir)))
@@ -71,24 +67,15 @@ def site_init(
             safe_name=safe_name,
             docker_network=effective_docker_network,
         )
-
-        compose_content = render_template("static/docker-compose.yml.j2", context)
-        index_content = render_template("static/index.html.j2", context)
-
-        write_text_file(
-            target_dir / "docker-compose.yml",
-            compose_content,
-            force=force,
-            dry_run=dry_run,
-            quiet=json_output,
-        )
-        write_text_file(
-            html_dir / "index.html",
-            index_content,
-            force=force,
-            dry_run=dry_run,
-            quiet=json_output,
-        )
+        for output_path, template_name in outputs:
+            content = render_template(template_name, context)
+            write_text_file(
+                output_path,
+                content,
+                force=force,
+                dry_run=dry_run,
+                quiet=json_output,
+            )
         if stack_settings_content.strip():
             write_text_file(
                 stack_config_path(target_dir),
