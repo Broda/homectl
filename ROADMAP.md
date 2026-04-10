@@ -572,7 +572,7 @@ Completed in this milestone:
 
 ## Milestone 4: API Reliability and Cloudflare Coverage
 
-Status: later
+Status: in progress
 
 Goal: decide whether more Cloudflare interactions should move from CLI-assisted flows to API-managed flows.
 
@@ -593,7 +593,7 @@ Subtasks:
 
 ### 4.2 Evaluate broader tunnel inspection or management coverage
 
-Status: planned
+Status: in progress
 
 Tasks:
 - Review whether tunnel inspection should move further to the Cloudflare API.
@@ -603,6 +603,18 @@ Subtasks:
 - Evaluate whether tunnel target discovery should rely less on local `cloudflared` behavior.
 - Evaluate whether tunnel metadata checks should be surfaced in a dedicated command.
 - Decide whether tunnel-management work belongs in `homesrvctl` scope at all.
+
+Current baseline:
+- `domain` and `validate` now use API-backed tunnel lookup when local UUID sources are unavailable and the local `cloudflared` credentials provide account context.
+- `tunnel status` now exists as a dedicated read-only command that reports:
+  - configured tunnel reference
+  - resolved tunnel UUID
+  - resolution source
+  - API tunnel status when account-scoped lookup is available
+
+Completed in this milestone:
+- Added a first `tunnel status` command instead of burying tunnel inspection only inside `domain` and `validate`.
+- Kept the command read-only and diagnostic-focused rather than expanding immediately into tunnel management verbs.
 
 ## Milestone 5: Terminal UI (Textual Migration)
 

@@ -14,6 +14,7 @@ It automates the repetitive parts of:
 
 - adding apex and wildcard tunnel DNS routes for a new domain
 - reconciling local `cloudflared` ingress entries for new domains
+- inspecting the configured Cloudflare Tunnel reference and resolved tunnel UUID
 - scaffolding static sites and app directories
 - starting and stopping per-hostname Compose stacks
 - validating the local hosting environment
@@ -115,6 +116,7 @@ profiles:
 
 `cloudflare_api_token` may also be supplied via the `CLOUDFLARE_API_TOKEN` environment variable.
 It should have at least `Zone:Read` and `DNS:Edit` for the zones you want `homesrvctl domain add` to manage.
+If you want API-backed tunnel inspection via `homesrvctl tunnel status` and the newer tunnel-resolution fallbacks in `domain` / `validate`, the token must also be able to read the relevant Cloudflare Tunnel in the owning account.
 
 Per-stack overrides may also be stored in:
 
@@ -234,6 +236,7 @@ Inspect the stack:
 ```bash
 homesrvctl list
 homesrvctl tui
+homesrvctl tunnel status
 homesrvctl cloudflared status
 homesrvctl cloudflared config-test
 homesrvctl cloudflared logs
@@ -253,6 +256,7 @@ homesrvctl domain status example.com --json
 homesrvctl domain repair example.com --dry-run --json
 homesrvctl domain remove example.com --dry-run --json
 homesrvctl list --json
+homesrvctl tunnel status --json
 homesrvctl cloudflared status --json
 homesrvctl cloudflared config-test --json
 homesrvctl cloudflared logs --follow --json

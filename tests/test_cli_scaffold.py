@@ -1765,6 +1765,144 @@ def test_cloudflared_reload_json_success(monkeypatch) -> None:
     assert payload["reload_command"] == ["systemctl", "reload", "cloudflared"]
 
 
+def test_tunnel_status_json_uses_credentials_api_lookup(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import tunnel_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    credentials_path = tmp_path / "example.json"
+    credentials_path.write_text('{"AccountTag":"account-456"}', encoding="utf-8")
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "homesrvctl-tunnel",
+                "credentials-file": str(credentials_path),
+                "ingress": [{"service": "http_status:404"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        tunnel_cmd,
+        "inspect_configured_tunnel",
+        lambda config: type(
+            "Inspection",
+            (),
+            {
+                "configured_tunnel": "homesrvctl-tunnel",
+                "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+                "resolution_source": "credentials+api",
+                "account_id": "account-456",
+                "api_available": True,
+                "api_status": type(
+                    "Tunnel",
+                    (),
+                    {
+                        "id": "11111111-2222-4333-8444-555555555555",
+                        "name": "homesrvctl-tunnel",
+                        "status": "healthy",
+                    },
+                )(),
+                "api_error": None,
+                "resolution_error": None,
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["tunnel", "status", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["ok"] is True
+    assert payload["resolved_tunnel_id"] == "11111111-2222-4333-8444-555555555555"
+    assert payload["resolution_source"] == "credentials+api"
+    assert payload["api_status"]["status"] == "healthy"
+
+
+def test_tunnel_status_text_reports_missing_api_context(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import tunnel_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        tunnel_cmd,
+        "inspect_configured_tunnel",
+        lambda config: type(
+            "Inspection",
+            (),
+            {
+                "configured_tunnel": "homesrvctl-tunnel",
+                "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+                "resolution_source": "config:tunnel_name",
+                "account_id": None,
+                "api_available": False,
+                "api_status": None,
+                "api_error": None,
+                "resolution_error": None,
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["tunnel", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert "configured tunnel: homesrvctl-tunnel" in result.output
+    assert "resolved tunnel id: 11111111-2222-4333-8444-555555555555" in result.output
+    assert "api detail: account-scoped tunnel inspection unavailable" in result.output
+
+
+def test_tunnel_status_json_fails_when_unresolved(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import tunnel_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        tunnel_cmd,
+        "inspect_configured_tunnel",
+        lambda config: type(
+            "Inspection",
+            (),
+            {
+                "configured_tunnel": "homesrvctl-tunnel",
+                "resolved_tunnel_id": None,
+                "resolution_source": None,
+                "account_id": "account-456",
+                "api_available": True,
+                "api_status": None,
+                "api_error": "Cloudflare tunnel not found in account for homesrvctl-tunnel",
+                "resolution_error": "Cloudflare tunnel not found in account for homesrvctl-tunnel",
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["tunnel", "status", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["ok"] is False
+    assert payload["detail"] == "Cloudflare tunnel not found in account for homesrvctl-tunnel"
+
+
 def test_domain_add_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import domain_cmd
 

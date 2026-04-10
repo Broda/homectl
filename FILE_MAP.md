@@ -67,6 +67,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Stack lifecycle commands such as `up`, `down`, `restart`, `list`, and `doctor`.
 - [`homesrvctl/commands/domain_cmd.py`](homesrvctl/commands/domain_cmd.py)
   Domain lifecycle commands such as `add`, `status`, `repair`, and `remove`.
+- [`homesrvctl/commands/tunnel_cmd.py`](homesrvctl/commands/tunnel_cmd.py)
+  Tunnel inspection command for configured tunnel resolution and Cloudflare API-backed tunnel status.
 - [`homesrvctl/commands/cloudflared_cmd.py`](homesrvctl/commands/cloudflared_cmd.py)
   `cloudflared` runtime and config-oriented commands.
 - [`homesrvctl/commands/validate_cmd.py`](homesrvctl/commands/validate_cmd.py)

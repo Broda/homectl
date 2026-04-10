@@ -11,6 +11,7 @@ from homesrvctl.cloudflare import (
     CloudflareApiError,
     account_id_from_cloudflared_config,
     account_id_from_zone,
+    inspect_configured_tunnel,
     tunnel_cname_target,
     tunnel_cname_target_for_account,
 )
@@ -266,6 +267,62 @@ def test_tunnel_cname_target_for_account_surfaces_lookup_error(tmp_path: Path) -
 
     with pytest.raises(typer.BadParameter, match="could not resolve tunnel ID for homesrvctl-tunnel"):
         tunnel_cname_target_for_account(config, account_id="account-123", api_client=client)
+
+
+def test_inspect_configured_tunnel_uses_local_uuid_without_api(tmp_path: Path) -> None:
+    config = HomesrvctlConfig(
+        tunnel_name="11111111-2222-4333-8444-555555555555",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=tmp_path / "missing.yml",
+    )
+
+    inspection = inspect_configured_tunnel(config)
+
+    assert inspection.resolved_tunnel_id == "11111111-2222-4333-8444-555555555555"
+    assert inspection.resolution_source == "config:tunnel_name"
+    assert inspection.api_status is None
+
+
+def test_inspect_configured_tunnel_uses_credentials_api_lookup(monkeypatch, tmp_path: Path) -> None:
+    credentials_path = tmp_path / "example.json"
+    credentials_path.write_text('{"AccountTag":"account-456"}', encoding="utf-8")
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        f"tunnel: homesrvctl-tunnel\ncredentials-file: {credentials_path}\n",
+        encoding="utf-8",
+    )
+    config = HomesrvctlConfig(
+        tunnel_name="homesrvctl-tunnel",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=cloudflared_config,
+        cloudflare_api_token="token",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "token"
+
+        def get_tunnel(self, account_id: str, tunnel_ref: str):  # noqa: ANN202
+            assert account_id == "account-456"
+            assert tunnel_ref == "homesrvctl-tunnel"
+            return type(
+                "Tunnel",
+                (),
+                {"id": "11111111-2222-4333-8444-555555555555", "name": tunnel_ref, "status": "healthy"},
+            )()
+
+    monkeypatch.setattr("homesrvctl.cloudflare.CloudflareApiClient", FakeClient)
+
+    inspection = inspect_configured_tunnel(config)
+
+    assert inspection.resolved_tunnel_id == "11111111-2222-4333-8444-555555555555"
+    assert inspection.resolution_source == "credentials+api"
+    assert inspection.api_status is not None
+    assert inspection.api_status.status == "healthy"
 
 
 def test_client_requires_api_token() -> None:

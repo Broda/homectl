@@ -53,6 +53,18 @@ class TunnelStatus:
     status: str
 
 
+@dataclass(slots=True)
+class TunnelInspection:
+    configured_tunnel: str
+    resolved_tunnel_id: str | None
+    resolution_source: str | None
+    account_id: str | None
+    api_available: bool
+    api_status: TunnelStatus | None = None
+    api_error: str | None = None
+    resolution_error: str | None = None
+
+
 class CloudflareApiClient:
     def __init__(self, api_token: str) -> None:
         token = api_token.strip()
@@ -285,6 +297,69 @@ def tunnel_cname_target(config: HomesrvctlConfig) -> str:
     return f"{tunnel_id}.cfargotunnel.com"
 
 
+def inspect_configured_tunnel(config: HomesrvctlConfig) -> TunnelInspection:
+    configured_tunnel = config.tunnel_name
+    resolved_tunnel_id: str | None = None
+    resolution_source: str | None = None
+
+    if UUID_RE.match(config.tunnel_name):
+        resolved_tunnel_id = config.tunnel_name.lower()
+        resolution_source = "config:tunnel_name"
+    else:
+        config_tunnel_id = _tunnel_id_from_config_file(config.cloudflared_config)
+        if config_tunnel_id is not None:
+            resolved_tunnel_id = config_tunnel_id
+            resolution_source = "cloudflared-config:tunnel"
+
+    account_id: str | None = None
+    api_status: TunnelStatus | None = None
+    api_error: str | None = None
+    api_available = False
+
+    try:
+        account_id = account_id_from_cloudflared_config(config.cloudflared_config)
+    except CloudflareApiError as exc:
+        api_error = str(exc)
+    else:
+        api_available = True
+        try:
+            client = CloudflareApiClient(config.cloudflare_api_token)
+        except typer.BadParameter as exc:
+            api_error = str(exc)
+        else:
+            if resolved_tunnel_id is None:
+                try:
+                    api_status = client.get_tunnel(account_id, configured_tunnel)
+                except CloudflareApiError as exc:
+                    api_error = str(exc)
+                else:
+                    resolved_tunnel_id = api_status.id.lower()
+                    resolution_source = "credentials+api"
+            else:
+                try:
+                    api_status = client.get_tunnel(account_id, resolved_tunnel_id)
+                except CloudflareApiError as exc:
+                    api_error = str(exc)
+
+    if resolved_tunnel_id is None:
+        cli_tunnel_id = _tunnel_id_from_cloudflared_cli(config)
+        if cli_tunnel_id is not None:
+            resolved_tunnel_id = cli_tunnel_id
+            resolution_source = "cloudflared-cli"
+
+    resolution_error = None if resolved_tunnel_id else (api_error or f"could not resolve tunnel ID for {configured_tunnel}")
+    return TunnelInspection(
+        configured_tunnel=configured_tunnel,
+        resolved_tunnel_id=resolved_tunnel_id,
+        resolution_source=resolution_source,
+        account_id=account_id,
+        api_available=api_available,
+        api_status=api_status,
+        api_error=api_error,
+        resolution_error=resolution_error,
+    )
+
+
 def local_tunnel_cname_target(config: HomesrvctlConfig) -> str | None:
     tunnel_id = _resolve_local_tunnel_id(config)
     if tunnel_id is None:
@@ -374,14 +449,35 @@ def _resolve_local_tunnel_id(config: HomesrvctlConfig) -> str | None:
     if UUID_RE.match(config.tunnel_name):
         return config.tunnel_name.lower()
 
-    if config.cloudflared_config.exists():
-        parsed = yaml.safe_load(config.cloudflared_config.read_text(encoding="utf-8")) or {}
-        tunnel_value = str(parsed.get("tunnel", "")).strip()
-        if UUID_RE.match(tunnel_value):
-            return tunnel_value.lower()
-        if tunnel_value and UUID_RE.match(config.tunnel_name):
-            return config.tunnel_name.lower()
+    config_tunnel_id = _tunnel_id_from_config_file(config.cloudflared_config)
+    if config_tunnel_id is not None:
+        return config_tunnel_id
 
+    return None
+
+
+def _tunnel_id_from_config_file(config_path: Path) -> str | None:
+    if not config_path.exists():
+        return None
+    try:
+        parsed = _load_cloudflared_yaml(config_path)
+    except CloudflareApiError:
+        return None
+    tunnel_value = str(parsed.get("tunnel", "")).strip()
+    if UUID_RE.match(tunnel_value):
+        return tunnel_value.lower()
+    return None
+
+
+def _tunnel_id_from_cloudflared_cli(config: HomesrvctlConfig) -> str | None:
+    result = run_command(["cloudflared", "tunnel", "info", config.tunnel_name], quiet=True)
+    if not result.ok:
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("ID:"):
+            tunnel_id = line.split(":", 1)[1].strip()
+            if UUID_RE.match(tunnel_id):
+                return tunnel_id.lower()
     return None
 
 

@@ -53,7 +53,7 @@ Responsibilities:
 - Cloudflare DNS API interactions
 - zone lookup
 - DNS record inspection, upsert, and removal
-- tunnel-target-related helper logic used by domain flows
+- tunnel-target-related helper logic used by domain and tunnel-inspection flows
 
 This module should stay focused on Cloudflare control-plane behavior, not local runtime orchestration.
 
