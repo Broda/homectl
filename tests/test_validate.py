@@ -75,6 +75,83 @@ def test_build_validate_report_uses_cloudflared_config_fallback(monkeypatch, tmp
     assert indexed["cloudflared ingress config"].ok
 
 
+def test_build_validate_report_uses_cloudflare_api_tunnel_lookup(monkeypatch, tmp_path: Path) -> None:
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    credentials_path = tmp_path / "example.json"
+    credentials_path.write_text('{"AccountTag":"account-456"}', encoding="utf-8")
+    cloudflared_config.write_text(
+        f"tunnel: homesrvctl-tunnel\ncredentials-file: {credentials_path}\ningress:\n  - hostname: example.com\n    service: http://localhost:8081\n  - hostname: '*.example.com'\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+    config = HomesrvctlConfig(
+        tunnel_name="homesrvctl-tunnel",
+        sites_root=tmp_path / "sites",
+        docker_network="web",
+        traefik_url="http://localhost:8081",
+        cloudflared_config=cloudflared_config,
+        cloudflare_api_token="token",
+    )
+
+    def fake_command_exists(binary: str) -> bool:
+        return binary in {"cloudflared", "docker"}
+
+    def fake_run_command(command: list[str], cwd: Path | None = None, dry_run: bool = False, quiet: bool = False) -> CommandResult:
+        if command[:3] == ["docker", "compose", "version"]:
+            return CommandResult(command, 0, "Docker Compose version v5.1.1", "")
+        if command[:3] == ["docker", "network", "inspect"]:
+            return CommandResult(command, 0, "\"web\"", "")
+        if command[:2] == ["docker", "ps"]:
+            return CommandResult(command, 0, "traefik", "")
+        if command[:2] == ["systemctl", "is-active"]:
+            return CommandResult(command, 0, "active", "")
+        if command[:2] == ["pgrep", "-fa"]:
+            return CommandResult(command, 1, "", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    def fake_urlopen(request, timeout: int = 3):  # noqa: ANN001
+        raise urllib.error.HTTPError(
+            url=config.traefik_url,
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "token"
+
+        def get_tunnel(self, account_id: str, tunnel_ref: str):  # noqa: ANN202
+            assert account_id == "account-456"
+            assert tunnel_ref == "homesrvctl-tunnel"
+            return type(
+                "Tunnel",
+                (),
+                {"id": "11111111-2222-4333-8444-555555555555", "name": tunnel_ref, "status": "healthy"},
+            )()
+
+    monkeypatch.setattr(validate_cmd, "command_exists", fake_command_exists)
+    monkeypatch.setattr(validate_cmd, "run_command", fake_run_command)
+    monkeypatch.setattr(validate_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        validate_cmd,
+        "detect_cloudflared_runtime",
+        lambda quiet=False: CloudflaredRuntime(
+            mode="systemd",
+            active=True,
+            detail="systemd service is active",
+            restart_command=["systemctl", "restart", "cloudflared"],
+        ),
+    )
+    monkeypatch.setattr(validate_cmd.urllib.request, "urlopen", fake_urlopen)
+
+    checks = validate_cmd.build_validate_report(config)
+    indexed = {check.name: check for check in checks}
+
+    assert indexed["configured tunnel"].ok
+    assert "resolved to 11111111-2222-4333-8444-555555555555 via API" in indexed["configured tunnel"].detail
+
+
 def test_build_hostname_doctor_report(monkeypatch, tmp_path: Path) -> None:
     stack_dir = tmp_path / "sites" / "example.com"
     stack_dir.mkdir(parents=True)
@@ -455,7 +532,7 @@ def test_build_validate_report_uses_quiet_probes_when_requested(monkeypatch, tmp
     checks = validate_cmd.build_validate_report(config, quiet=True)
 
     assert checks
-    assert quiet_flags == [True, True, True, True]
+    assert quiet_flags == [True, True, True]
 
 
 def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path: Path) -> None:

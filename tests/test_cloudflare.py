@@ -9,6 +9,7 @@ import typer
 from homesrvctl.cloudflare import (
     CloudflareApiClient,
     CloudflareApiError,
+    account_id_from_cloudflared_config,
     account_id_from_zone,
     tunnel_cname_target,
     tunnel_cname_target_for_account,
@@ -170,6 +171,18 @@ def test_account_id_from_zone_returns_nested_account_id() -> None:
 def test_account_id_from_zone_errors_when_missing() -> None:
     with pytest.raises(CloudflareApiError):
         account_id_from_zone({"id": "zone-123"})
+
+
+def test_account_id_from_cloudflared_config_uses_credentials_file(tmp_path: Path) -> None:
+    credentials_path = tmp_path / "example.json"
+    credentials_path.write_text('{"AccountTag":"account-456"}', encoding="utf-8")
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        f"tunnel: homesrvctl-tunnel\ncredentials-file: {credentials_path}\n",
+        encoding="utf-8",
+    )
+
+    assert account_id_from_cloudflared_config(cloudflared_config) == "account-456"
 
 
 def test_get_tunnel_looks_up_by_name(monkeypatch) -> None:

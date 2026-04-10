@@ -6,6 +6,7 @@ import urllib.parse
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import typer
 import yaml
@@ -311,6 +312,28 @@ def account_id_from_zone(zone: dict[str, object]) -> str:
     return account_id
 
 
+def account_id_from_cloudflared_config(config_path: Path) -> str:
+    parsed = _load_cloudflared_yaml(config_path)
+    credentials_value = str(parsed.get("credentials-file", "")).strip()
+    if not credentials_value:
+        raise CloudflareApiError(f"cloudflared config missing credentials-file: {config_path}")
+    credentials_path = Path(credentials_value)
+    if not credentials_path.is_absolute():
+        credentials_path = config_path.parent / credentials_path
+    if not credentials_path.exists():
+        raise CloudflareApiError(f"cloudflared credentials file missing: {credentials_path}")
+    try:
+        payload = json.loads(credentials_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise CloudflareApiError(f"unable to read cloudflared credentials file {credentials_path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise CloudflareApiError(f"invalid cloudflared credentials JSON: {credentials_path}: {exc}") from exc
+    account_id = str(payload.get("AccountTag", "")).strip()
+    if not account_id:
+        raise CloudflareApiError(f"cloudflared credentials missing AccountTag: {credentials_path}")
+    return account_id
+
+
 def _resolve_tunnel_id(config: HomesrvctlConfig) -> str:
     tunnel_id = _resolve_local_tunnel_id(config)
     if tunnel_id is not None:
@@ -360,6 +383,18 @@ def _resolve_local_tunnel_id(config: HomesrvctlConfig) -> str | None:
             return config.tunnel_name.lower()
 
     return None
+
+
+def _load_cloudflared_yaml(config_path: Path) -> dict[str, object]:
+    try:
+        parsed = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        raise CloudflareApiError(f"unable to read cloudflared config {config_path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise CloudflareApiError(f"invalid cloudflared config YAML: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise CloudflareApiError(f"invalid cloudflared config structure: expected mapping in {config_path}")
+    return parsed
 
 
 def _parse_tunnel_status(result: object, tunnel_ref: str) -> TunnelStatus:

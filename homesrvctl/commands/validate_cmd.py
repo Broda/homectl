@@ -7,6 +7,11 @@ import urllib.request
 import typer
 import yaml
 
+from homesrvctl.cloudflare import (
+    CloudflareApiClient,
+    CloudflareApiError,
+    account_id_from_cloudflared_config,
+)
 from homesrvctl.cloudflared import (
     CloudflaredConfigError,
     find_hostname_route,
@@ -231,35 +236,30 @@ def _compose_ps_detail(result) -> str:
 
 
 def _check_tunnel_reference(config: HomesrvctlConfig) -> CheckResult:
-    tunnel_result = run_command(
-        [
-            "cloudflared",
-            "--config",
-            str(config.cloudflared_config),
-            "tunnel",
-            "info",
-            config.tunnel_name,
-        ],
-        quiet=True,
-    )
-    if tunnel_result.ok:
-        return CheckResult(
-            "configured tunnel",
-            True,
-            tunnel_result.stdout or f"tunnel reachable via cloudflared: {config.tunnel_name}",
-        )
-
     if not config.cloudflared_config.exists():
         return CheckResult(
             "configured tunnel",
             False,
-            tunnel_result.stderr or f"cloudflared config file missing: {config.cloudflared_config}",
+            f"cloudflared config file missing: {config.cloudflared_config}",
         )
 
     try:
         parsed = yaml.safe_load(config.cloudflared_config.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        return CheckResult("configured tunnel", False, f"unable to read cloudflared config: {exc}")
     except yaml.YAMLError as exc:
         return CheckResult("configured tunnel", False, f"invalid cloudflared config YAML: {exc}")
+
+    try:
+        account_id = account_id_from_cloudflared_config(config.cloudflared_config)
+        tunnel = CloudflareApiClient(config.cloudflare_api_token).get_tunnel(account_id, config.tunnel_name)
+        return CheckResult(
+            "configured tunnel",
+            True,
+            f"Cloudflare tunnel {tunnel.name or config.tunnel_name} resolved to {tunnel.id} via API",
+        )
+    except (CloudflareApiError, typer.BadParameter):
+        pass
 
     tunnel_value = str(parsed.get("tunnel", "")).strip()
     if tunnel_value == config.tunnel_name:
@@ -281,6 +281,24 @@ def _check_tunnel_reference(config: HomesrvctlConfig) -> CheckResult:
             "configured tunnel",
             True,
             f"tunnel name {config.tunnel_name} found in {config.cloudflared_config}",
+        )
+
+    tunnel_result = run_command(
+        [
+            "cloudflared",
+            "--config",
+            str(config.cloudflared_config),
+            "tunnel",
+            "info",
+            config.tunnel_name,
+        ],
+        quiet=True,
+    )
+    if tunnel_result.ok:
+        return CheckResult(
+            "configured tunnel",
+            True,
+            tunnel_result.stdout or f"tunnel reachable via cloudflared: {config.tunnel_name}",
         )
 
     return CheckResult(
