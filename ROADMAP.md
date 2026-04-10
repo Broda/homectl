@@ -423,6 +423,11 @@ Status: ongoing
 Tasks:
 - Preserve the per-template directory layout under `homesrvctl/templates/app/`.
 - Avoid regressing to flat template sprawl.
+- Keep template registration and metadata from drifting across command, TUI, docs, and tests.
+- Keep scaffold family boundaries explicit between:
+  - `site init` templates
+  - `app init` templates
+- Keep shipped template families covered by parity-style artifact checks and release packaging verification, not only by smoke scaffold tests.
 
 Subtasks:
 - Keep template assets grouped under:
@@ -431,6 +436,32 @@ Subtasks:
   - `python/`
   - any future template directories
 - Keep scaffold JSON metadata aligned with whatever template structure is shipped.
+- Revisit whether template registration should move toward a single source of truth for:
+  - valid app template names
+  - rendered file lists
+  - operator-facing template descriptions
+- Keep `app init`, the TUI template picker, and public docs aligned on the same shipped template catalog.
+- Audit the current split between `templates/static` and `templates/app/static` and either:
+  - document the intentional difference more explicitly
+  - or plan a narrow follow-up to reduce duplicated static-site scaffold maintenance
+- Add parity-style artifact-coherence coverage for the remaining shipped template families that still lack it:
+  - `static`
+  - `static-api`
+  - `placeholder`
+  - `site init`
+- Broaden release-oriented packaging verification from Jekyll-only to the rest of the shipped template asset set when that becomes the next maintenance slice.
+- Keep template-family conventions explicit for new templates:
+  - README presence where operator guidance is required
+  - healthcheck expectations where runtime containers are scaffolded
+  - whether `.dockerignore` is expected for build-context-based templates
+  - rendered-template manifest stability in `--json` output
+
+Current baseline:
+- App template names and file outputs are currently hardcoded in `homesrvctl/commands/app_cmd.py`.
+- The TUI template picker currently maintains its own template list and descriptions.
+- `site init` uses a separate top-level template family from `app init --template static`.
+- Artifact-coherence coverage currently exists for `node`, `python`, and `jekyll`, but not for every shipped scaffold family.
+- Release-packaging verification currently checks Jekyll template assets, not the full template catalog.
 
 ### 3.5 Add a narrow Jekyll workflow without expanding the product boundary
 
