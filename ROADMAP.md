@@ -866,6 +866,7 @@ Subtasks:
   - `list`
   - `validate`
   - `config show`
+  - `tunnel status`
   - `domain status`
   - doctor output
   - `cloudflared` status
@@ -886,6 +887,7 @@ Current baseline:
   - `list`
   - `validate`
   - `config show`
+  - `tunnel status`
   - per-stack `config show --stack`
   - apex `domain status`
   - cached doctor output

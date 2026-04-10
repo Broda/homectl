@@ -8,6 +8,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Header, Label, Static
 
 from homesrvctl.tui.data import (
+    TOOL_ITEMS,
     build_dashboard_snapshot,
     render_config_payload_detail,
     render_domain_status_detail,
@@ -381,9 +382,9 @@ class HomesrvctlTextualApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal(id="summary_strip"):
-            yield SummaryCardWidget("summary_stacks", "Stacks", focus_index=3)
-            yield SummaryCardWidget("summary_cloudflared", "Cloudflared", focus_index=1)
-            yield SummaryCardWidget("summary_validate", "Validate", focus_index=2)
+            yield SummaryCardWidget("summary_stacks", "Stacks", focus_index=len(TOOL_ITEMS))
+            yield SummaryCardWidget("summary_cloudflared", "Cloudflared", focus_index=2)
+            yield SummaryCardWidget("summary_validate", "Validate", focus_index=3)
         with Horizontal(id="body"):
             with Vertical(id="controls_pane"):
                 yield Static("Controls", classes="pane_title")
@@ -560,6 +561,10 @@ class HomesrvctlTextualApp(App[None]):
             if selected_action == "init":
                 self._run_config_init()
                 return
+        if tool == "tunnel":
+            if selected_action == "show":
+                self._run_selected_tool_action("tunnel", "show")
+                return
         if tool == "cloudflared":
             if selected_action == "logs":
                 self.push_screen(CloudflaredLogsModeScreen(), self._complete_cloudflared_logs_mode)
@@ -726,7 +731,7 @@ class HomesrvctlTextualApp(App[None]):
         controls_box = self.query_one("#controls_box", Vertical)
         controls_box.remove_children()
         items = self._control_items()
-        tool_count = 3
+        tool_count = len(TOOL_ITEMS)
         controls_box.mount(ControlSectionLabel("Tools"))
         for index, item in enumerate(items[:tool_count]):
             row = ControlRowWidget(index, str(item["label"]))
@@ -749,11 +754,7 @@ class HomesrvctlTextualApp(App[None]):
             controls_box.mount(row)
 
     def _control_items(self) -> list[dict[str, object]]:
-        items: list[dict[str, object]] = [
-            {"kind": "tool", "tool": "config", "label": "Config"},
-            {"kind": "tool", "tool": "cloudflared", "label": "Cloudflared"},
-            {"kind": "tool", "tool": "validate", "label": "Validate"},
-        ]
+        items: list[dict[str, object]] = [{"kind": "tool", "tool": tool, "label": label} for tool, label in TOOL_ITEMS]
         for site in stack_sites(self.snapshot):
             hostname = str(site.get("hostname", "<unknown>"))
             items.append(
@@ -776,9 +777,9 @@ class HomesrvctlTextualApp(App[None]):
     def _control_list_text(self) -> str:
         items = self._control_items()
         if not items:
-            return "Tools\n\n> Config\n  Cloudflared\n  Validate\n\nStacks\n\n(no stacks found)"
+            return "Tools\n\n> Config\n  Tunnel\n  Cloudflared\n  Validate\n\nStacks\n\n(no stacks found)"
 
-        tool_count = 3
+        tool_count = len(TOOL_ITEMS)
         lines = ["Tools", ""]
         for index, item in enumerate(items[:tool_count]):
             marker = ">" if index == self.selected_control_index else " "
@@ -804,6 +805,8 @@ class HomesrvctlTextualApp(App[None]):
         tool = str(item.get("tool", ""))
         if tool == "config":
             return "Tool: Config"
+        if tool == "tunnel":
+            return "Tool: Tunnel"
         if tool == "cloudflared":
             return "Tool: Cloudflared"
         return "Tool: Validate"
@@ -813,6 +816,8 @@ class HomesrvctlTextualApp(App[None]):
         if item.get("kind") == "tool":
             if item.get("tool") == "config":
                 return self._config_detail_text()
+            if item.get("tool") == "tunnel":
+                return self._tunnel_detail_text()
             if item.get("tool") == "cloudflared":
                 return self._cloudflared_detail_text()
             return self._validate_detail_text()
@@ -873,6 +878,43 @@ class HomesrvctlTextualApp(App[None]):
         if failures:
             return f"[red]✗ {len(failures)} failing[/red]", f"{len(checks)} checks"
         return "[green]✓ all passing[/green]", f"{len(checks)} checks"
+
+    def _tunnel_detail_text(self) -> str:
+        payload = self.snapshot.get("tunnel")
+        if not isinstance(payload, dict):
+            return "Tunnel detail unavailable"
+        if not payload.get("ok") and payload.get("configured_tunnel") in {None, ""}:
+            return f"error: {payload.get('detail') or payload.get('error', 'unknown error')}"
+        lines = [
+            "[bold #ffcf5a]Tunnel Detail[/bold #ffcf5a]",
+            "",
+            f"configured tunnel: {payload.get('configured_tunnel', '<unknown>')}",
+            f"resolved tunnel id: {payload.get('resolved_tunnel_id') or '<unresolved>'}",
+            f"resolution source: {payload.get('resolution_source') or 'unknown'}",
+        ]
+        account_id = payload.get("account_id")
+        if account_id:
+            lines.append(f"account id: {account_id}")
+        api_status = payload.get("api_status")
+        if isinstance(api_status, dict):
+            lines.extend(
+                [
+                    "",
+                    f"api tunnel name: {api_status.get('name', '<unknown>')}",
+                    f"api tunnel status: {api_status.get('status', 'unknown')}",
+                ]
+            )
+        api_error = payload.get("api_error")
+        if api_error:
+            lines.extend(["", f"api detail: {api_error}"])
+        cached = self.last_tool_actions.get("tunnel")
+        if isinstance(cached, dict):
+            action = cached.get("action")
+            action_payload = cached.get("payload")
+            if isinstance(action, str) and isinstance(action_payload, dict):
+                lines.extend(["", *render_tool_action_detail("tunnel", action, action_payload)])
+        lines.extend(["", "· enter menu  · r refresh  · q quit"])
+        return "\n".join(lines)
 
     def _stack_detail_text(self, hostname: str, compose: bool) -> str:
         config_view = self.stack_config_views.get(hostname)

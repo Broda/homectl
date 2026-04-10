@@ -7,17 +7,26 @@ import time
 from homesrvctl.shell import run_command
 from homesrvctl.utils import validate_bare_domain
 
+TOOL_ITEMS: list[tuple[str, str]] = [
+    ("config", "Config"),
+    ("tunnel", "Tunnel"),
+    ("cloudflared", "Cloudflared"),
+    ("validate", "Validate"),
+]
+
 
 def build_dashboard_snapshot(run_json_command=None) -> dict[str, object]:  # noqa: ANN001
     if run_json_command is None:
         run_json_command = run_json_subcommand
     list_payload = run_json_command(["list"])
     config_payload = run_json_command(["config", "show"])
+    tunnel_payload = run_json_command(["tunnel", "status"])
     cloudflared_payload = run_json_command(["cloudflared", "status"])
     validate_payload = run_json_command(["validate"])
     return {
         "list": list_payload,
         "config": config_payload,
+        "tunnel": tunnel_payload,
         "cloudflared": cloudflared_payload,
         "validate": validate_payload,
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -101,6 +110,9 @@ def run_tool_action(
             return run_json_subcommand(args)
         if action == "show":
             return run_json_subcommand(["config", "show"])
+    if tool == "tunnel":
+        if action == "show":
+            return run_json_subcommand(["tunnel", "status"])
     if tool == "cloudflared":
         if action == "config-test":
             return run_json_subcommand(["cloudflared", "config-test"])

@@ -84,6 +84,21 @@ def test_build_dashboard_snapshot_uses_existing_json_surfaces() -> None:
                     "profiles": {},
                 },
             }
+        if args == ["tunnel", "status"]:
+            return {
+                "ok": True,
+                "configured_tunnel": "homesrvctl-tunnel",
+                "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+                "resolution_source": "credentials+api",
+                "account_id": "account-123",
+                "api_available": True,
+                "api_status": {
+                    "id": "11111111-2222-4333-8444-555555555555",
+                    "name": "homesrvctl-tunnel",
+                    "status": "healthy",
+                },
+                "api_error": None,
+            }
         if args == ["cloudflared", "status"]:
             return {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"}
         if args == ["validate"]:
@@ -92,9 +107,10 @@ def test_build_dashboard_snapshot_uses_existing_json_surfaces() -> None:
 
     snapshot = data.build_dashboard_snapshot(run_json_command=fake_run_json_command)
 
-    assert calls == [("list",), ("config", "show"), ("cloudflared", "status"), ("validate",)]
+    assert calls == [("list",), ("config", "show"), ("tunnel", "status"), ("cloudflared", "status"), ("validate",)]
     assert snapshot["list"]["sites"][0]["hostname"] == "example.com"
     assert snapshot["config"]["global"]["docker_network"] == "web"
+    assert snapshot["tunnel"]["resolved_tunnel_id"] == "11111111-2222-4333-8444-555555555555"
     assert snapshot["cloudflared"]["mode"] == "systemd"
     assert snapshot["validate"]["checks"][0]["name"] == "docker"
 
@@ -205,6 +221,21 @@ def test_run_tool_action_dispatches_to_existing_commands(monkeypatch) -> None:
     assert calls == [["cloudflared", "config-test"]]
 
 
+def test_run_tool_action_dispatches_tunnel_show(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555"}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_tool_action("tunnel", "show")
+
+    assert payload["ok"] is True
+    assert calls == [["tunnel", "status"]]
+
+
 def test_run_tool_action_dispatches_cloudflared_logs_follow(monkeypatch) -> None:
     calls: list[list[str]] = []
 
@@ -233,6 +264,12 @@ def test_run_tool_action_dispatches_config_init_force(monkeypatch) -> None:
 
     assert payload["ok"] is True
     assert calls == [["config", "init", "--force"]]
+
+
+def test_tool_action_options_include_tunnel_action() -> None:
+    tunnel_options = prompts.tool_action_options("tunnel")
+
+    assert tunnel_options == [("show", "tunnel status", "Refresh configured tunnel resolution and API status detail.")]
 
 
 def test_run_stack_config_view_dispatches_to_existing_command(monkeypatch) -> None:
@@ -614,7 +651,7 @@ def test_textual_app_summary_and_stack_list_text() -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 4
+    app.selected_control_index = 5
     app.stack_config_views["notes.example.com"] = {
         "ok": True,
         "stack": {
@@ -661,6 +698,16 @@ def test_textual_app_config_tool_detail_text() -> None:
             },
         },
         "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+        "tunnel": {
+            "ok": True,
+            "configured_tunnel": "homesrvctl-tunnel",
+            "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+            "resolution_source": "credentials+api",
+            "account_id": "account-123",
+            "api_available": True,
+            "api_status": {"name": "homesrvctl-tunnel", "status": "healthy"},
+            "api_error": None,
+        },
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
@@ -674,6 +721,35 @@ def test_textual_app_config_tool_detail_text() -> None:
     assert "web" in detail
     assert "profiles: 1" in detail
     assert "w/s navigate" in command_bar
+
+
+def test_textual_app_tunnel_tool_detail_text() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": []},
+        "tunnel": {
+            "ok": True,
+            "configured_tunnel": "homesrvctl-tunnel",
+            "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+            "resolution_source": "credentials+api",
+            "account_id": "account-123",
+            "api_available": True,
+            "api_status": {"name": "homesrvctl-tunnel", "status": "healthy"},
+            "api_error": None,
+        },
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 1
+
+    detail = app._detail_text()
+
+    assert "Tunnel Detail" in detail
+    assert "configured tunnel: homesrvctl-tunnel" in detail
+    assert "resolved tunnel id: 11111111-2222-4333-8444-555555555555" in detail
+    assert "api tunnel status: healthy" in detail
 
 
 def test_app_init_template_screen_renders_options() -> None:
@@ -760,7 +836,7 @@ def test_textual_app_app_init_prompt_pushes_modal(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
@@ -780,7 +856,7 @@ def test_textual_app_stack_action_menu_pushes_modal(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
@@ -800,7 +876,7 @@ def test_textual_app_tool_action_menu_pushes_modal(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 1
+    app.selected_control_index = 2
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
@@ -820,7 +896,7 @@ def test_textual_app_stack_action_menu_rejects_unsupported_tool_focus(monkeypatc
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 2
+    app.selected_control_index = 3
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app.action_stack_action_menu()
@@ -837,7 +913,7 @@ def test_textual_app_domain_add_prompt_pushes_modal(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
@@ -857,7 +933,7 @@ def test_textual_app_domain_remove_prompt_pushes_modal(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
@@ -937,7 +1013,7 @@ def test_textual_app_stack_detail_includes_last_action_result() -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     app.stack_config_views["example.com"] = {
         "ok": True,
         "stack": {
@@ -989,7 +1065,7 @@ def test_textual_app_stack_detail_includes_domain_status() -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     app.stack_config_views["example.com"] = {
         "ok": True,
         "stack": {
@@ -1033,7 +1109,7 @@ def test_textual_app_domain_repair_rejects_subdomain(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app.action_domain_repair()
@@ -1050,7 +1126,7 @@ def test_textual_app_domain_add_rejects_subdomain(monkeypatch) -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3
+    app.selected_control_index = 4
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app.action_domain_add_prompt()
@@ -1095,7 +1171,7 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
         },
         "validate": {"ok": False, "checks": [{"name": "docker", "ok": False, "detail": "missing"}]},
     }
-    app.selected_control_index = 1
+    app.selected_control_index = 2
 
     detail = app._detail_text()
     command_bar = app._command_bar_text()
@@ -1127,7 +1203,7 @@ def test_textual_app_tool_detail_includes_last_cloudflared_action() -> None:
         },
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 1
+    app.selected_control_index = 2
     app.last_tool_actions["cloudflared"] = {
         "action": "config-test",
         "payload": {
@@ -1174,7 +1250,7 @@ def test_textual_app_tool_detail_includes_last_cloudflared_logs_action() -> None
         },
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 1
+    app.selected_control_index = 2
     app.last_tool_actions["cloudflared"] = {
         "action": "logs",
         "payload": {
@@ -1253,7 +1329,7 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
     calls: list[tuple[str, str]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 3
+    app.selected_control_index = 4
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1292,7 +1368,7 @@ def test_textual_app_domain_repair_refreshes_status(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 3
+    app.selected_control_index = 4
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1330,7 +1406,7 @@ def test_textual_app_domain_add_refreshes_status(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 3
+    app.selected_control_index = 4
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1368,7 +1444,7 @@ def test_textual_app_domain_remove_refreshes_status(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 3
+    app.selected_control_index = 4
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1406,7 +1482,7 @@ def test_textual_app_app_init_prompt_runs_selected_template(monkeypatch) -> None
     calls: list[tuple[str, str, str | None]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 3
+    app.selected_control_index = 4
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1473,7 +1549,7 @@ def test_textual_app_selected_tool_action_refreshes_status(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
-    app.selected_control_index = 1
+    app.selected_control_index = 2
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
     monkeypatch.setattr(
@@ -1581,9 +1657,9 @@ def test_textual_app_complete_config_init_overwrite_cancel_updates_status(monkey
 
 
 def test_control_row_widget_has_correct_index_and_label() -> None:
-    row = textual_app.ControlRowWidget(2, "Validate")
+    row = textual_app.ControlRowWidget(3, "Validate")
 
-    assert row.row_index == 2
+    assert row.row_index == 3
     assert row.render() == "Validate"
 
 
@@ -1615,17 +1691,17 @@ def test_control_row_widget_click_updates_selected_index(monkeypatch) -> None:
 
         app = textual_app.HomesrvctlTextualApp()
         async with app.run_test(size=(120, 40)) as pilot:
-            # Validate row is index 2 — click it
+            # Validate row is index 3 — click it
             await pilot.click(textual_app.ControlRowWidget, offset=(1, 0))
-            # All three tool rows appear; the first ControlRowWidget is Config (index 0)
-            # We need the third row (Validate, index 2)
+            # All four tool rows appear; the first ControlRowWidget is Config (index 0)
+            # We need the fourth row (Validate, index 3)
             rows = app.query(textual_app.ControlRowWidget)
-            validate_row = [r for r in rows if r.row_index == 2][0]
+            validate_row = [r for r in rows if r.row_index == 3][0]
             await pilot.click(validate_row)
             return app.selected_control_index
 
     result = asyncio.run(_run())
-    assert result == 2
+    assert result == 3
 
 
 def test_control_items_returns_tools_then_stacks() -> None:
@@ -1644,14 +1720,15 @@ def test_control_items_returns_tools_then_stacks() -> None:
     items = app._control_items()
 
     assert items[0] == {"kind": "tool", "tool": "config", "label": "Config"}
-    assert items[1] == {"kind": "tool", "tool": "cloudflared", "label": "Cloudflared"}
-    assert items[2] == {"kind": "tool", "tool": "validate", "label": "Validate"}
-    assert items[3]["kind"] == "stack"
-    assert items[3]["hostname"] == "example.com"
-    assert items[3]["compose"] is True
+    assert items[1] == {"kind": "tool", "tool": "tunnel", "label": "Tunnel"}
+    assert items[2] == {"kind": "tool", "tool": "cloudflared", "label": "Cloudflared"}
+    assert items[3] == {"kind": "tool", "tool": "validate", "label": "Validate"}
     assert items[4]["kind"] == "stack"
-    assert items[4]["hostname"] == "notes.example.com"
-    assert items[4]["compose"] is False
+    assert items[4]["hostname"] == "example.com"
+    assert items[4]["compose"] is True
+    assert items[5]["kind"] == "stack"
+    assert items[5]["hostname"] == "notes.example.com"
+    assert items[5]["compose"] is False
 
 
 def test_detail_pane_title_reflects_focused_tool() -> None:
@@ -1668,12 +1745,15 @@ def test_detail_pane_title_reflects_focused_tool() -> None:
     assert app._detail_pane_title() == "Tool: Config"
 
     app.selected_control_index = 1
-    assert app._detail_pane_title() == "Tool: Cloudflared"
+    assert app._detail_pane_title() == "Tool: Tunnel"
 
     app.selected_control_index = 2
-    assert app._detail_pane_title() == "Tool: Validate"
+    assert app._detail_pane_title() == "Tool: Cloudflared"
 
     app.selected_control_index = 3
+    assert app._detail_pane_title() == "Tool: Validate"
+
+    app.selected_control_index = 4
     assert app._detail_pane_title() == "Stack: example.com"
 
 
@@ -1788,7 +1868,7 @@ def test_detail_button_actions_stack_focus() -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 3  # example.com stack
+    app.selected_control_index = 4  # example.com stack
 
     # Simulate _rebuild_detail_buttons without a running app
     # by calling the inner logic directly
@@ -1813,7 +1893,7 @@ def test_detail_button_actions_cloudflared_focus() -> None:
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
         "validate": {"ok": True, "checks": []},
     }
-    app.selected_control_index = 1  # Cloudflared
+    app.selected_control_index = 2  # Cloudflared
 
     item = app._selected_control_item()
     assert item.get("tool") == "cloudflared"
@@ -1852,7 +1932,7 @@ def test_detail_button_press_dispatches_action(monkeypatch) -> None:
 
         from textual.widgets import Button as TButton
         app = textual_app.HomesrvctlTextualApp()
-        # Validate tool focus (index 2) → Refresh button
+        # Validate tool focus (index 3) → Refresh button
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
             # Click the Refresh button in the detail button strip
@@ -1963,14 +2043,14 @@ def test_summary_card_click_focuses_control_row(monkeypatch) -> None:
         app.selected_control_index = 0  # start on Config
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            # Click the Validate summary card (focus_index=2 → Validate tool)
+            # Click the Validate summary card (focus_index=3 → Validate tool)
             card = app.query_one("#summary_validate", textual_app.SummaryCardWidget)
             await pilot.click(card)
             await pilot.pause()
             return app.selected_control_index
 
     result = asyncio.run(_run())
-    assert result == 2  # Validate is index 2
+    assert result == 3  # Validate is index 3
 
 
 def test_mixed_keyboard_and_mouse_navigation(monkeypatch) -> None:
@@ -2004,7 +2084,8 @@ def test_mixed_keyboard_and_mouse_navigation(monkeypatch) -> None:
             await pilot.pause()
             trace.append(app.selected_control_index)  # initial (0)
 
-            # Keyboard: move down twice → index 2 (Validate)
+            # Keyboard: move down three times → index 3 (Validate)
+            await pilot.press("s")
             await pilot.press("s")
             await pilot.press("s")
             await pilot.pause()
@@ -2012,13 +2093,13 @@ def test_mixed_keyboard_and_mouse_navigation(monkeypatch) -> None:
 
             # Click a stack row to jump to it
             rows = list(app.query(textual_app.ControlRowWidget))
-            target = [r for r in rows if r.row_index == 4]  # second stack
+            target = [r for r in rows if r.row_index == 5]  # second stack
             if target:
                 await pilot.click(target[0])
                 await pilot.pause()
                 trace.append(app.selected_control_index)
 
-            # Keyboard: move up once → index 3 (first stack)
+            # Keyboard: move up once → index 4 (first stack)
             await pilot.press("w")
             await pilot.pause()
             trace.append(app.selected_control_index)
@@ -2026,7 +2107,7 @@ def test_mixed_keyboard_and_mouse_navigation(monkeypatch) -> None:
         return trace
 
     trace = asyncio.run(_run())
-    assert trace == [0, 2, 4, 3]
+    assert trace == [0, 3, 5, 4]
 
 
 def test_click_selection_applies_selected_class(monkeypatch) -> None:
@@ -2053,13 +2134,13 @@ def test_click_selection_applies_selected_class(monkeypatch) -> None:
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
             rows = list(app.query(textual_app.ControlRowWidget))
-            target = [r for r in rows if r.row_index == 2][0]  # Validate
+            target = [r for r in rows if r.row_index == 3][0]  # Validate
             await pilot.click(target)
             await pilot.pause()
             # After click, the Validate row should carry --selected
             rows_after = list(app.query(textual_app.ControlRowWidget))
             validate_selected = any(
-                r.row_index == 2 and "--selected" in r.classes for r in rows_after
+                r.row_index == 3 and "--selected" in r.classes for r in rows_after
             )
             config_not_selected = all(
                 "--selected" not in r.classes for r in rows_after if r.row_index == 0

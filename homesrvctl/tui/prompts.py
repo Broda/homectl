@@ -97,6 +97,10 @@ def tool_action_options(tool: str) -> list[tuple[str, str, str]]:
             ("show", "config show", "Refresh the current config detail view."),
             ("init", "config init", "Write the default starter config if it is missing."),
         ]
+    if tool == "tunnel":
+        return [
+            ("show", "tunnel status", "Refresh configured tunnel resolution and API status detail."),
+        ]
     if tool == "cloudflared":
         return [
             ("config-test", "config-test", "Validate the configured ingress file."),
