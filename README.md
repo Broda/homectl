@@ -119,6 +119,7 @@ profiles:
 `cloudflare_api_token` may also be supplied via the `CLOUDFLARE_API_TOKEN` environment variable.
 It should have at least `Zone:Read` and `DNS:Edit` for the zones you want `homesrvctl domain add` to manage.
 If you want API-backed tunnel inspection via `homesrvctl tunnel status` and API-backed tunnel resolution when no local UUID is available, the token must also be able to read the relevant Cloudflare Tunnel in the owning account.
+Tunnel resolution is now explicit: local UUID from `tunnel_name` or the local `cloudflared` config first, then account-scoped API lookup when credentials context exists. There is no `cloudflared tunnel info` fallback.
 
 Per-stack overrides may also be stored in:
 
