@@ -1864,3 +1864,110 @@ def test_detail_button_press_dispatches_action(monkeypatch) -> None:
 
     asyncio.run(_run())
     assert "refresh" in actions_called
+
+
+def test_stacks_summary_parts_ready() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "list": {"ok": True, "sites": [
+            {"hostname": "example.com", "compose": True},
+            {"hostname": "notes.example.com", "compose": False},
+        ]},
+    }
+
+    status, detail = app._stacks_summary_parts()
+
+    assert "1 ready" in status or "✓" in status
+    assert "2" in detail
+
+
+def test_stacks_summary_parts_error() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {"list": {"ok": False, "error": "list command failed"}}
+
+    status, detail = app._stacks_summary_parts()
+
+    assert "error" in status.lower() or "✗" in status
+
+
+def test_cloudflared_summary_parts_active() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
+    }
+
+    status, detail = app._cloudflared_summary_parts()
+
+    assert "active" in status
+    assert "systemd" in detail
+
+
+def test_cloudflared_summary_parts_inactive() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "cloudflared": {"ok": True, "mode": "docker", "active": False, "detail": "not running"},
+    }
+
+    status, detail = app._cloudflared_summary_parts()
+
+    assert "inactive" in status or "⚠" in status
+
+
+def test_validate_summary_parts_passing() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "validate": {"ok": True, "checks": [
+            {"name": "docker", "ok": True},
+            {"name": "config", "ok": True},
+        ]},
+    }
+
+    status, detail = app._validate_summary_parts()
+
+    assert "passing" in status or "✓" in status
+    assert "2" in detail
+
+
+def test_validate_summary_parts_failing() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "validate": {"ok": False, "checks": [
+            {"name": "docker", "ok": True},
+            {"name": "config", "ok": False},
+        ]},
+    }
+
+    status, detail = app._validate_summary_parts()
+
+    assert "failing" in status or "✗" in status
+
+
+def test_summary_card_click_focuses_control_row(monkeypatch) -> None:
+    import asyncio
+
+    async def _run() -> int:
+        snapshot = {
+            "generated_at": "2026-04-08 12:00:00",
+            "config": {"ok": True, "global": {"profiles": {}}},
+            "list": {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
+            "validate": {"ok": True, "checks": []},
+        }
+
+        def fake_build_snapshot():  # noqa: ANN202
+            return snapshot
+
+        monkeypatch.setattr(data, "build_dashboard_snapshot", fake_build_snapshot)
+
+        app = textual_app.HomesrvctlTextualApp()
+        app.selected_control_index = 0  # start on Config
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            # Click the Validate summary card (focus_index=2 → Validate tool)
+            card = app.query_one("#summary_validate", textual_app.SummaryCardWidget)
+            await pilot.click(card)
+            await pilot.pause()
+            return app.selected_control_index
+
+    result = asyncio.run(_run())
+    assert result == 2  # Validate is index 2

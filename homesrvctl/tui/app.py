@@ -32,6 +32,67 @@ from homesrvctl.tui.prompts import (
 from homesrvctl.utils import validate_bare_domain
 
 
+class SummaryCardWidget(Widget, can_focus=False):
+    """Clickable summary card in the top strip. Click focuses the related control row."""
+
+    DEFAULT_CSS = """
+    SummaryCardWidget {
+        width: 1fr;
+        height: 1fr;
+        margin-right: 1;
+        padding: 1 2;
+        background: #0d161b;
+        border: round #1fd6c1;
+        color: #d7fff7;
+        layout: vertical;
+    }
+    SummaryCardWidget:last-of-type {
+        margin-right: 0;
+    }
+    SummaryCardWidget:hover {
+        border: round #ffcf5a;
+    }
+    SummaryCardWidget .card_title {
+        color: #ffcf5a;
+        text-style: bold;
+        height: 1;
+    }
+    SummaryCardWidget .card_status {
+        height: 1;
+    }
+    SummaryCardWidget .card_detail {
+        color: #8ccfc5;
+        height: 1fr;
+    }
+    """
+
+    def __init__(self, widget_id: str, title: str, focus_index: int) -> None:
+        super().__init__(id=widget_id)
+        self._title = title
+        self._focus_index = focus_index
+        self._status = ""
+        self._detail = ""
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._title, classes="card_title")
+        yield Static("", id=f"{self.id}_status", classes="card_status")
+        yield Static("", id=f"{self.id}_detail", classes="card_detail")
+
+    def update_content(self, status: str, detail: str) -> None:
+        self._status = status
+        self._detail = detail
+        self.query_one(f"#{self.id}_status", Static).update(status)
+        self.query_one(f"#{self.id}_detail", Static).update(detail)
+
+    def on_click(self, event: Click) -> None:  # noqa: ARG002
+        app = self.app
+        if isinstance(app, HomesrvctlTextualApp):
+            items = app._control_items()
+            target = max(0, min(self._focus_index, len(items) - 1))
+            app.selected_control_index = target
+            app._render()
+
+
 class ControlSectionLabel(Widget):
     """Non-clickable section header in the controls pane."""
 
@@ -125,26 +186,6 @@ class HomesrvctlTextualApp(App[None]):
         width: 100%;
         height: 9;
         padding: 1 2 0 2;
-    }
-
-    .summary_card {
-        width: 1fr;
-        height: 1fr;
-        margin-right: 1;
-        padding: 1 2;
-        background: #0d161b;
-        border: round #1fd6c1;
-        color: #d7fff7;
-    }
-
-    .summary_card:last-child {
-        margin-right: 0;
-    }
-
-    .card_title {
-        color: #ffcf5a;
-        text-style: bold;
-        margin-bottom: 1;
     }
 
     #body {
@@ -340,9 +381,9 @@ class HomesrvctlTextualApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal(id="summary_strip"):
-            yield Static("", id="summary_stacks", classes="summary_card")
-            yield Static("", id="summary_cloudflared", classes="summary_card")
-            yield Static("", id="summary_validate", classes="summary_card")
+            yield SummaryCardWidget("summary_stacks", "Stacks", focus_index=3)
+            yield SummaryCardWidget("summary_cloudflared", "Cloudflared", focus_index=1)
+            yield SummaryCardWidget("summary_validate", "Validate", focus_index=2)
         with Horizontal(id="body"):
             with Vertical(id="controls_pane"):
                 yield Static("Controls", classes="pane_title")
@@ -630,9 +671,12 @@ class HomesrvctlTextualApp(App[None]):
         self._render()
 
     def _render(self) -> None:
-        self.query_one("#summary_stacks", Static).update(self._summary_card("Stacks", self._stacks_summary()))
-        self.query_one("#summary_cloudflared", Static).update(self._summary_card("Cloudflared", self._cloudflared_summary()))
-        self.query_one("#summary_validate", Static).update(self._summary_card("Validate", self._validate_summary()))
+        stacks_status, stacks_detail = self._stacks_summary_parts()
+        self.query_one("#summary_stacks", SummaryCardWidget).update_content(stacks_status, stacks_detail)
+        cf_status, cf_detail = self._cloudflared_summary_parts()
+        self.query_one("#summary_cloudflared", SummaryCardWidget).update_content(cf_status, cf_detail)
+        val_status, val_detail = self._validate_summary_parts()
+        self.query_one("#summary_validate", SummaryCardWidget).update_content(val_status, val_detail)
         self._rebuild_controls()
         self.query_one("#detail_pane_title", Static).update(self._detail_pane_title())
         self.query_one("#detail_box", Static).update(self._detail_text())
@@ -703,9 +747,6 @@ class HomesrvctlTextualApp(App[None]):
             if index == self.selected_control_index:
                 row.add_class("--selected")
             controls_box.mount(row)
-
-    def _summary_card(self, title: str, detail: str) -> str:
-        return f"{title}\n\n{detail}"
 
     def _control_items(self) -> list[dict[str, object]]:
         items: list[dict[str, object]] = [
@@ -781,24 +822,29 @@ class HomesrvctlTextualApp(App[None]):
         mode = f"auto refresh {self.refresh_seconds:g}s" if self.refresh_seconds > 0 else "manual refresh"
         return f"w/s navigate  ·  r refresh  ·  q quit  ·  status: {self.status_message}  ·  {mode}"
 
-    def _stacks_summary(self) -> str:
+    def _stacks_summary_parts(self) -> tuple[str, str]:
         payload = self.snapshot.get("list")
         if not isinstance(payload, dict):
-            return "Unavailable"
+            return "○ unavailable", ""
         if not payload.get("ok"):
-            return f"Error\n\n{payload.get('error', 'unknown error')}"
+            return "[red]✗ error[/red]", str(payload.get("error", "unknown error"))
         sites = payload.get("sites", [])
         if not sites:
-            return "No stacks\n\nNothing scaffolded yet."
+            return "○ none ready", "Nothing scaffolded yet."
         compose_ready = sum(1 for site in sites if site.get("compose"))
-        return f"{len(sites)} stack(s)\n\n{compose_ready} ready for compose actions"
+        status = f"[green]✓ {compose_ready} ready[/green]" if compose_ready else "○ none ready"
+        return status, f"{len(sites)} stack(s)"
 
-    def _cloudflared_summary(self) -> str:
+    def _cloudflared_summary_parts(self) -> tuple[str, str]:
         payload = self.snapshot.get("cloudflared")
         if not isinstance(payload, dict):
-            return "Unavailable"
-        runtime = payload.get("mode", "unknown")
-        active = "active" if payload.get("active") else "inactive"
+            return "○ unavailable", ""
+        active = payload.get("active")
+        runtime = str(payload.get("mode", "unknown"))
+        if active:
+            status = "[green]✓ active[/green]"
+        else:
+            status = "[yellow]⚠ inactive[/yellow]"
         config_validation = payload.get("config_validation")
         if isinstance(config_validation, dict):
             issues = config_validation.get("issues", [])
@@ -807,22 +853,26 @@ class HomesrvctlTextualApp(App[None]):
                 advisory_count = sum(
                     1 for issue in issues if isinstance(issue, dict) and issue.get("severity") == "advisory"
                 )
-                return f"{runtime} ({active})\n\n{blocking_count} blocking, {advisory_count} advisory"
+                if blocking_count:
+                    status = f"[yellow]⚠ {blocking_count} warnings[/yellow]"
+                return status, f"{runtime} · {advisory_count} advisory"
             if config_validation.get("warnings"):
-                return f"{runtime} ({active})\n\n{len(config_validation['warnings'])} warning(s)"
-        return f"{runtime} ({active})\n\n{payload.get('detail', 'no detail')}"
+                count = len(config_validation["warnings"])
+                status = f"[yellow]⚠ {count} warnings[/yellow]"
+                return status, runtime
+        return status, f"{runtime} · {payload.get('detail', 'no detail')}"
 
-    def _validate_summary(self) -> str:
+    def _validate_summary_parts(self) -> tuple[str, str]:
         payload = self.snapshot.get("validate")
         if not isinstance(payload, dict):
-            return "Unavailable"
+            return "○ unavailable", ""
         checks = payload.get("checks", [])
         failures = [check for check in checks if not check.get("ok")]
         if not checks:
-            return "No checks\n\nValidation returned no checks."
+            return "○ no checks", "Validation returned no checks."
         if failures:
-            return f"{len(checks)} checks\n\n{len(failures)} failing"
-        return f"{len(checks)} checks\n\nAll passing"
+            return f"[red]✗ {len(failures)} failing[/red]", f"{len(checks)} checks"
+        return "[green]✓ all passing[/green]", f"{len(checks)} checks"
 
     def _stack_detail_text(self, hostname: str, compose: bool) -> str:
         config_view = self.stack_config_views.get(hostname)
