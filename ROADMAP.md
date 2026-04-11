@@ -1243,6 +1243,94 @@ Status: planned
 
 Tasks:
 - Decide whether the current split between `site init` and `app init --template static` should remain permanent.
+
+## Milestone 9: Full TUI Creation Flows
+
+Status: planned
+
+Goal: make `homesrvctl tui` fully functional for common creation and onboarding work, not only inspection and operations on already-known stacks.
+
+Why this is separate from Milestone 5:
+- Milestone 5 was the Textual migration and command-coverage baseline.
+- The shipped TUI can already launch several mutations for a focused stack.
+- What is still missing is first-class creation flow support when the target stack or domain does not already exist in the current dashboard state.
+
+### 9.1 Add stack-creation entry flows to the TUI
+
+Status: planned
+
+Tasks:
+- Make it possible to create a new stack from the TUI without first scaffolding it in the CLI.
+- Keep the TUI layered over the existing `site init` and `app init` commands rather than inventing a second creation backend.
+
+Subtasks:
+- Add a global creation affordance in the TUI, not tied only to a currently focused existing stack.
+- Add a prompt flow for:
+  - hostname entry
+  - creation mode selection:
+    - `site init`
+    - `app init`
+  - app-template selection for `app init`
+  - optional routing/profile inputs that already exist in the CLI:
+    - `profile`
+    - `docker_network`
+    - `traefik_url`
+- Keep confirmation and overwrite behavior aligned with the underlying CLI.
+- Keep the created stack visible in the dashboard immediately after a successful run.
+
+Current baseline:
+- The TUI can already run `site init` and `app init`, but only from a focused stack row or guided action flow that starts from the current dashboard context.
+- The TUI does not yet expose a first-class “create new site/app” flow for hostnames that are not already represented in the current stack list.
+
+### 9.2 Add domain-onboarding creation flows to the TUI
+
+Status: planned
+
+Tasks:
+- Make it possible to onboard a new apex domain from the TUI without dropping back to the CLI.
+- Keep the TUI aligned with the existing `domain add` behavior and diagnostics.
+
+Subtasks:
+- Add a prompt flow for:
+  - apex domain entry
+  - optional dry-run choice
+  - optional `--restart-cloudflared` choice
+- Decide how the TUI should relate domain onboarding to stack context:
+  - start from an existing apex stack
+  - start from a new hostname/domain entry flow
+  - or support both paths explicitly
+- Keep post-run DNS/ingress status visible in the detail pane after the mutation completes.
+- Reuse the existing `domain status` and `tunnel status` surfaces for follow-up visibility.
+
+Current baseline:
+- The TUI can already run `domain add`, `domain repair`, and `domain remove` for focused apex stacks.
+- The TUI does not yet provide a first-class creation-oriented domain entry flow when the operator starts from “I want to onboard a new domain” rather than from an already focused apex stack.
+
+### 9.3 Define the operator model for “fully functional” TUI creation
+
+Status: planned
+
+Tasks:
+- Decide which common creation jobs must be possible end-to-end from the TUI before calling it “fully functional”.
+- Avoid turning the TUI into a second product surface with divergent semantics.
+
+Subtasks:
+- Define the minimum end-to-end flows:
+  - create static site stack
+  - create app stack from template
+  - onboard apex domain
+  - inspect resulting routing/domain state
+  - run first `up` / verification actions
+- Decide which creation inputs remain CLI-only for now, if any.
+- Document which flows are intentionally out of scope:
+  - bulk/multi-site creation
+  - remote creation against another host
+  - generalized form-builder style config editing
+- Add regression coverage for:
+  - prompt validation
+  - guided creation dispatch
+  - refresh/reselection after creation
+  - error rendering when the underlying CLI rejects the requested creation
 - Avoid accidental convergence or deprecation without an explicit user-facing decision.
 
 Subtasks:
