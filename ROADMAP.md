@@ -1246,7 +1246,7 @@ Tasks:
 
 ## Milestone 9: Full TUI Creation Flows
 
-Status: in progress
+Status: completed
 
 Goal: make `homesrvctl tui` fully functional for common creation and onboarding work, not only inspection and operations on already-known stacks.
 
@@ -1308,7 +1308,7 @@ Current baseline:
 
 ### 9.3 Define the operator model for “fully functional” TUI creation
 
-Status: planned
+Status: completed
 
 Tasks:
 - Decide which common creation jobs must be possible end-to-end from the TUI before calling it “fully functional”.
@@ -1339,6 +1339,12 @@ Subtasks:
   - keep both public commands with shared internals
   - deprecate one command surface in a later major slice
   - keep both and document the difference permanently
+
+Decision:
+- Treat the TUI as fully functional for common local onboarding once it can create a static site stack, create an app stack from a shipped template, onboard an apex domain, surface resulting routing/domain state, and run first local `up` / verification actions.
+- Keep stack scaffold `--dry-run` and explicit `--force` entry CLI-first for now; the TUI may confirm overwrites after a CLI rejection, but it does not need to mirror every scaffold flag as an input control.
+- Keep bulk creation, remote-host creation, and generalized config editing out of scope for the TUI.
+- Keep `site init` and `app init --template static` as distinct public surfaces for now and document the difference explicitly rather than converging them implicitly.
 
 ## Cross-Cutting Working Rules
 

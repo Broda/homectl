@@ -15,6 +15,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added a global TUI domain-onboarding flow that can run `domain add` for a new apex domain without requiring an existing focused stack row.
 - Added sequential TUI prompts for apex-domain entry plus optional `domain add` `--dry-run` and `--restart-cloudflared` choices.
 - Added post-run TUI follow-up visibility for global domain onboarding by surfacing the last domain-add result and `domain status` view in the `Tunnel` detail pane when no matching local stack row exists.
+- Defined the current “fully functional” TUI creation contract for common local onboarding, including what remains intentionally CLI-only and which broader creation/editing workflows stay out of scope.
 - Added `homesrvctl tunnel status` to report the configured tunnel reference, resolved tunnel UUID, resolution source, and Cloudflare API tunnel status when account-scoped tunnel inspection is available.
 - Added `Tunnel` as a first-class TUI tool item so `homesrvctl tui` can inspect the current `tunnel status` output and rerun tunnel inspection from the guided tool menu.
 - TUI mouse support: the control pane rows, summary cards, modal option lists, confirm prompts, and a new detail-pane action button strip are now real Textual widgets that respond to clicks. Mouse and keyboard selection share the same highlighted row, every click target is also reachable by keyboard, and clicks are quietly ignored on terminals that do not report mouse events.

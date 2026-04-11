@@ -360,6 +360,19 @@ homesrvctl up example.com --dry-run
 - `domain remove` removes apex and wildcard DNS records and matching `cloudflared` ingress entries for the requested zone.
 - pass `--restart-cloudflared` to have domain-changing commands restart `cloudflared` automatically when a supported runtime is detected
 - without that flag, restart `cloudflared` manually after ingress changes
+- The TUI creation surface is now considered complete for common local onboarding when it can:
+  - create a static site stack
+  - create an app stack from a shipped template
+  - onboard an apex domain
+  - inspect resulting routing and domain state
+  - run first `up`, `doctor`, `domain repair`, and related verification actions
+- Some creation inputs remain intentionally CLI-first for now:
+  - stack scaffold `--dry-run`
+  - explicit scaffold `--force` as a first-choice prompt, though the TUI does surface overwrite confirmation when files already exist
+- Some flows remain intentionally out of scope for the TUI:
+  - bulk or multi-site creation
+  - remote creation against another host
+  - generalized form-style config editing
 - `site init` and `app init` generate Traefik-safe router and service identifiers from the hostname.
 - All generated Compose files join the external Docker network configured in `docker_network`.
 - `site init` and `app init` can write stack-local `homesrvctl.yml` overrides for `docker_network` and `traefik_url`.
