@@ -63,6 +63,36 @@ class TunnelInspection:
     resolution_error: str | None = None
 
 
+def summarize_tunnel_api_detail(
+    *,
+    resolved_tunnel_id: str | None,
+    api_available: bool,
+    api_status: TunnelStatus | None,
+    api_error: str | None,
+) -> tuple[str | None, bool]:
+    """Return operator-facing API inspection detail plus whether it is warning-grade.
+
+    Some local environments intentionally keep the cloudflared credentials file
+    unreadable to the current user. If the tunnel ID is already resolved through
+    local config, that should not look like a tunnel failure in the CLI or TUI.
+    """
+
+    if api_status is not None:
+        return None, False
+    if api_error:
+        normalized = api_error.lower()
+        if (
+            resolved_tunnel_id is not None
+            and "unable to read cloudflared credentials file" in normalized
+            and "permission denied" in normalized
+        ):
+            return "account-scoped tunnel inspection unavailable from current user permissions", False
+        return api_error, True
+    if not api_available:
+        return "account-scoped tunnel inspection unavailable from local cloudflared credentials", False
+    return None, False
+
+
 class CloudflareApiClient:
     def __init__(self, api_token: str) -> None:
         token = api_token.strip()
@@ -113,12 +143,14 @@ class CloudflareApiClient:
         existing = self._list_dns_records(zone_id, record_name)
         if not existing:
             return ApiPlan("create", record_name, "CNAME", content)
-        if len(existing) > 1:
+        classification = _classify_dns_records(existing, expected_content=content)
+        if classification["conflicts"]:
             raise CloudflareApiError(
                 f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
             )
-
-        record = existing[0]
+        if classification["matching_cname"] is not None:
+            return ApiPlan("noop", record_name, "CNAME", content)
+        record = classification["managed_record"] or existing[0]
         current_type = str(record.get("type", ""))
         current_content = str(record.get("content", ""))
         current_proxied = bool(record.get("proxied"))
@@ -142,12 +174,14 @@ class CloudflareApiClient:
             )
             return ApiPlan("create", record_name, "CNAME", content)
 
-        if len(existing) > 1:
+        classification = _classify_dns_records(existing, expected_content=content)
+        if classification["conflicts"]:
             raise CloudflareApiError(
                 f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
             )
-
-        record = existing[0]
+        if classification["matching_cname"] is not None:
+            return ApiPlan("noop", record_name, "CNAME", content)
+        record = classification["managed_record"] or existing[0]
         record_id = str(record.get("id", "")).strip()
         current_type = str(record.get("type", ""))
         current_content = str(record.get("content", ""))
@@ -172,12 +206,14 @@ class CloudflareApiClient:
         existing = self._list_dns_records(zone_id, record_name)
         if not existing:
             return ApiPlan("noop", record_name, "DNS", "")
-        if len(existing) > 1:
+        classification = _classify_dns_records(existing)
+        if classification["conflicts"]:
             raise CloudflareApiError(
                 f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
             )
-
-        record = existing[0]
+        record = classification["managed_record"]
+        if record is None:
+            return ApiPlan("noop", record_name, "DNS", "")
         return ApiPlan(
             "delete",
             record_name,
@@ -189,12 +225,14 @@ class CloudflareApiClient:
         existing = self._list_dns_records(zone_id, record_name)
         if not existing:
             return ApiPlan("noop", record_name, "DNS", "")
-        if len(existing) > 1:
+        classification = _classify_dns_records(existing)
+        if classification["conflicts"]:
             raise CloudflareApiError(
                 f"multiple DNS records exist for {record_name}; clean them up manually before retrying"
             )
-
-        record = existing[0]
+        record = classification["managed_record"]
+        if record is None:
+            return ApiPlan("noop", record_name, "DNS", "")
         record_id = str(record.get("id", "")).strip()
         record_type = str(record.get("type", "")).strip() or "DNS"
         record_content = str(record.get("content", "")).strip()
@@ -213,7 +251,8 @@ class CloudflareApiClient:
                 matches_expected=False,
                 detail="record missing",
             )
-        if len(existing) > 1:
+        classification = _classify_dns_records(existing, expected_content=expected_content)
+        if classification["conflicts"]:
             rendered_records = [_render_dns_record(record) for record in existing]
             return DnsRecordStatus(
                 record_name=record_name,
@@ -227,8 +266,24 @@ class CloudflareApiClient:
                 detail=f"multiple conflicting records exist: {', '.join(rendered_records)}",
                 records=_records_to_status_records(existing),
             )
+        if classification["matching_cname"] is not None:
+            ancillary_records = classification["ancillary_records"]
+            detail = _describe_single_dns_record("CNAME", expected_content, True)
+            if ancillary_records:
+                detail += "; ancillary records present: " + ", ".join(_render_dns_record(record) for record in ancillary_records)
+            return DnsRecordStatus(
+                record_name=record_name,
+                exists=True,
+                record_type="CNAME",
+                content=expected_content,
+                proxied=True,
+                matches_expected=True,
+                record_count=len(existing),
+                detail=detail,
+                records=_records_to_status_records(existing),
+            )
 
-        record = existing[0]
+        record = classification["managed_record"] or existing[0]
         record_type = str(record.get("type", "")).strip()
         content = str(record.get("content", "")).strip()
         proxied = bool(record.get("proxied"))
@@ -512,3 +567,41 @@ def _records_to_status_records(records: list[dict[str, object]]) -> list[dict[st
             }
         )
     return rendered
+
+
+def _classify_dns_records(
+    records: list[dict[str, object]],
+    *,
+    expected_content: str | None = None,
+) -> dict[str, object]:
+    routing_types = {"A", "AAAA", "CNAME"}
+    ancillary_types = {"MX", "TXT", "CAA"}
+    routing_records = [record for record in records if str(record.get("type", "")).strip().upper() in routing_types]
+    ancillary_records = [record for record in records if str(record.get("type", "")).strip().upper() in ancillary_types]
+    unknown_records = [
+        record
+        for record in records
+        if str(record.get("type", "")).strip().upper() not in routing_types | ancillary_types
+    ]
+    matching_cname = None
+    if expected_content is not None:
+        for record in routing_records:
+            if (
+                str(record.get("type", "")).strip().upper() == "CNAME"
+                and str(record.get("content", "")).strip() == expected_content
+                and bool(record.get("proxied"))
+            ):
+                matching_cname = record
+                break
+
+    nonmatching_routing_records = [record for record in routing_records if record is not matching_cname]
+    conflicts = len(nonmatching_routing_records) > 1 or bool(unknown_records)
+    managed_record = matching_cname if matching_cname is not None else (nonmatching_routing_records[0] if nonmatching_routing_records else None)
+    return {
+        "routing_records": routing_records,
+        "ancillary_records": ancillary_records,
+        "unknown_records": unknown_records,
+        "matching_cname": matching_cname,
+        "managed_record": managed_record,
+        "conflicts": conflicts,
+    }

@@ -23,6 +23,7 @@ from homesrvctl.tui.data import (
     summarize_stack_action,
     summarize_tool_action,
 )
+from homesrvctl.cloudflare import summarize_tunnel_api_detail
 from homesrvctl.tui.prompts import (
     AppInitTemplateScreen,
     BooleanChoiceScreen,
@@ -1195,9 +1196,15 @@ class HomesrvctlTextualApp(App[None]):
                     f"api tunnel status: {api_status.get('status', 'unknown')}",
                 ]
             )
-        api_error = payload.get("api_error")
-        if api_error:
-            lines.extend(["", f"api detail: {api_error}"])
+        api_detail, is_warning = summarize_tunnel_api_detail(
+            resolved_tunnel_id=str(payload.get("resolved_tunnel_id")) if payload.get("resolved_tunnel_id") else None,
+            api_available=bool(payload.get("api_available")),
+            api_status=api_status if isinstance(api_status, dict) else None,
+            api_error=str(payload.get("api_error")) if payload.get("api_error") else None,
+        )
+        if api_detail:
+            label = "api detail" if is_warning else "api note"
+            lines.extend(["", f"{label}: {api_detail}"])
         cached = self.last_tool_actions.get("tunnel")
         if isinstance(cached, dict):
             action = cached.get("action")

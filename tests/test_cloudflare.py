@@ -61,6 +61,29 @@ def test_apply_dns_record_updates_existing_record(monkeypatch) -> None:
     }
 
 
+def test_apply_dns_record_noops_when_expected_cname_coexists_with_mail_records(monkeypatch) -> None:
+    client = CloudflareApiClient("test-token")
+    seen: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def fake_request_json(method: str, path: str, body: dict[str, object] | None = None) -> dict[str, object]:
+        seen.append((method, path, body))
+        return {
+            "success": True,
+            "result": [
+                {"id": "record-123", "name": "example.com", "type": "CNAME", "content": "uuid.cfargotunnel.com", "proxied": True},
+                {"id": "record-234", "name": "example.com", "type": "MX", "content": "route1.mx.cloudflare.net", "proxied": False},
+                {"id": "record-345", "name": "example.com", "type": "TXT", "content": "\"v=spf1 include:_spf.mx.cloudflare.net ~all\"", "proxied": False},
+            ],
+        }
+
+    monkeypatch.setattr(client, "_request_json", fake_request_json)
+
+    result = client.apply_dns_record("zone-123", "example.com", "uuid.cfargotunnel.com")
+
+    assert result.action == "noop"
+    assert seen == [("GET", "/zones/zone-123/dns_records?name=example.com", None)]
+
+
 def test_apply_dns_record_removal_deletes_existing_record(monkeypatch) -> None:
     client = CloudflareApiClient("test-token")
     seen: list[tuple[str, str, dict[str, object] | None]] = []
@@ -89,6 +112,53 @@ def test_apply_dns_record_removal_deletes_existing_record(monkeypatch) -> None:
     assert result.action == "delete"
     assert seen[1][0] == "DELETE"
     assert seen[1][1] == "/zones/zone-123/dns_records/record-123"
+
+
+def test_apply_dns_record_removal_keeps_mail_records_and_deletes_matching_cname(monkeypatch) -> None:
+    client = CloudflareApiClient("test-token")
+    seen: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def fake_request_json(method: str, path: str, body: dict[str, object] | None = None) -> dict[str, object]:
+        seen.append((method, path, body))
+        if method == "GET":
+            return {
+                "success": True,
+                "result": [
+                    {"id": "record-123", "name": "example.com", "type": "CNAME", "content": "uuid.cfargotunnel.com", "proxied": True},
+                    {"id": "record-234", "name": "example.com", "type": "MX", "content": "route1.mx.cloudflare.net", "proxied": False},
+                ],
+            }
+        return {"success": True, "result": {"id": "record-123"}}
+
+    monkeypatch.setattr(client, "_request_json", fake_request_json)
+
+    result = client.apply_dns_record_removal("zone-123", "example.com")
+
+    assert result.action == "delete"
+    assert seen[1] == ("DELETE", "/zones/zone-123/dns_records/record-123", None)
+
+
+def test_get_dns_record_status_allows_expected_cname_with_mail_records(monkeypatch) -> None:
+    client = CloudflareApiClient("test-token")
+
+    monkeypatch.setattr(
+        client,
+        "_request_json",
+        lambda method, path, body=None: {
+            "success": True,
+            "result": [
+                {"id": "record-123", "name": "example.com", "type": "CNAME", "content": "uuid.cfargotunnel.com", "proxied": True},
+                {"id": "record-234", "name": "example.com", "type": "MX", "content": "route1.mx.cloudflare.net", "proxied": False},
+                {"id": "record-345", "name": "example.com", "type": "TXT", "content": "\"v=spf1 include:_spf.mx.cloudflare.net ~all\"", "proxied": False},
+            ],
+        },
+    )
+
+    status = client.get_dns_record_status("zone-123", "example.com", "uuid.cfargotunnel.com")
+
+    assert status.matches_expected is True
+    assert status.multiple_records is False
+    assert "ancillary records present" in status.detail
 
 
 def test_plan_dns_record_removal_noop(monkeypatch) -> None:

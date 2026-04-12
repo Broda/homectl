@@ -4,7 +4,7 @@ import json
 
 import typer
 
-from homesrvctl.cloudflare import CloudflareApiError, inspect_configured_tunnel
+from homesrvctl.cloudflare import CloudflareApiError, inspect_configured_tunnel, summarize_tunnel_api_detail
 from homesrvctl.config import load_config
 from homesrvctl.utils import info, success, warn, with_json_schema
 
@@ -76,10 +76,18 @@ def tunnel_status(
         if inspection.api_status is not None:
             api_name = inspection.api_status.name or inspection.configured_tunnel
             info(f"api status: {inspection.api_status.status or 'unknown'} ({api_name})")
-        elif inspection.api_error:
-            warn(f"api detail: {inspection.api_error}")
-        elif not inspection.api_available:
-            warn("api detail: account-scoped tunnel inspection unavailable from local cloudflared credentials")
+        else:
+            api_detail, is_warning = summarize_tunnel_api_detail(
+                resolved_tunnel_id=inspection.resolved_tunnel_id,
+                api_available=inspection.api_available,
+                api_status=inspection.api_status,
+                api_error=inspection.api_error,
+            )
+            if api_detail:
+                if is_warning:
+                    warn(f"api detail: {api_detail}")
+                else:
+                    info(f"api note: {api_detail}")
 
     if not ok:
         raise typer.Exit(code=1)

@@ -808,6 +808,33 @@ def test_textual_app_tunnel_tool_detail_text() -> None:
     assert "api tunnel status: healthy" in detail
 
 
+def test_textual_app_tunnel_detail_downgrades_credentials_permission_denied() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": []},
+        "tunnel": {
+            "ok": True,
+            "configured_tunnel": "homesrvctl-tunnel",
+            "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+            "resolution_source": "cloudflared-config:tunnel",
+            "account_id": None,
+            "api_available": False,
+            "api_status": None,
+            "api_error": "unable to read cloudflared credentials file /etc/cloudflared/example.json: [Errno 13] Permission denied",
+        },
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.selected_control_index = 1
+
+    detail = app._detail_text()
+
+    assert "api note: account-scoped tunnel inspection unavailable from current user permissions" in detail
+    assert "Permission denied" not in detail
+
+
 def test_app_init_template_screen_renders_options() -> None:
     screen = prompts.AppInitTemplateScreen()
 

@@ -1863,7 +1863,43 @@ def test_tunnel_status_text_reports_missing_api_context(monkeypatch, tmp_path: P
     assert result.exit_code == 0, result.output
     assert "configured tunnel: homesrvctl-tunnel" in result.output
     assert "resolved tunnel id: 11111111-2222-4333-8444-555555555555" in result.output
-    assert "api detail: account-scoped tunnel inspection unavailable" in result.output
+    assert "api note: account-scoped tunnel inspection unavailable from local cloudflared credentials" in result.output
+
+
+def test_tunnel_status_text_downgrades_credentials_permission_denied(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import tunnel_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    monkeypatch.setattr(
+        tunnel_cmd,
+        "inspect_configured_tunnel",
+        lambda config: type(
+            "Inspection",
+            (),
+            {
+                "configured_tunnel": "homesrvctl-tunnel",
+                "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555",
+                "resolution_source": "cloudflared-config:tunnel",
+                "account_id": None,
+                "api_available": False,
+                "api_status": None,
+                "api_error": "unable to read cloudflared credentials file /etc/cloudflared/example.json: [Errno 13] Permission denied",
+                "resolution_error": None,
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["tunnel", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert "configured tunnel: homesrvctl-tunnel" in result.output
+    assert "api note: account-scoped tunnel inspection unavailable from current user permissions" in result.output
+    assert "Permission denied" not in result.output
 
 
 def test_tunnel_status_json_fails_when_unresolved(monkeypatch, tmp_path: Path) -> None:
@@ -2415,6 +2451,36 @@ def test_domain_repair_reports_repaired(monkeypatch, tmp_path: Path) -> None:
         "tunnel_cname_target",
         lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
     )
+    monkeypatch.setattr(
+        domain_cmd,
+        "_build_domain_ingress_statuses",
+        lambda config_path, domain, expected_service: [
+            {
+                "hostname": domain,
+                "probe_hostname": domain,
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": domain,
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+            {
+                "hostname": f"*.{domain}",
+                "probe_hostname": f"_homesrvctl-probe.{domain}",
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": f"*.{domain}",
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+        ],
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["domain", "repair", "example.com"])
@@ -2468,6 +2534,36 @@ def test_domain_repair_json_error(monkeypatch, tmp_path: Path) -> None:
         domain_cmd,
         "tunnel_cname_target",
         lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+    monkeypatch.setattr(
+        domain_cmd,
+        "_build_domain_ingress_statuses",
+        lambda config_path, domain, expected_service: [
+            {
+                "hostname": domain,
+                "probe_hostname": domain,
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": domain,
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+            {
+                "hostname": f"*.{domain}",
+                "probe_hostname": f"_homesrvctl-probe.{domain}",
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": f"*.{domain}",
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+        ],
     )
 
     runner = CliRunner()
@@ -2842,6 +2938,36 @@ def test_domain_status_reports_ok(monkeypatch, tmp_path: Path) -> None:
         "tunnel_cname_target",
         lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
     )
+    monkeypatch.setattr(
+        domain_cmd,
+        "_build_domain_ingress_statuses",
+        lambda config_path, domain, expected_service: [
+            {
+                "hostname": domain,
+                "probe_hostname": domain,
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": domain,
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+            {
+                "hostname": f"*.{domain}",
+                "probe_hostname": f"_homesrvctl-probe.{domain}",
+                "exists": True,
+                "duplicate": False,
+                "service": expected_service,
+                "matches_expected": True,
+                "effective_hostname": f"*.{domain}",
+                "effective_service": expected_service,
+                "shadowed": False,
+                "detail": expected_service,
+            },
+        ],
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["domain", "status", "example.com"])
@@ -3099,6 +3225,83 @@ def test_domain_status_reports_multiple_dns_records_as_manual_fix(monkeypatch, t
     assert result.exit_code == 1, result.output
     assert "FAIL DNS example.com: multiple conflicting records exist:" in result.output
     assert "Repairable by homesrvctl: no; manual cleanup is likely required first" in result.output
+
+
+def test_domain_status_allows_expected_cname_with_mail_records(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, object]:
+            return {"id": "zone-123", "account": {"id": "account-123"}}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            if record_name == "example.com":
+                return type(
+                    "Status",
+                    (),
+                    {
+                        "record_name": record_name,
+                        "exists": True,
+                        "record_type": "CNAME",
+                        "content": expected_content,
+                        "proxied": True,
+                        "matches_expected": True,
+                        "multiple_records": False,
+                        "record_count": 3,
+                        "detail": "CNAME -> 11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied); ancillary records present: MX -> route1.mx.cloudflare.net, TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"",
+                        "records": [
+                            {"type": "CNAME", "content": expected_content, "proxied": True},
+                            {"type": "MX", "content": "route1.mx.cloudflare.net", "proxied": False},
+                            {"type": "TXT", "content": "\"v=spf1 include:_spf.mx.cloudflare.net ~all\"", "proxied": False},
+                        ],
+                    },
+                )()
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                    "multiple_records": False,
+                    "record_count": 1,
+                    "detail": f"CNAME -> {expected_content} (proxied)",
+                    "records": [{"type": "CNAME", "content": expected_content, "proxied": True}],
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["overall"] == "partial"
+    assert payload["dns"][0]["matches_expected"] is True
+    assert payload["dns"][0]["multiple_records"] is False
 
 
 def test_domain_status_reports_wrong_dns_type_with_explicit_detail(monkeypatch, tmp_path: Path) -> None:
