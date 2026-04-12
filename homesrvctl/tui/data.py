@@ -386,6 +386,15 @@ def normalize_check_detail(name: str, detail: object) -> str:
     return rendered or "unknown"
 
 
+def split_dns_detail(detail: object) -> tuple[str, str | None]:
+    rendered = str(detail or "").strip()
+    marker = "; ancillary records present: "
+    if marker not in rendered:
+        return rendered or "unknown", None
+    main_detail, ancillary = rendered.split(marker, 1)
+    return main_detail.strip() or "unknown", ancillary.strip() or None
+
+
 def summarize_tool_action(tool: str, action: str, payload: dict[str, object]) -> str:
     tool_label = str(tool)
     label = str(action)
@@ -674,17 +683,19 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
         for item in dns:
             if not isinstance(item, dict):
                 continue
+            detail, ancillary = split_dns_detail(item.get("detail", ""))
+            row_items = [
+                ("hostname", str(item.get("record_name", "<unknown>"))),
+                ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
+                ("type", str(item.get("record_type") or "<unknown>")),
+                ("target", str(item.get("content") or "<unknown>")),
+                ("detail", detail),
+            ]
+            if ancillary:
+                row_items.append(("ancillary records", ancillary))
             dns_lines.extend(
                 [
-                    *format_key_value_lines(
-                        [
-                            ("hostname", str(item.get("record_name", "<unknown>"))),
-                            ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
-                            ("type", str(item.get("record_type") or "<unknown>")),
-                            ("target", str(item.get("content") or "<unknown>")),
-                            ("detail", str(item.get("detail", ""))),
-                        ]
-                    ),
+                    *format_key_value_lines(row_items),
                     "",
                 ]
             )

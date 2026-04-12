@@ -771,6 +771,39 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "homesrvctl domain repair example.com" in rendered
 
 
+def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
+    lines = data.render_domain_status_detail(
+        "example.com",
+        {
+            "ok": True,
+            "domain": "example.com",
+            "overall": "ok",
+            "repairable": False,
+            "manual_fix_required": False,
+            "expected_tunnel_target": "1234.cfargotunnel.com",
+            "expected_ingress_service": "http://localhost:8081",
+            "dns": [
+                {
+                    "record_name": "example.com",
+                    "matches_expected": True,
+                    "record_type": "CNAME",
+                    "content": "1234.cfargotunnel.com",
+                    "detail": (
+                        "CNAME -> 1234.cfargotunnel.com (proxied); ancillary records present: "
+                        "MX -> route1.mx.cloudflare.net, TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\""
+                    ),
+                }
+            ],
+            "ingress": [],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "detail : CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
+    assert "ancillary records : MX -> route1.mx.cloudflare.net, TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"" in rendered
+
+
 def test_render_domain_status_detail_uses_na_when_no_repair_needed() -> None:
     lines = data.render_domain_status_detail(
         "example.com",
