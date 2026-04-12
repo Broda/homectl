@@ -401,6 +401,15 @@ def split_ancillary_records(detail: str) -> list[str]:
     return [part.strip() for part in detail.split(", ") if part.strip()]
 
 
+def split_dns_detail_records(detail: str) -> list[str]:
+    parts = [part.strip() for part in detail.split(", ") if part.strip()]
+    if len(parts) <= 1:
+        return [detail]
+    if all(" -> " in part for part in parts):
+        return parts
+    return [detail]
+
+
 def format_key_value_with_continuations(label: str, values: list[str]) -> list[str]:
     if not values:
         return []
@@ -703,11 +712,11 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
                 ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
                 ("type", str(item.get("record_type") or "<unknown>")),
                 ("target", str(item.get("content") or "<unknown>")),
-                ("detail", detail),
             ]
             dns_lines.extend(
                 [
                     *format_key_value_lines(row_items),
+                    *(format_key_value_with_continuations("detail", split_dns_detail_records(detail)) if detail else []),
                     *(format_key_value_with_continuations("ancillary records", split_ancillary_records(ancillary)) if ancillary else []),
                     "",
                 ]

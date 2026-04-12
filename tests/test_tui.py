@@ -805,6 +805,36 @@ def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
     assert "TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"" in rendered
 
 
+def test_render_domain_status_detail_wraps_multi_record_main_detail() -> None:
+    lines = data.render_domain_status_detail(
+        "example.com",
+        {
+            "ok": False,
+            "domain": "example.com",
+            "overall": "misconfigured",
+            "repairable": False,
+            "manual_fix_required": True,
+            "expected_tunnel_target": "1234.cfargotunnel.com",
+            "expected_ingress_service": "http://localhost:8081",
+            "dns": [
+                {
+                    "record_name": "example.com",
+                    "matches_expected": False,
+                    "record_type": "DNS",
+                    "content": "",
+                    "detail": "CNAME -> wrong-target.example.com (proxied), A -> 192.0.2.10",
+                }
+            ],
+            "ingress": [],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "detail : CNAME -> wrong-target.example.com (proxied)" in rendered
+    assert "A -> 192.0.2.10" in rendered
+
+
 def test_render_domain_status_detail_uses_na_when_no_repair_needed() -> None:
     lines = data.render_domain_status_detail(
         "example.com",
