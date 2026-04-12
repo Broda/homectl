@@ -1529,12 +1529,23 @@ Completed in this milestone:
 
 ### 12.3 Host Runtime Bootstrap
 
-Status: planned
+Status: completed
 
 Tasks:
 - Install Docker, Compose, and `cloudflared` on the target Debian-family host.
 - Create the shared directories, Unix group, and Docker network used by the supported platform layout.
 - Install or render the baseline Traefik runtime expected by `homesrvctl`.
+
+Completed in this milestone:
+- Added `homesrvctl bootstrap runtime` as the host-baseline bootstrap command.
+- The command now supports `--dry-run` and `--json` from the start.
+- The runtime slice now:
+  - installs Docker Engine, the Docker Compose plugin, and `cloudflared`
+  - creates the dedicated `homesrvctl` Unix group plus the shared `/srv/homesrvctl` directory layout
+  - adds the selected operator user to the `homesrvctl` and `docker` groups when one is available
+  - creates the shared external Docker network
+  - writes and starts the baseline Traefik runtime from `/srv/homesrvctl/traefik/docker-compose.yml`
+- `bootstrap assess` now points operators at `bootstrap runtime` when the host is missing the runtime baseline.
 
 ### 12.4 Config And Service Wiring
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import pytest
+import typer
 
 from homesrvctl import bootstrap
 from homesrvctl.models import HomesrvctlConfig
@@ -309,3 +311,105 @@ def test_provision_bootstrap_tunnel_reuses_existing_local_credentials(monkeypatc
     assert provisioned.reused is True
     assert provisioned.credentials_written is False
     assert provisioned.credentials_path == str(credentials_path)
+
+
+def test_provision_bootstrap_runtime_converges_runtime_baseline(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+
+    monkeypatch.setattr(
+        bootstrap,
+        "_os_assessment",
+        lambda: {
+            "id": "debian",
+            "version_id": "12",
+            "pretty_name": "Debian GNU/Linux 12",
+            "supported": True,
+            "detail": "Debian-family host detected",
+        },
+    )
+    monkeypatch.setattr(bootstrap, "_systemd_assessment", lambda: {"present": True, "detail": "systemd detected"})
+    monkeypatch.setattr(
+        bootstrap,
+        "_config_assessment",
+        lambda path: (
+            {
+                "path": str(path),
+                "exists": True,
+                "valid": True,
+                "detail": "config file loaded successfully",
+                "docker_network": "web",
+                "cloudflared_config": "/srv/homesrvctl/cloudflared/config.yml",
+                "token_present": True,
+                "token_source": "file",
+            },
+            HomesrvctlConfig(
+                sites_root=tmp_path / "sites",
+                cloudflared_config=tmp_path / "cloudflared" / "config.yml",
+                cloudflare_api_token="token",
+            ),
+        ),
+    )
+    monkeypatch.setattr(bootstrap, "_resolve_operator_user", lambda explicit_user=None: "broda")
+    monkeypatch.setattr(bootstrap, "_debian_codename", lambda os_info: "bookworm")
+    monkeypatch.setattr(bootstrap, "_dpkg_architecture", lambda dry_run=False: "arm64")
+    monkeypatch.setattr(
+        bootstrap,
+        "_runtime_package_commands",
+        lambda codename, architecture: [["apt-get", "update"], ["apt-get", "install", "-y", "cloudflared"]],
+    )
+    seen_commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        bootstrap,
+        "_run_runtime_command",
+        lambda command, dry_run=False: seen_commands.append(tuple(command)),
+    )
+    monkeypatch.setattr(bootstrap, "_write_runtime_repo_files", lambda codename, architecture, dry_run=False: None)
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_runtime_groups",
+        lambda operator_user, dry_run=False: [{"group": "homesrvctl", "created": True}],
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_runtime_directories",
+        lambda config, dry_run=False: [{"path": "/srv/homesrvctl/sites", "mode": "0o2775", "existed": False}],
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_runtime_docker_network",
+        lambda docker_network, dry_run=False: {"name": docker_network, "created": True, "detail": "created"},
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_runtime_traefik",
+        lambda docker_network, force=False, dry_run=False: {
+            "compose_path": "/srv/homesrvctl/traefik/docker-compose.yml",
+            "written": True,
+            "started": True,
+        },
+    )
+    monkeypatch.setattr(bootstrap.os, "geteuid", lambda: 0)
+
+    provisioned = bootstrap.provision_bootstrap_runtime(config_path, dry_run=False)
+
+    assert provisioned.ok is True
+    assert provisioned.operator_user == "broda"
+    assert provisioned.network["created"] is True
+    assert provisioned.traefik["started"] is True
+    assert seen_commands == [
+        ("apt-get", "update"),
+        ("apt-get", "install", "-y", "cloudflared"),
+    ]
+
+
+def test_provision_bootstrap_runtime_rejects_non_root_without_dry_run(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        bootstrap,
+        "_os_assessment",
+        lambda: {"supported": True, "pretty_name": "Debian GNU/Linux 12", "detail": "Debian-family host detected"},
+    )
+    monkeypatch.setattr(bootstrap, "_systemd_assessment", lambda: {"present": True, "detail": "systemd detected"})
+    monkeypatch.setattr(bootstrap.os, "geteuid", lambda: 1000)
+
+    with pytest.raises(typer.BadParameter, match="requires root privileges"):
+        bootstrap.provision_bootstrap_runtime(tmp_path / "config.yml")

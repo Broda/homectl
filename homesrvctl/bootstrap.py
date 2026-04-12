@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import grp
 import json
 import os
 from pathlib import Path
+import pwd
 import urllib.error
 import urllib.request
 
@@ -25,6 +27,18 @@ from homesrvctl.cloudflared_service import detect_cloudflared_runtime
 from homesrvctl.config import default_config_path, load_config_details, update_config
 from homesrvctl.models import HomesrvctlConfig
 from homesrvctl.shell import command_exists, run_command
+
+
+DOCKER_APT_KEY_URL = "https://download.docker.com/linux/debian/gpg"
+DOCKER_APT_SOURCE_PATH = Path("/etc/apt/sources.list.d/docker.list")
+DOCKER_APT_KEYRING_PATH = Path("/etc/apt/keyrings/docker.asc")
+CLOUDFLARED_APT_KEY_URL = "https://pkg.cloudflare.com/cloudflare-main.gpg"
+CLOUDFLARED_APT_SOURCE_PATH = Path("/etc/apt/sources.list.d/cloudflared.list")
+CLOUDFLARED_APT_KEYRING_PATH = Path("/usr/share/keyrings/cloudflare-main.gpg")
+HOMESRVCTL_GROUP = "homesrvctl"
+HOMESRVCTL_ROOT = Path("/srv/homesrvctl")
+TRAEFIK_DIR = HOMESRVCTL_ROOT / "traefik"
+TRAEFIK_COMPOSE_PATH = TRAEFIK_DIR / "docker-compose.yml"
 
 
 @dataclass(slots=True)
@@ -64,6 +78,23 @@ class BootstrapTunnelProvisioning:
     config_updated: bool
     credentials_written: bool
     cloudflared_config_written: bool
+    next_steps: list[str]
+
+
+@dataclass(slots=True)
+class BootstrapRuntimeProvisioning:
+    ok: bool
+    dry_run: bool
+    detail: str
+    operator_user: str | None
+    config_path: str
+    docker_network: str
+    homesrvctl_group: str
+    package_commands: list[list[str]]
+    directories: list[dict[str, object]]
+    groups: list[dict[str, object]]
+    network: dict[str, object]
+    traefik: dict[str, object]
     next_steps: list[str]
 
 
@@ -164,6 +195,65 @@ def provision_bootstrap_tunnel(
         config_updated=config_updated,
         credentials_written=credentials_written,
         cloudflared_config_written=cloudflared_config_written,
+        next_steps=next_steps,
+    )
+
+
+def provision_bootstrap_runtime(
+    config_path: Path | None = None,
+    *,
+    operator_user: str | None = None,
+    force: bool = False,
+    dry_run: bool = False,
+) -> BootstrapRuntimeProvisioning:
+    target_path = config_path or default_config_path()
+    os_info = _os_assessment()
+    systemd_info = _systemd_assessment()
+    if not bool(os_info["supported"]) or not bool(systemd_info["present"]):
+        raise typer.BadParameter(
+            "bootstrap runtime currently supports Debian-family Linux with systemd only"
+        )
+    if os.geteuid() != 0 and not dry_run:
+        raise typer.BadParameter("bootstrap runtime requires root privileges; rerun with sudo or use --dry-run")
+
+    config_info, config = _config_assessment(target_path)
+    resolved_operator_user = _resolve_operator_user(operator_user)
+    codename = _debian_codename(os_info)
+    architecture = _dpkg_architecture(dry_run=dry_run)
+    package_commands = _runtime_package_commands(codename=codename, architecture=architecture)
+
+    for command in package_commands[:2]:
+        _run_runtime_command(command, dry_run=dry_run)
+    _write_runtime_repo_files(codename=codename, architecture=architecture, dry_run=dry_run)
+    for command in package_commands[2:]:
+        _run_runtime_command(command, dry_run=dry_run)
+
+    group_actions = _ensure_runtime_groups(resolved_operator_user, dry_run=dry_run)
+    directory_actions = _ensure_runtime_directories(config, dry_run=dry_run)
+    network_state = _ensure_runtime_docker_network(config.docker_network, dry_run=dry_run)
+    traefik_state = _ensure_runtime_traefik(config.docker_network, force=force, dry_run=dry_run)
+
+    next_steps = [
+        "Run `homesrvctl validate` to confirm Docker, Traefik, and the default ingress target are reachable.",
+        "Run `homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>` to provision the shared host tunnel if it is still missing.",
+        "Cloudflared service wiring remains a later bootstrap slice; use `homesrvctl cloudflared setup` for current guidance once local tunnel material exists.",
+    ]
+    detail = "host runtime baseline converged for the current bootstrap target"
+    if dry_run:
+        detail = "dry-run complete for bootstrap runtime baseline"
+    return BootstrapRuntimeProvisioning(
+        ok=True,
+        dry_run=dry_run,
+        detail=detail,
+        operator_user=resolved_operator_user,
+        config_path=str(config_info["path"]),
+        docker_network=config.docker_network,
+        homesrvctl_group=HOMESRVCTL_GROUP,
+        package_commands=package_commands,
+        directories=directory_actions,
+        groups=group_actions,
+        network=network_state,
+        traefik=traefik_state,
         next_steps=next_steps,
     )
 
@@ -486,17 +576,17 @@ def _next_steps(
     if not host_supported:
         steps.append("Use a Debian-family Raspberry Pi OS host with systemd for the first bootstrap target.")
     if not packages_info["docker"] or not packages_info["docker_compose"]:
-        steps.append("Install Docker Engine plus the Docker Compose plugin.")
+        steps.append("Run `sudo homesrvctl bootstrap runtime` to install Docker Engine plus the Docker Compose plugin.")
     if not packages_info["cloudflared"]:
-        steps.append("Install cloudflared on the host.")
+        steps.append("Run `sudo homesrvctl bootstrap runtime` to install cloudflared on the host.")
     if config_info["exists"] is False:
         steps.append("Run `homesrvctl config init` to create the starter config.")
-    if not services_info["traefik_running"]:
-        steps.append("Install or start the baseline Traefik runtime expected by homesrvctl.")
+    if not services_info["traefik_running"] and packages_info["docker"] and packages_info["docker_compose"]:
+        steps.append("Run `sudo homesrvctl bootstrap runtime` to start the baseline Traefik runtime expected by homesrvctl.")
     if not services_info["cloudflared_active"]:
         steps.append("Install or start the cloudflared service for the shared host tunnel.")
     if network_info["exists"] is False:
-        steps.append(f"Create the shared Docker network `{docker_network}`.")
+        steps.append(f"Run `sudo homesrvctl bootstrap runtime` to create the shared Docker network `{docker_network}`.")
     if not cloudflare_info["token_present"]:
         steps.append("Configure `cloudflare_api_token` or `CLOUDFLARE_API_TOKEN` for Cloudflare API access.")
     elif cloudflare_info["api_reachable"] is False:
@@ -507,6 +597,223 @@ def _next_steps(
         )
     steps.append("`homesrvctl bootstrap apply` is not shipped yet; use this assessment to prepare the host manually.")
     return steps
+
+
+def _resolve_operator_user(explicit_user: str | None) -> str | None:
+    candidate = (explicit_user or os.environ.get("SUDO_USER") or os.environ.get("USER") or "").strip()
+    if not candidate or candidate == "root":
+        return None
+    try:
+        pwd.getpwnam(candidate)
+    except KeyError as exc:
+        raise typer.BadParameter(f"operator user does not exist: {candidate}") from exc
+    return candidate
+
+
+def _debian_codename(os_info: dict[str, object]) -> str:
+    codename = os.environ.get("VERSION_CODENAME", "").strip()
+    if codename:
+        return codename
+    os_release = Path("/etc/os-release")
+    if os_release.exists():
+        for line in os_release.read_text(encoding="utf-8").splitlines():
+            if line.startswith("VERSION_CODENAME="):
+                return line.split("=", 1)[1].strip().strip('"')
+    raise typer.BadParameter("could not determine Debian codename for package repository setup")
+
+
+def _dpkg_architecture(*, dry_run: bool) -> str:
+    result = run_command(["dpkg", "--print-architecture"], quiet=dry_run)
+    if result.ok and result.stdout.strip():
+        return result.stdout.strip()
+    if dry_run:
+        return "arm64"
+    raise typer.BadParameter(f"could not determine dpkg architecture: {result.stderr or result.stdout or 'no output'}")
+
+
+def _runtime_package_commands(*, codename: str, architecture: str) -> list[list[str]]:
+    del codename, architecture
+    return [
+        ["apt-get", "update"],
+        ["apt-get", "install", "-y", "ca-certificates", "curl"],
+        ["apt-get", "update"],
+        [
+            "apt-get",
+            "install",
+            "-y",
+            "docker-ce",
+            "docker-ce-cli",
+            "containerd.io",
+            "docker-buildx-plugin",
+            "docker-compose-plugin",
+            "cloudflared",
+        ],
+        ["systemctl", "enable", "--now", "docker"],
+    ]
+
+
+def _run_runtime_command(command: list[str], *, dry_run: bool) -> None:
+    result = run_command(command, dry_run=dry_run, quiet=dry_run)
+    if dry_run or result.ok:
+        return
+    raise typer.BadParameter(
+        f"bootstrap runtime command failed: {' '.join(command)}: {result.stderr or result.stdout or 'no output'}"
+    )
+
+
+def _write_runtime_repo_files(*, codename: str, architecture: str, dry_run: bool) -> None:
+    _ensure_file_content(
+        DOCKER_APT_KEYRING_PATH,
+        _fetch_url_bytes(DOCKER_APT_KEY_URL, dry_run=dry_run),
+        dry_run=dry_run,
+    )
+    _ensure_file_content(
+        DOCKER_APT_SOURCE_PATH,
+        (
+            "deb [arch="
+            f"{architecture} signed-by={DOCKER_APT_KEYRING_PATH}"
+            "] https://download.docker.com/linux/debian "
+            f"{codename} stable\n"
+        ).encode("utf-8"),
+        dry_run=dry_run,
+    )
+    _ensure_file_content(
+        CLOUDFLARED_APT_KEYRING_PATH,
+        _fetch_url_bytes(CLOUDFLARED_APT_KEY_URL, dry_run=dry_run),
+        dry_run=dry_run,
+    )
+    _ensure_file_content(
+        CLOUDFLARED_APT_SOURCE_PATH,
+        (
+            "deb [signed-by="
+            f"{CLOUDFLARED_APT_KEYRING_PATH}"
+            "] https://pkg.cloudflare.com/cloudflared any main\n"
+        ).encode("utf-8"),
+        dry_run=dry_run,
+    )
+
+
+def _fetch_url_bytes(url: str, *, dry_run: bool) -> bytes:
+    if dry_run:
+        return f"# dry-run placeholder for {url}\n".encode("utf-8")
+    request = urllib.request.Request(url, headers={"User-Agent": f"homesrvctl/{__version__}"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.read()
+    except urllib.error.URLError as exc:
+        raise typer.BadParameter(f"failed to fetch bootstrap repository material from {url}: {exc}") from exc
+
+
+def _ensure_file_content(path: Path, content: bytes, *, dry_run: bool) -> bool:
+    existing = path.read_bytes() if path.exists() else None
+    if existing == content:
+        return False
+    if dry_run:
+        return True
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return True
+
+
+def _ensure_runtime_groups(operator_user: str | None, *, dry_run: bool) -> list[dict[str, object]]:
+    actions: list[dict[str, object]] = []
+    group_exists = True
+    try:
+        grp.getgrnam(HOMESRVCTL_GROUP)
+    except KeyError:
+        group_exists = False
+        _run_runtime_command(["groupadd", "--system", HOMESRVCTL_GROUP], dry_run=dry_run)
+    actions.append({"group": HOMESRVCTL_GROUP, "created": not group_exists})
+
+    if operator_user:
+        _run_runtime_command(["usermod", "-aG", HOMESRVCTL_GROUP, operator_user], dry_run=dry_run)
+        actions.append({"group": HOMESRVCTL_GROUP, "user": operator_user, "updated": True})
+        _run_runtime_command(["usermod", "-aG", "docker", operator_user], dry_run=dry_run)
+        actions.append({"group": "docker", "user": operator_user, "updated": True})
+    return actions
+
+
+def _ensure_runtime_directories(config: HomesrvctlConfig, *, dry_run: bool) -> list[dict[str, object]]:
+    group_info = grp.getgrnam(HOMESRVCTL_GROUP) if not dry_run else None
+    group_id = group_info.gr_gid if group_info is not None else None
+    specs = [
+        (HOMESRVCTL_ROOT, 0o755),
+        (config.sites_root, 0o2775),
+        (config.cloudflared_config.parent, 0o2750),
+        (TRAEFIK_DIR, 0o2775),
+    ]
+    actions: list[dict[str, object]] = []
+    for path, mode in specs:
+        existed = path.exists()
+        if not dry_run:
+            path.mkdir(parents=True, exist_ok=True)
+            os.chmod(path, mode)
+            if group_id is not None:
+                os.chown(path, 0, group_id)
+        actions.append({"path": str(path), "mode": oct(mode), "existed": existed})
+    return actions
+
+
+def _ensure_runtime_docker_network(docker_network: str, *, dry_run: bool) -> dict[str, object]:
+    inspect = run_command(["docker", "network", "inspect", docker_network], quiet=dry_run)
+    if inspect.ok:
+        return {"name": docker_network, "created": False, "detail": "already exists"}
+    _run_runtime_command(["docker", "network", "create", docker_network], dry_run=dry_run)
+    return {"name": docker_network, "created": True, "detail": "created"}
+
+
+def _ensure_runtime_traefik(docker_network: str, *, force: bool, dry_run: bool) -> dict[str, object]:
+    rendered = _render_traefik_compose(docker_network)
+    existing = TRAEFIK_COMPOSE_PATH.read_text(encoding="utf-8") if TRAEFIK_COMPOSE_PATH.exists() else None
+    written = False
+    if existing != rendered:
+        if existing is not None and not force:
+            raise typer.BadParameter(
+                f"Traefik compose file already exists at {TRAEFIK_COMPOSE_PATH}; use --force to overwrite"
+            )
+        if not dry_run:
+            TRAEFIK_COMPOSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TRAEFIK_COMPOSE_PATH.write_text(rendered, encoding="utf-8")
+        written = True
+    _run_runtime_command(
+        ["docker", "compose", "-f", str(TRAEFIK_COMPOSE_PATH), "up", "-d"],
+        dry_run=dry_run,
+    )
+    return {
+        "compose_path": str(TRAEFIK_COMPOSE_PATH),
+        "written": written,
+        "started": True,
+    }
+
+
+def _render_traefik_compose(docker_network: str) -> str:
+    return "\n".join(
+        [
+            "services:",
+            "  traefik:",
+            "    image: traefik:v3",
+            "    container_name: traefik",
+            "    restart: unless-stopped",
+            "    command:",
+            "      - --api.insecure=true",
+            "      - --api.dashboard=true",
+            "      - --providers.docker=true",
+            "      - --providers.docker.exposedbydefault=false",
+            "      - --entrypoints.web.address=:80",
+            "    ports:",
+            "      - \"80:80\"",
+            "      - \"8081:8080\"",
+            "    volumes:",
+            "      - /var/run/docker.sock:/var/run/docker.sock:ro",
+            "    networks:",
+            f"      - {docker_network}",
+            "",
+            "networks:",
+            f"  {docker_network}:",
+            "    external: true",
+            "",
+        ]
+    )
 
 
 def _resolve_bootstrap_account_id(config: HomesrvctlConfig, *, explicit_account_id: str | None) -> str:

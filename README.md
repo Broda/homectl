@@ -63,8 +63,9 @@ Current shipped step in that direction:
 
 - `homesrvctl bootstrap assess` now reports whether the host looks fresh, partial, ready, or unsupported relative to the first bootstrap target
 - `homesrvctl bootstrap tunnel` can now create or reuse the shared Cloudflare tunnel and write local bootstrap tunnel material when the target path is writable and local credentials are available for safe reuse
+- `homesrvctl bootstrap runtime` can now install the Debian-family host runtime baseline for the first target: Docker Engine, Docker Compose, `cloudflared`, the shared `homesrvctl` group and directories, the external Docker network, and the baseline Traefik runtime
 
-Host package installation, service wiring, and end-to-end fresh-host convergence are still roadmap work.
+Cloudflared service wiring and end-to-end fresh-host convergence are still roadmap work.
 
 ## Installation
 
@@ -280,6 +281,7 @@ Inspect the stack:
 ```bash
 homesrvctl list
 homesrvctl bootstrap assess
+sudo homesrvctl bootstrap runtime
 homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>
 homesrvctl tui
 homesrvctl tunnel status
@@ -303,6 +305,7 @@ homesrvctl domain repair example.com --dry-run --json
 homesrvctl domain remove example.com --dry-run --json
 homesrvctl list --json
 homesrvctl bootstrap assess --json
+homesrvctl bootstrap runtime --dry-run --json
 homesrvctl bootstrap tunnel --account-id <cloudflare-account-id> --json
 homesrvctl tunnel status --json
 homesrvctl cloudflared status --json
@@ -328,6 +331,7 @@ homesrvctl up example.com --dry-run
 - `homesrvctl config init [--path PATH] [--force] [--json]`
 - `homesrvctl config show [--path PATH] [--stack HOSTNAME] [--json]`
 - `homesrvctl bootstrap assess [--path PATH] [--json]`
+- `homesrvctl bootstrap runtime [--path PATH] [--operator-user USER] [--force] [--dry-run] [--json]`
 - `homesrvctl bootstrap tunnel [--path PATH] [--account-id ACCOUNT_ID] [--name NAME] [--force] [--json]`
 - `homesrvctl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain status <domain> [--json]`
@@ -355,6 +359,8 @@ homesrvctl up example.com --dry-run
 - `domain add`, `domain repair`, and `domain remove` support `--json` for machine-readable mutation results.
 - `domain add`, `domain repair`, and `domain remove` now preflight local ingress mutation safety before writing DNS: if the configured `cloudflared` config path is not writable by the current user, or if an active systemd service is pointed at a different config file, the command fails early with setup guidance instead of making a partial DNS-only change.
 - `bootstrap assess` is still the assessment-only host-readiness command for the current Debian-family Pi bootstrap target.
+- `bootstrap runtime` is the host-baseline mutation command for the current bootstrap target. It is meant to run as root, supports `--dry-run` and `--json`, installs Docker Engine plus the Docker Compose plugin and `cloudflared`, creates the shared `homesrvctl` group and `/srv/homesrvctl` layout, creates the external Docker network, and starts the baseline Traefik runtime from `/srv/homesrvctl/traefik/docker-compose.yml`.
+- `bootstrap runtime` defaults the operator account from `SUDO_USER` or `USER` when available and adds that user to the `homesrvctl` and `docker` groups.
 - `bootstrap tunnel` is the first mutating bootstrap slice: it creates a locally managed Cloudflare tunnel when needed, reuses a safely recoverable local tunnel when credentials already exist, writes bootstrap credentials plus a minimal `cloudflared` config, and normalizes `tunnel_name` in the main config to the tunnel UUID.
 - `bootstrap tunnel` currently requires `--account-id` unless the current `cloudflared` credentials file is already readable and can supply the account ID.
 - `bootstrap tunnel` needs Cloudflare tunnel-write capability in addition to the existing DNS-oriented token permissions. The current practical token set is:
@@ -362,7 +368,7 @@ homesrvctl up example.com --dry-run
   - `DNS: Edit`
   - `Account: Cloudflare Tunnel Read` for inspection
   - `Account: Cloudflare Tunnel Edit` for bootstrap tunnel provisioning
-- `bootstrap tunnel` does not yet install packages or wire the `cloudflared` service. It only provisions the Cloudflare tunnel and the local bootstrap material for later host/runtime slices.
+- `bootstrap tunnel` does not yet wire the `cloudflared` service. It only provisions the Cloudflare tunnel and the local bootstrap material for the later service/config slice.
 - all `--json` commands include a top-level `schema_version` so automation can pin to a known output shape.
 - `config init --json` reports whether the config file was created or overwritten.
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.

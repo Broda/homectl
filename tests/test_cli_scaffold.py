@@ -5237,6 +5237,70 @@ def test_bootstrap_tunnel_json_failure(monkeypatch, tmp_path: Path) -> None:
     assert "missing Cloudflare account ID" in payload["error"]
 
 
+def test_bootstrap_runtime_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "provision_bootstrap_runtime",
+        lambda path, operator_user=None, force=False, dry_run=False: type(
+            "Provisioned",
+            (),
+            {
+                "ok": True,
+                "dry_run": dry_run,
+                "detail": "host runtime baseline converged for the current bootstrap target",
+                "operator_user": "broda",
+                "config_path": str(config_path),
+                "docker_network": "web",
+                "homesrvctl_group": "homesrvctl",
+                "package_commands": [["apt-get", "update"]],
+                "directories": [{"path": "/srv/homesrvctl/sites", "mode": "0o2775", "existed": False}],
+                "groups": [{"group": "homesrvctl", "created": True}],
+                "network": {"name": "web", "created": True, "detail": "created"},
+                "traefik": {
+                    "compose_path": "/srv/homesrvctl/traefik/docker-compose.yml",
+                    "written": True,
+                    "started": True,
+                },
+                "next_steps": ["Run `homesrvctl validate`."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "runtime", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_runtime"
+    assert payload["ok"] is True
+    assert payload["traefik"]["started"] is True
+
+
+def test_bootstrap_runtime_json_failure(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+
+    def fail(path, operator_user=None, force=False, dry_run=False):  # noqa: ANN001,ANN202
+        raise typer.BadParameter("bootstrap runtime requires root privileges")
+
+    monkeypatch.setattr(bootstrap_cmd, "provision_bootstrap_runtime", fail)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "runtime", "--json", "--path", str(config_path)])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_runtime"
+    assert payload["ok"] is False
+    assert "root privileges" in payload["error"]
+
+
 def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import validate_cmd
 

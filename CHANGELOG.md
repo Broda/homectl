@@ -10,6 +10,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Added
 - Added `homesrvctl bootstrap assess` as the first fresh-host bootstrap slice. It is assessment-only and reports whether the current host looks `fresh`, `partial`, `ready`, or `unsupported` relative to the first Debian-family Raspberry Pi bootstrap target.
+- Added `homesrvctl bootstrap runtime` as the host-baseline bootstrap slice. It supports `--dry-run` and `--json`, installs Docker Engine plus the Docker Compose plugin and `cloudflared`, creates the shared `homesrvctl` group and `/srv/homesrvctl` directory layout, creates the external Docker network, and writes plus starts the baseline Traefik runtime.
 - Added `homesrvctl bootstrap tunnel` as the first mutating bootstrap slice. It can create a locally managed Cloudflare tunnel through the API, reuse an existing tunnel only when matching local credentials are already available, write bootstrap tunnel credentials plus a minimal local `cloudflared` config, and normalize the main config tunnel reference to the resolved UUID.
 - Added `cloudflared setup` to assess whether the configured `cloudflared` config path is writable and aligned with the active runtime, and to print exact systemd override / migration commands when setup repair is needed.
 - Added setup-alignment reporting to `cloudflared status` plus a matching `Fix Setup` action in the TUI `Cloudflared` pane.

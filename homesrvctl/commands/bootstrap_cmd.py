@@ -5,7 +5,11 @@ from pathlib import Path
 
 import typer
 
-from homesrvctl.bootstrap import assess_bootstrap, provision_bootstrap_tunnel
+from homesrvctl.bootstrap import (
+    assess_bootstrap,
+    provision_bootstrap_runtime,
+    provision_bootstrap_tunnel,
+)
 from homesrvctl.cloudflared import CloudflaredConfigError
 from homesrvctl.config import default_config_path
 from homesrvctl.utils import info, success, warn, with_json_schema
@@ -169,6 +173,83 @@ def bootstrap_tunnel(
     info(f"configured tunnel id: {provisioned.tunnel_id}")
     info(f"credentials path: {provisioned.credentials_path}")
     info(f"cloudflared config path: {provisioned.cloudflared_config_path}")
+    if provisioned.next_steps:
+        typer.echo("")
+        info("next steps:")
+        for step in provisioned.next_steps:
+            typer.echo(f"- {step}")
+
+
+@bootstrap_cli.command("runtime")
+def bootstrap_runtime(
+    path: Path | None = typer.Option(
+        None,
+        "--path",
+        help="Read homesrvctl config from a custom path instead of the default user config location.",
+    ),
+    operator_user: str | None = typer.Option(
+        None,
+        "--operator-user",
+        help="Non-root operator account to add to the homesrvctl and docker groups. Defaults to SUDO_USER or USER when available.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite the baseline Traefik compose file when it already exists."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the planned host runtime changes without applying them."),
+    json_output: bool = typer.Option(False, "--json", help="Print the runtime bootstrap result as JSON."),
+) -> None:
+    """Install and converge the local runtime baseline for the bootstrap target."""
+    target_path = path or default_config_path()
+    try:
+        provisioned = provision_bootstrap_runtime(
+            target_path,
+            operator_user=operator_user,
+            force=force,
+            dry_run=dry_run,
+        )
+    except (typer.BadParameter, CloudflaredConfigError) as exc:
+        payload = with_json_schema(
+            {
+                "action": "bootstrap_runtime",
+                "ok": False,
+                "dry_run": dry_run,
+                "config_path": str(target_path),
+                "error": str(exc),
+            }
+        )
+        if json_output:
+            typer.echo(json.dumps(payload, indent=2))
+            raise typer.Exit(code=1) from exc
+        raise
+
+    payload = with_json_schema(
+        {
+            "action": "bootstrap_runtime",
+            "ok": provisioned.ok,
+            "dry_run": provisioned.dry_run,
+            "detail": provisioned.detail,
+            "operator_user": provisioned.operator_user,
+            "config_path": provisioned.config_path,
+            "docker_network": provisioned.docker_network,
+            "homesrvctl_group": provisioned.homesrvctl_group,
+            "package_commands": provisioned.package_commands,
+            "directories": provisioned.directories,
+            "groups": provisioned.groups,
+            "network": provisioned.network,
+            "traefik": provisioned.traefik,
+            "next_steps": provisioned.next_steps,
+        }
+    )
+
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    if provisioned.dry_run:
+        info(provisioned.detail)
+    else:
+        success(provisioned.detail)
+    info(f"operator user: {provisioned.operator_user or '<none>'}")
+    info(f"docker network: {provisioned.docker_network}")
+    info(f"Traefik compose: {provisioned.traefik['compose_path']}")
     if provisioned.next_steps:
         typer.echo("")
         info("next steps:")
