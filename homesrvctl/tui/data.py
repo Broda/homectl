@@ -350,18 +350,22 @@ def render_check_list_detail(
 
     failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
     advisory_checks = [check for check in checks if isinstance(check, dict) and str(check.get("severity")) == "advisory"]
-    lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
+    rows: list[list[str]] = []
     for check in checks[:limit]:
         if not isinstance(check, dict):
             continue
         severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
         if severity == "advisory":
-            marker = "[yellow]WARN[/yellow]"
+            marker = "WARN"
         elif check.get("ok"):
-            marker = "[green]PASS[/green]"
+            marker = "PASS"
         else:
-            marker = "[red]FAIL[/red]"
-        lines.append(f"{marker} {check.get('name', '<unknown>')}: {check.get('detail', '')}")
+            marker = "FAIL"
+        rows.append([marker, str(check.get("name", "<unknown>")), str(check.get("detail", ""))])
+
+    lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
+    if rows:
+        lines.extend(render_bordered_table(["Status", "Check", "Detail"], rows))
     if len(checks) > limit:
         lines.append(f"... {len(checks) - limit} more")
     return lines
