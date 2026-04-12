@@ -356,18 +356,22 @@ def render_check_list_detail(
             continue
         severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
         if severity == "advisory":
-            marker = "WARN"
+            marker = "[yellow]WARN[/yellow]"
+            marker_width = len("WARN")
         elif check.get("ok"):
-            marker = "PASS"
+            marker = "[green]PASS[/green]"
+            marker_width = len("PASS")
         else:
-            marker = "FAIL"
-        rows.append((marker, str(check.get("name", "<unknown>")), str(check.get("detail", ""))))
+            marker = "[red]FAIL[/red]"
+            marker_width = len("FAIL")
+        rows.append((marker, marker_width, str(check.get("name", "<unknown>")), str(check.get("detail", ""))))
 
     lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
     if rows:
-        status_width = max(len(status) for status, _, _ in rows)
-        check_width = max(len(name) for _, name, _ in rows)
-        for status, name, detail in rows:
+        status_width = max(status_width for _, status_width, _, _ in rows)
+        check_width = max(len(name) for _, _, name, _ in rows)
+        for status, raw_status_width, name, detail in rows:
+            _ = raw_status_width
             lines.append(f"{status.ljust(status_width)}  {name.ljust(check_width)}  {detail}")
     if len(checks) > limit:
         lines.append(f"... {len(checks) - limit} more")
