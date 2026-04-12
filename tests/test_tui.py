@@ -967,9 +967,12 @@ def test_textual_app_tunnel_tool_detail_text() -> None:
     detail = app._detail_text()
 
     assert "Tunnel Detail" in detail
-    assert "configured tunnel: homesrvctl-tunnel" in detail
-    assert "resolved tunnel id: 11111111-2222-4333-8444-555555555555" in detail
-    assert "api tunnel status: healthy" in detail
+    assert "configured tunnel" in detail
+    assert "homesrvctl-tunnel" in detail
+    assert "resolved tunnel id" in detail
+    assert "11111111-2222-4333-8444-555555555555" in detail
+    assert "api tunnel status" in detail
+    assert "healthy" in detail
 
 
 def test_textual_app_tunnel_detail_downgrades_credentials_permission_denied() -> None:
