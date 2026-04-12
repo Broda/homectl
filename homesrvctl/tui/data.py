@@ -350,36 +350,24 @@ def render_check_list_detail(
 
     failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
     advisory_checks = [check for check in checks if isinstance(check, dict) and str(check.get("severity")) == "advisory"]
-    rows: list[tuple[str, str, str]] = []
+    rows: list[tuple[str, str]] = []
     for check in checks[:limit]:
         if not isinstance(check, dict):
             continue
         severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
         if severity == "advisory":
             marker = "[yellow]WARN[/yellow]"
-            marker_width = len("WARN")
         elif check.get("ok"):
             marker = "[green]PASS[/green]"
-            marker_width = len("PASS")
         else:
             marker = "[red]FAIL[/red]"
-            marker_width = len("FAIL")
-        rows.append(
-            (
-                marker,
-                marker_width,
-                str(check.get("name", "<unknown>")),
-                normalize_check_detail(str(check.get("name", "<unknown>")), check.get("detail", "")),
-            )
-        )
+        name = str(check.get("name", "<unknown>"))
+        detail = normalize_check_detail(name, check.get("detail", ""))
+        rows.append((f"{marker} {name}", detail))
 
     lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
     if rows:
-        status_width = max(status_width for _, status_width, _, _ in rows)
-        check_width = max(len(name) for _, _, name, _ in rows)
-        for status, raw_status_width, name, detail in rows:
-            _ = raw_status_width
-            lines.append(f"{status.ljust(status_width)}  {name.ljust(check_width)}  {detail}")
+        lines.extend(format_key_value_lines(rows))
     if len(checks) > limit:
         lines.append(f"... {len(checks) - limit} more")
     return lines
@@ -556,7 +544,7 @@ def render_config_payload_detail(payload: dict[str, object]) -> list[str]:
     profiles = global_config.get("profiles")
     if isinstance(profiles, dict):
         profile_names = sorted(str(name) for name in profiles)
-        lines.extend(["", f"profiles: {len(profile_names)}"])
+        lines.extend(["", *format_key_value_lines([("profiles", str(len(profile_names)))])])
         if profile_names:
             lines.extend(f"- {name}" for name in profile_names[:8])
             if len(profile_names) > 8:
@@ -675,45 +663,53 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
 
     dns = payload.get("dns")
     if isinstance(dns, list):
-        rows: list[list[str]] = []
+        dns_lines: list[str] = []
         for item in dns:
             if not isinstance(item, dict):
                 continue
-            rows.append(
+            dns_lines.extend(
                 [
-                    str(item.get("record_name", "<unknown>")),
-                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
-                    str(item.get("record_type") or "<unknown>"),
-                    str(item.get("content") or "<unknown>"),
-                    str(item.get("detail", "")),
+                    *format_key_value_lines(
+                        [
+                            ("hostname", str(item.get("record_name", "<unknown>"))),
+                            ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
+                            ("type", str(item.get("record_type") or "<unknown>")),
+                            ("target", str(item.get("content") or "<unknown>")),
+                            ("detail", str(item.get("detail", ""))),
+                        ]
+                    ),
+                    "",
                 ]
             )
-        if rows:
-            lines.extend(["", "[bold #ffcf5a]DNS Records[/bold #ffcf5a]", "", *render_bordered_table(
-                ["hostname", "match", "type", "target", "detail"],
-                rows,
-            )])
+        if dns_lines:
+            if dns_lines[-1] == "":
+                dns_lines.pop()
+            lines.extend(["", "[bold #ffcf5a]DNS Records[/bold #ffcf5a]", "", *dns_lines])
 
     ingress = payload.get("ingress")
     if isinstance(ingress, list):
-        rows = []
+        ingress_lines: list[str] = []
         for item in ingress:
             if not isinstance(item, dict):
                 continue
-            rows.append(
+            ingress_lines.extend(
                 [
-                    str(item.get("hostname", "<unknown>")),
-                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
-                    str(item.get("service") or "<none>"),
-                    str(item.get("effective_service") or "<none>"),
-                    str(item.get("detail", "")),
+                    *format_key_value_lines(
+                        [
+                            ("hostname", str(item.get("hostname", "<unknown>"))),
+                            ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
+                            ("configured", str(item.get("service") or "<none>")),
+                            ("effective", str(item.get("effective_service") or "<none>")),
+                            ("detail", str(item.get("detail", ""))),
+                        ]
+                    ),
+                    "",
                 ]
             )
-        if rows:
-            lines.extend(["", "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]", "", *render_bordered_table(
-                ["hostname", "match", "configured", "effective", "detail"],
-                rows,
-            )])
+        if ingress_lines:
+            if ingress_lines[-1] == "":
+                ingress_lines.pop()
+            lines.extend(["", "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]", "", *ingress_lines])
 
     suggested_command = payload.get("suggested_command")
     if suggested_command:
@@ -814,7 +810,7 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
 
     notes = payload.get("notes")
     if isinstance(notes, list):
-        lines.extend(["", f"notes: {len(notes)}"])
+        lines.extend(["", *format_key_value_lines([("notes", str(len(notes)))])])
         for note in notes[:4]:
             lines.append(f"- {note}")
         if len(notes) > 4:
@@ -822,7 +818,7 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
 
     issues = payload.get("issues")
     if isinstance(issues, list):
-        lines.extend(["", f"setup issues: {len(issues)}"])
+        lines.extend(["", *format_key_value_lines([("setup issues", str(len(issues)))])])
         for issue in issues[:5]:
             lines.append(f"- {issue}")
         if len(issues) > 5:
@@ -830,7 +826,7 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
 
     next_commands = payload.get("next_commands")
     if isinstance(next_commands, list) and next_commands:
-        lines.extend(["", f"next commands: {len(next_commands)}"])
+        lines.extend(["", *format_key_value_lines([("next commands", str(len(next_commands)))])])
         for command in next_commands[:6]:
             lines.append(f"- {command}")
         if len(next_commands) > 6:
@@ -974,7 +970,7 @@ def render_bootstrap_assessment_detail(payload: dict[str, object]) -> list[str]:
 
     issues = payload.get("issues")
     if isinstance(issues, list):
-        lines.extend(["", f"issues: {len(issues)}"])
+        lines.extend(["", *format_key_value_lines([("issues", str(len(issues)))])])
         for issue in issues[:6]:
             lines.append(f"- {issue}")
         if len(issues) > 6:
@@ -982,7 +978,7 @@ def render_bootstrap_assessment_detail(payload: dict[str, object]) -> list[str]:
 
     next_steps = payload.get("next_steps")
     if isinstance(next_steps, list):
-        lines.extend(["", f"next steps: {len(next_steps)}"])
+        lines.extend(["", *format_key_value_lines([("next steps", str(len(next_steps)))])])
         for step in next_steps[:6]:
             lines.append(f"- {step}")
         if len(next_steps) > 6:

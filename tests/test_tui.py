@@ -483,9 +483,11 @@ def test_render_check_list_detail_formats_pass_and_fail_checks() -> None:
     rendered = "\n".join(lines)
 
     assert "checks: 2 total, 1 failing, 0 advisory" in rendered
-    assert "[green]PASS[/green]  cloudflared binary" in rendered
+    assert "[green]PASS[/green] cloudflared binary" in rendered
+    assert "cloudflared binary :" in rendered
     assert "found in PATH" in rendered
-    assert "[red]FAIL[/red]  Traefik URL" in rendered
+    assert "[red]FAIL[/red] Traefik URL" in rendered
+    assert "Traefik URL : unreachable" in rendered
     assert "unreachable" in rendered
 
 
@@ -656,7 +658,7 @@ def test_render_tool_action_detail_formats_bootstrap_assessment() -> None:
     assert "host supported" in rendered
     assert "Packages" in rendered
     assert "Cloudflare" in rendered
-    assert "next steps: 1" in rendered
+    assert "next steps : 1" in rendered
 
 
 def test_render_config_payload_detail_formats_global_config() -> None:
@@ -684,7 +686,7 @@ def test_render_config_payload_detail_formats_global_config() -> None:
     assert "/home/test/.config/homesrvctl/config.yml" in rendered
     assert "docker network" in rendered
     assert "web" in rendered
-    assert "profiles: 2" in rendered
+    assert "profiles : 2" in rendered
     assert "- edge" in rendered
 
 
@@ -764,7 +766,7 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "no" in rendered
     assert "DNS Records" in rendered
     assert "Ingress Routes" in rendered
-    assert "| hostname" in rendered
+    assert "| hostname" not in rendered
     assert "example.com" in rendered
     assert "*.example.com" in rendered
     assert "suggested command" in rendered
@@ -963,7 +965,7 @@ def test_textual_app_config_tool_detail_text() -> None:
     assert "Config Detail" in detail
     assert "docker network" in detail
     assert "web" in detail
-    assert "profiles: 1" in detail
+    assert "profiles : 1" in detail
     assert "status:" in command_bar
 
 
@@ -1710,9 +1712,11 @@ def test_textual_app_validate_detail_shows_all_checks() -> None:
 
     assert "Validate Detail" in detail
     assert "checks: 2 total, 1 failing, 0 advisory" in detail
-    assert "[green]PASS[/green]  cloudflared binary" in detail
+    assert "[green]PASS[/green] cloudflared binary" in detail
+    assert "cloudflared binary :" in detail
     assert "found in PATH" in detail
-    assert "[red]FAIL[/red]  Traefik URL" in detail
+    assert "[red]FAIL[/red] Traefik URL" in detail
+    assert "Traefik URL : unreachable" in detail
     assert "unreachable" in detail
 
 
