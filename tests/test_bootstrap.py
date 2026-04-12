@@ -413,3 +413,88 @@ def test_provision_bootstrap_runtime_rejects_non_root_without_dry_run(monkeypatc
 
     with pytest.raises(typer.BadParameter, match="requires root privileges"):
         bootstrap.provision_bootstrap_runtime(tmp_path / "config.yml")
+
+
+def test_provision_bootstrap_wiring_converges_shared_config_and_service(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    source_cloudflared = tmp_path / "legacy" / "config.yml"
+    source_credentials = tmp_path / "legacy" / "legacy.json"
+    source_cloudflared.parent.mkdir(parents=True)
+    source_credentials.write_text('{"AccountTag":"account-123","TunnelID":"11111111-2222-4333-8444-555555555555"}\n', encoding="utf-8")
+    source_cloudflared.write_text(
+        "\n".join(
+            [
+                "tunnel: 11111111-2222-4333-8444-555555555555",
+                f"credentials-file: {source_credentials}",
+                "ingress:",
+                "  - service: http_status:404",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "tunnel_name: 11111111-2222-4333-8444-555555555555",
+                f"sites_root: {tmp_path / 'sites'}",
+                "docker_network: web",
+                "traefik_url: http://localhost:8081",
+                f"cloudflared_config: {source_cloudflared}",
+                "cloudflare_api_token: token",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(bootstrap.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(bootstrap, "SHARED_CONFIG_PATH", tmp_path / "shared" / "config.yml")
+    monkeypatch.setattr(bootstrap, "SYSTEMD_OVERRIDE_PATH", str(tmp_path / "override.conf"))
+    monkeypatch.setattr(bootstrap, "SYSTEMD_UNIT_PATH", str(tmp_path / "cloudflared.service"))
+    monkeypatch.setattr(
+        bootstrap,
+        "inspect_cloudflared_systemd_unit",
+        lambda quiet=False: type("Unit", (), {"present": False})(),
+    )
+    monkeypatch.setattr(bootstrap, "_ensure_shared_cloudflared_permissions", lambda config_path, credentials_path, dry_run=False: None)
+    seen_commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        bootstrap,
+        "_run_runtime_command",
+        lambda command, dry_run=False: seen_commands.append(tuple(command)),
+    )
+
+    provisioned = bootstrap.provision_bootstrap_wiring(config_path)
+
+    assert provisioned.ok is True
+    assert provisioned.systemd_mode == "unit"
+    assert provisioned.systemd_written is True
+    assert Path(provisioned.cloudflared_config_path).exists()
+    assert Path(provisioned.credentials_path).exists()
+    assert any(command[:3] == ("systemctl", "enable", "--now") for command in seen_commands)
+
+
+def test_provision_bootstrap_wiring_rejects_missing_credentials(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "tunnel_name: homesrvctl-tunnel",
+                f"sites_root: {tmp_path / 'sites'}",
+                "docker_network: web",
+                "traefik_url: http://localhost:8081",
+                f"cloudflared_config: {tmp_path / 'missing.yml'}",
+                "cloudflare_api_token: token",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bootstrap.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(bootstrap, "SHARED_CONFIG_PATH", tmp_path / "shared" / "config.yml")
+
+    with pytest.raises(typer.BadParameter, match="could not find cloudflared tunnel credentials"):
+        bootstrap.provision_bootstrap_wiring(config_path)

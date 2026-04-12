@@ -64,8 +64,9 @@ Current shipped step in that direction:
 - `homesrvctl bootstrap assess` now reports whether the host looks fresh, partial, ready, or unsupported relative to the first bootstrap target
 - `homesrvctl bootstrap tunnel` can now create or reuse the shared Cloudflare tunnel and write local bootstrap tunnel material when the target path is writable and local credentials are available for safe reuse
 - `homesrvctl bootstrap runtime` can now install the Debian-family host runtime baseline for the first target: Docker Engine, Docker Compose, `cloudflared`, the shared `homesrvctl` group and directories, the external Docker network, and the baseline Traefik runtime
+- `homesrvctl bootstrap wiring` can now converge the shared `cloudflared` config path, migrate local tunnel credentials into `/srv/homesrvctl/cloudflared`, install the needed systemd unit or override, and enable the service under the shared-group model
 
-Cloudflared service wiring and end-to-end fresh-host convergence are still roadmap work.
+End-to-end fresh-host validation and convergence are still roadmap work.
 
 ## Installation
 
@@ -283,6 +284,7 @@ homesrvctl list
 homesrvctl bootstrap assess
 sudo homesrvctl bootstrap runtime
 homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>
+sudo homesrvctl bootstrap wiring
 homesrvctl tui
 homesrvctl tunnel status
 homesrvctl cloudflared status
@@ -307,6 +309,7 @@ homesrvctl list --json
 homesrvctl bootstrap assess --json
 homesrvctl bootstrap runtime --dry-run --json
 homesrvctl bootstrap tunnel --account-id <cloudflare-account-id> --json
+homesrvctl bootstrap wiring --dry-run --json
 homesrvctl tunnel status --json
 homesrvctl cloudflared status --json
 homesrvctl cloudflared config-test --json
@@ -333,6 +336,7 @@ homesrvctl up example.com --dry-run
 - `homesrvctl bootstrap assess [--path PATH] [--json]`
 - `homesrvctl bootstrap runtime [--path PATH] [--operator-user USER] [--force] [--dry-run] [--json]`
 - `homesrvctl bootstrap tunnel [--path PATH] [--account-id ACCOUNT_ID] [--name NAME] [--force] [--json]`
+- `homesrvctl bootstrap wiring [--path PATH] [--force] [--dry-run] [--json]`
 - `homesrvctl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
@@ -363,12 +367,13 @@ homesrvctl up example.com --dry-run
 - `bootstrap runtime` defaults the operator account from `SUDO_USER` or `USER` when available and adds that user to the `homesrvctl` and `docker` groups.
 - `bootstrap tunnel` is the first mutating bootstrap slice: it creates a locally managed Cloudflare tunnel when needed, reuses a safely recoverable local tunnel when credentials already exist, writes bootstrap credentials plus a minimal `cloudflared` config, and normalizes `tunnel_name` in the main config to the tunnel UUID.
 - `bootstrap tunnel` currently requires `--account-id` unless the current `cloudflared` credentials file is already readable and can supply the account ID.
+- `bootstrap wiring` is the shared-group cloudflared convergence command. It can create the main config when missing, normalize `cloudflared_config` to `/srv/homesrvctl/cloudflared/config.yml`, migrate tunnel credentials into the shared path, install the systemd unit or override needed for the active host, and enable the `cloudflared` service.
 - `bootstrap tunnel` needs Cloudflare tunnel-write capability in addition to the existing DNS-oriented token permissions. The current practical token set is:
   - `Zone: Read`
   - `DNS: Edit`
   - `Account: Cloudflare Tunnel Read` for inspection
   - `Account: Cloudflare Tunnel Edit` for bootstrap tunnel provisioning
-- `bootstrap tunnel` does not yet wire the `cloudflared` service. It only provisions the Cloudflare tunnel and the local bootstrap material for the later service/config slice.
+- `bootstrap wiring` expects tunnel credentials to already exist locally. If they do not, run `bootstrap tunnel` first or point the config at an existing local cloudflared setup before wiring the service.
 - all `--json` commands include a top-level `schema_version` so automation can pin to a known output shape.
 - `config init --json` reports whether the config file was created or overwritten.
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.

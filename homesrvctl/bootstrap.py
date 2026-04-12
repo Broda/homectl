@@ -24,7 +24,16 @@ from homesrvctl.cloudflared import (
     write_bootstrap_cloudflared_config,
 )
 from homesrvctl.cloudflared_service import detect_cloudflared_runtime
-from homesrvctl.config import default_config_path, load_config_details, update_config
+from homesrvctl.cloudflared_service import (
+    SHARED_CONFIG_PATH,
+    SYSTEMD_OVERRIDE_PATH,
+    SYSTEMD_UNIT_PATH,
+    inspect_cloudflared_systemd_unit,
+    render_cloudflared_systemd_override,
+    render_cloudflared_systemd_unit,
+    render_cloudflared_target_config_content,
+)
+from homesrvctl.config import default_config_data, default_config_path, init_config, load_config_details, update_config
 from homesrvctl.models import HomesrvctlConfig
 from homesrvctl.shell import command_exists, run_command
 
@@ -95,6 +104,25 @@ class BootstrapRuntimeProvisioning:
     groups: list[dict[str, object]]
     network: dict[str, object]
     traefik: dict[str, object]
+    next_steps: list[str]
+
+
+@dataclass(slots=True)
+class BootstrapWiringProvisioning:
+    ok: bool
+    dry_run: bool
+    detail: str
+    config_path: str
+    config_created: bool
+    config_updated: bool
+    cloudflared_config_path: str
+    credentials_path: str
+    cloudflared_config_written: bool
+    credentials_written: bool
+    systemd_mode: str
+    systemd_path: str
+    systemd_written: bool
+    service_enabled: bool
     next_steps: list[str]
 
 
@@ -176,7 +204,7 @@ def provision_bootstrap_tunnel(
     update_config(target_path, tunnel_name=tunnel_id_value)
     next_steps = [
         f"Run `homesrvctl tunnel status --json` to confirm the configured tunnel resolves to {tunnel_id_value}.",
-        "Host runtime/service bootstrap is still a later slice; install or wire cloudflared before expecting traffic.",
+        "Run `sudo homesrvctl bootstrap wiring` to converge the shared cloudflared config path and service wiring.",
     ]
     return BootstrapTunnelProvisioning(
         ok=True,
@@ -234,9 +262,9 @@ def provision_bootstrap_runtime(
     traefik_state = _ensure_runtime_traefik(config.docker_network, force=force, dry_run=dry_run)
 
     next_steps = [
-        "Run `homesrvctl validate` to confirm Docker, Traefik, and the default ingress target are reachable.",
+        "Run `sudo homesrvctl bootstrap wiring` after tunnel provisioning to install the shared cloudflared service wiring.",
         "Run `homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>` to provision the shared host tunnel if it is still missing.",
-        "Cloudflared service wiring remains a later bootstrap slice; use `homesrvctl cloudflared setup` for current guidance once local tunnel material exists.",
+        "Run `homesrvctl validate` after bootstrap wiring to confirm Docker, Traefik, and the default ingress target are reachable.",
     ]
     detail = "host runtime baseline converged for the current bootstrap target"
     if dry_run:
@@ -254,6 +282,101 @@ def provision_bootstrap_runtime(
         groups=group_actions,
         network=network_state,
         traefik=traefik_state,
+        next_steps=next_steps,
+    )
+
+
+def provision_bootstrap_wiring(
+    config_path: Path | None = None,
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+) -> BootstrapWiringProvisioning:
+    target_path = config_path or default_config_path()
+    if os.geteuid() != 0 and not dry_run:
+        raise typer.BadParameter("bootstrap wiring requires root privileges; rerun with sudo or use --dry-run")
+
+    config_created = False
+    if not target_path.exists():
+        if not dry_run:
+            init_config(target_path, force=False)
+        config_created = True
+
+    config, _ = load_config_details(target_path) if target_path.exists() or not dry_run else (
+        HomesrvctlConfig(),
+        {field: "default" for field in default_config_data().keys()},
+    )
+    current_cloudflared_config = config.cloudflared_config
+    source_cloudflared_config = _existing_cloudflared_config_source(current_cloudflared_config)
+    credentials_source_path = _existing_credentials_source(source_cloudflared_config)
+    credentials_target_path = SHARED_CONFIG_PATH.parent / _bootstrap_credentials_filename(config)
+    if credentials_source_path is not None:
+        credentials_target_path = SHARED_CONFIG_PATH.parent / credentials_source_path.name
+    elif not (SHARED_CONFIG_PATH.parent / _bootstrap_credentials_filename(config)).exists():
+        raise typer.BadParameter(
+            "bootstrap wiring could not find cloudflared tunnel credentials. Run `homesrvctl bootstrap tunnel` first "
+            "or point the config at an existing local cloudflared setup."
+        )
+
+    rendered_config = render_cloudflared_target_config_content(source_cloudflared_config, credentials_target_path)
+    if rendered_config is None:
+        rendered_config = _render_minimal_bootstrap_cloudflared_config(config, credentials_target_path)
+
+    cloudflared_config_written = _write_text_if_changed(
+        SHARED_CONFIG_PATH,
+        rendered_config,
+        force=force,
+        dry_run=dry_run,
+    )
+    credentials_written = _copy_if_changed(
+        credentials_source_path,
+        credentials_target_path,
+        force=force,
+        dry_run=dry_run,
+    )
+    _ensure_shared_cloudflared_permissions(SHARED_CONFIG_PATH, credentials_target_path, dry_run=dry_run)
+
+    config_updated = current_cloudflared_config != SHARED_CONFIG_PATH
+    if not dry_run:
+        update_config(target_path, cloudflared_config=str(SHARED_CONFIG_PATH))
+
+    systemd_unit = inspect_cloudflared_systemd_unit(quiet=dry_run)
+    if systemd_unit.present:
+        systemd_mode = "override"
+        systemd_path = SYSTEMD_OVERRIDE_PATH
+        systemd_content = render_cloudflared_systemd_override(SHARED_CONFIG_PATH)
+    else:
+        systemd_mode = "unit"
+        systemd_path = SYSTEMD_UNIT_PATH
+        systemd_content = render_cloudflared_systemd_unit(SHARED_CONFIG_PATH)
+    systemd_written = _write_text_if_changed(Path(systemd_path), systemd_content, force=force, dry_run=dry_run)
+    if not dry_run:
+        _run_runtime_command(["systemctl", "daemon-reload"], dry_run=False)
+        _run_runtime_command(["systemctl", "enable", "--now", "cloudflared"], dry_run=False)
+
+    next_steps = [
+        "Run `homesrvctl cloudflared status` to confirm the shared-group config path and credential readability.",
+        "Run `homesrvctl tunnel status` to confirm the service-backed tunnel resolves correctly.",
+        "Final bootstrap validation remains the next slice.",
+    ]
+    detail = "cloudflared config and systemd wiring converged for the shared-group bootstrap model"
+    if dry_run:
+        detail = "dry-run complete for bootstrap config and service wiring"
+    return BootstrapWiringProvisioning(
+        ok=True,
+        dry_run=dry_run,
+        detail=detail,
+        config_path=str(target_path),
+        config_created=config_created,
+        config_updated=config_updated,
+        cloudflared_config_path=str(SHARED_CONFIG_PATH),
+        credentials_path=str(credentials_target_path),
+        cloudflared_config_written=cloudflared_config_written,
+        credentials_written=credentials_written,
+        systemd_mode=systemd_mode,
+        systemd_path=systemd_path,
+        systemd_written=systemd_written,
+        service_enabled=True,
         next_steps=next_steps,
     )
 
@@ -610,6 +733,33 @@ def _resolve_operator_user(explicit_user: str | None) -> str | None:
     return candidate
 
 
+def _existing_cloudflared_config_source(config_path: Path) -> Path | None:
+    if config_path.exists():
+        return config_path
+    if SHARED_CONFIG_PATH.exists():
+        return SHARED_CONFIG_PATH
+    return None
+
+
+def _existing_credentials_source(config_path: Path | None) -> Path | None:
+    if config_path is None:
+        return None
+    try:
+        credentials_path = cloudflared_credentials_path(config_path)
+    except (CloudflaredConfigError, typer.BadParameter):
+        return None
+    if credentials_path.exists():
+        return credentials_path
+    return None
+
+
+def _bootstrap_credentials_filename(config: HomesrvctlConfig) -> str:
+    candidate = config.tunnel_name.strip().lower()
+    if candidate and all(char in "0123456789abcdef-" for char in candidate) and len(candidate) == 36:
+        return f"{candidate}.json"
+    return "tunnel-credentials.json"
+
+
 def _debian_codename(os_info: dict[str, object]) -> str:
     codename = os.environ.get("VERSION_CODENAME", "").strip()
     if codename:
@@ -620,6 +770,21 @@ def _debian_codename(os_info: dict[str, object]) -> str:
             if line.startswith("VERSION_CODENAME="):
                 return line.split("=", 1)[1].strip().strip('"')
     raise typer.BadParameter("could not determine Debian codename for package repository setup")
+
+
+def _render_minimal_bootstrap_cloudflared_config(config: HomesrvctlConfig, credentials_path: Path) -> str:
+    tunnel_ref = config.tunnel_name.strip()
+    if not tunnel_ref:
+        raise typer.BadParameter("cannot render bootstrap cloudflared config without a tunnel reference")
+    return "\n".join(
+        [
+            f"tunnel: {tunnel_ref}",
+            f"credentials-file: {credentials_path}",
+            "ingress:",
+            "  - service: http_status:404",
+            "",
+        ]
+    )
 
 
 def _dpkg_architecture(*, dry_run: bool) -> str:
@@ -713,6 +878,48 @@ def _ensure_file_content(path: Path, content: bytes, *, dry_run: bool) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     return True
+
+
+def _write_text_if_changed(path: Path, content: str, *, force: bool, dry_run: bool) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    if existing == content:
+        return False
+    if existing is not None and not force:
+        raise typer.BadParameter(f"file already exists at {path}; use --force to overwrite")
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _copy_if_changed(source: Path | None, target: Path, *, force: bool, dry_run: bool) -> bool:
+    if source is None:
+        return False
+    payload = source.read_text(encoding="utf-8")
+    return _write_text_if_changed(target, payload, force=force, dry_run=dry_run)
+
+
+def _ensure_shared_cloudflared_permissions(config_path: Path, credentials_path: Path, *, dry_run: bool) -> None:
+    try:
+        group_id = grp.getgrnam(HOMESRVCTL_GROUP).gr_gid
+    except KeyError as exc:
+        raise typer.BadParameter("homesrvctl group is missing; run `sudo homesrvctl bootstrap runtime` first") from exc
+    specs = [
+        (config_path.parent, 0o750, False, True),
+        (config_path, 0o640, True, False),
+        (credentials_path, 0o640, True, False),
+    ]
+    for path, mode, must_exist, is_dir in specs:
+        if must_exist and not path.exists():
+            continue
+        if dry_run:
+            continue
+        if is_dir:
+            path.mkdir(parents=True, exist_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(path, mode)
+        os.chown(path, 0, group_id)
 
 
 def _ensure_runtime_groups(operator_user: str | None, *, dry_run: bool) -> list[dict[str, object]]:

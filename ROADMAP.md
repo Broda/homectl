@@ -1549,12 +1549,24 @@ Completed in this milestone:
 
 ### 12.4 Config And Service Wiring
 
-Status: planned
+Status: completed
 
 Tasks:
 - Write the main `homesrvctl` config for the provisioned host.
 - Write the supported `cloudflared` config and credentials layout.
 - Install the systemd service wiring needed for the shared-group model.
+
+Completed in this milestone:
+- Added `homesrvctl bootstrap wiring` as the shared-group cloudflared convergence command.
+- The command now supports `--dry-run` and `--json`.
+- The wiring slice now:
+  - creates the main config when it is still missing
+  - normalizes `cloudflared_config` to `/srv/homesrvctl/cloudflared/config.yml`
+  - migrates tunnel credentials into the shared config directory
+  - writes the shared cloudflared config and permissions
+  - installs the needed systemd unit or override for the current host
+  - enables the `cloudflared` service under the shared-group model
+- Runtime and tunnel bootstrap next-step guidance now points at `bootstrap wiring` before final validation.
 
 ### 12.5 First-Run Validation
 

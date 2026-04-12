@@ -114,10 +114,11 @@ Responsibilities:
 - assess fresh-host readiness for the planned Debian-family bootstrap target
 - provision the shared Cloudflare tunnel and local bootstrap material for later host/runtime wiring
 - converge the host runtime baseline for the first bootstrap target, including packages, shared directories/groups, Docker network, and baseline Traefik runtime
+- converge the shared-group `cloudflared` config path, tunnel credentials layout, and systemd service wiring
 - detect current host/package/runtime/config/token state without mutating the host
 - keep bootstrap orchestration separate from the existing domain, stack, and runtime command modules
 
-The current shipped slices cover assessment, Cloudflare tunnel provisioning plus local bootstrap material writing, and host runtime baseline convergence.
+The current shipped slices cover assessment, Cloudflare tunnel provisioning plus local bootstrap material writing, host runtime baseline convergence, and shared-group cloudflared wiring.
 Future bootstrap mutation flows should continue building on this layer rather than spreading provisioning logic across unrelated modules.
 
 ## Current Architectural Boundaries

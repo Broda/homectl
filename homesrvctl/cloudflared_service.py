@@ -18,6 +18,8 @@ from homesrvctl.shell import run_command
 SHARED_GROUP_NAME = "homesrvctl"
 SHARED_CONFIG_DIR = Path("/srv/homesrvctl/cloudflared")
 SHARED_CONFIG_PATH = SHARED_CONFIG_DIR / "config.yml"
+SYSTEMD_OVERRIDE_PATH = "/etc/systemd/system/cloudflared.service.d/override.conf"
+SYSTEMD_UNIT_PATH = "/etc/systemd/system/cloudflared.service"
 
 
 @dataclass(slots=True)
@@ -139,7 +141,7 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
     issues: list[str] = []
     notes: list[str] = []
     next_commands: list[str] = []
-    override_path = "/etc/systemd/system/cloudflared.service.d/override.conf" if unit.present else None
+    override_path = SYSTEMD_OVERRIDE_PATH if unit.present else None
     current_user = getpass.getuser()
     configured_credentials_path: str | None = None
     configured_credentials_exists: bool | None = None
@@ -150,7 +152,7 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
     configured_credentials_mode: str | None = None
     target_config_path = SHARED_CONFIG_PATH if unit.present else config_path
     target_credentials_path: Path | None = None
-    override_content = _systemd_override_content(target_config_path) if unit.present else None
+    override_content = render_cloudflared_systemd_override(target_config_path) if unit.present else None
 
     if not configured_exists:
         issues.append(f"configured cloudflared config is missing: {config_path}")
@@ -359,12 +361,38 @@ def _path_is_writable(path: Path) -> bool:
 
 
 def _systemd_override_content(config_path: Path) -> str:
+    return render_cloudflared_systemd_override(config_path)
+
+
+def render_cloudflared_systemd_override(config_path: Path) -> str:
     return "\n".join(
         [
             "[Service]",
             f"Group={SHARED_GROUP_NAME}",
             "ExecStart=",
             f"ExecStart=/usr/bin/cloudflared --no-autoupdate --config {config_path} tunnel run",
+        ]
+    )
+
+
+def render_cloudflared_systemd_unit(config_path: Path) -> str:
+    return "\n".join(
+        [
+            "[Unit]",
+            "Description=cloudflared tunnel",
+            "After=network-online.target",
+            "Wants=network-online.target",
+            "",
+            "[Service]",
+            "Type=simple",
+            "User=root",
+            f"Group={SHARED_GROUP_NAME}",
+            f"ExecStart=/usr/bin/cloudflared --no-autoupdate --config {config_path} tunnel run",
+            "Restart=on-failure",
+            "RestartSec=5s",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
         ]
     )
 
@@ -421,6 +449,10 @@ def _systemd_setup_commands(
 
 
 def _render_target_config_content(config_path: Path | None, target_credentials_path: Path | None) -> str | None:
+    return render_cloudflared_target_config_content(config_path, target_credentials_path)
+
+
+def render_cloudflared_target_config_content(config_path: Path | None, target_credentials_path: Path | None) -> str | None:
     if config_path is None or not config_path.exists():
         return None
     try:

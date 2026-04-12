@@ -9,6 +9,7 @@ from homesrvctl.bootstrap import (
     assess_bootstrap,
     provision_bootstrap_runtime,
     provision_bootstrap_tunnel,
+    provision_bootstrap_wiring,
 )
 from homesrvctl.cloudflared import CloudflaredConfigError
 from homesrvctl.config import default_config_path
@@ -250,6 +251,78 @@ def bootstrap_runtime(
     info(f"operator user: {provisioned.operator_user or '<none>'}")
     info(f"docker network: {provisioned.docker_network}")
     info(f"Traefik compose: {provisioned.traefik['compose_path']}")
+    if provisioned.next_steps:
+        typer.echo("")
+        info("next steps:")
+        for step in provisioned.next_steps:
+            typer.echo(f"- {step}")
+
+
+@bootstrap_cli.command("wiring")
+def bootstrap_wiring(
+    path: Path | None = typer.Option(
+        None,
+        "--path",
+        help="Read homesrvctl config from a custom path instead of the default user config location.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing local config or systemd wiring when needed."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the planned wiring changes without applying them."),
+    json_output: bool = typer.Option(False, "--json", help="Print the wiring result as JSON."),
+) -> None:
+    """Converge the shared cloudflared config path and systemd wiring."""
+    target_path = path or default_config_path()
+    try:
+        provisioned = provision_bootstrap_wiring(target_path, dry_run=dry_run, force=force)
+    except (typer.BadParameter, CloudflaredConfigError) as exc:
+        payload = with_json_schema(
+            {
+                "action": "bootstrap_wiring",
+                "ok": False,
+                "dry_run": dry_run,
+                "config_path": str(target_path),
+                "error": str(exc),
+            }
+        )
+        if json_output:
+            typer.echo(json.dumps(payload, indent=2))
+            raise typer.Exit(code=1) from exc
+        raise
+
+    payload = with_json_schema(
+        {
+            "action": "bootstrap_wiring",
+            "ok": provisioned.ok,
+            "dry_run": provisioned.dry_run,
+            "detail": provisioned.detail,
+            "config_path": provisioned.config_path,
+            "config_created": provisioned.config_created,
+            "config_updated": provisioned.config_updated,
+            "cloudflared_config_path": provisioned.cloudflared_config_path,
+            "credentials_path": provisioned.credentials_path,
+            "cloudflared_config_written": provisioned.cloudflared_config_written,
+            "credentials_written": provisioned.credentials_written,
+            "systemd": {
+                "mode": provisioned.systemd_mode,
+                "path": provisioned.systemd_path,
+                "written": provisioned.systemd_written,
+            },
+            "service_enabled": provisioned.service_enabled,
+            "next_steps": provisioned.next_steps,
+        }
+    )
+
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    if provisioned.dry_run:
+        info(provisioned.detail)
+    else:
+        success(provisioned.detail)
+    info(f"config path: {provisioned.config_path}")
+    info(f"cloudflared config path: {provisioned.cloudflared_config_path}")
+    info(f"credentials path: {provisioned.credentials_path}")
+    info(f"systemd {provisioned.systemd_mode}: {provisioned.systemd_path}")
     if provisioned.next_steps:
         typer.echo("")
         info("next steps:")

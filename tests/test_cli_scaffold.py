@@ -5301,6 +5301,68 @@ def test_bootstrap_runtime_json_failure(monkeypatch, tmp_path: Path) -> None:
     assert "root privileges" in payload["error"]
 
 
+def test_bootstrap_wiring_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "provision_bootstrap_wiring",
+        lambda path, dry_run=False, force=False: type(
+            "Provisioned",
+            (),
+            {
+                "ok": True,
+                "dry_run": dry_run,
+                "detail": "cloudflared config and systemd wiring converged for the shared-group bootstrap model",
+                "config_path": str(config_path),
+                "config_created": False,
+                "config_updated": True,
+                "cloudflared_config_path": "/srv/homesrvctl/cloudflared/config.yml",
+                "credentials_path": "/srv/homesrvctl/cloudflared/tunnel.json",
+                "cloudflared_config_written": True,
+                "credentials_written": True,
+                "systemd_mode": "override",
+                "systemd_path": "/etc/systemd/system/cloudflared.service.d/override.conf",
+                "systemd_written": True,
+                "service_enabled": True,
+                "next_steps": ["Run `homesrvctl cloudflared status`."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "wiring", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_wiring"
+    assert payload["systemd"]["mode"] == "override"
+    assert payload["service_enabled"] is True
+
+
+def test_bootstrap_wiring_json_failure(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+
+    def fail(path, dry_run=False, force=False):  # noqa: ANN001,ANN202
+        raise typer.BadParameter("bootstrap wiring could not find cloudflared tunnel credentials")
+
+    monkeypatch.setattr(bootstrap_cmd, "provision_bootstrap_wiring", fail)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "wiring", "--json", "--path", str(config_path)])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_wiring"
+    assert payload["ok"] is False
+    assert "cloudflared tunnel credentials" in payload["error"]
+
+
 def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import validate_cmd
 
