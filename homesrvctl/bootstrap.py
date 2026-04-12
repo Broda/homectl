@@ -1175,7 +1175,7 @@ def _ensure_shared_cloudflared_permissions(config_path: Path, credentials_path: 
         raise typer.BadParameter("homesrvctl group is missing; run `sudo homesrvctl bootstrap runtime` first") from exc
     specs = [
         (config_path.parent, 0o750, False, True),
-        (config_path, 0o640, True, False),
+        (config_path, 0o660, True, False),
         (credentials_path, 0o640, True, False),
     ]
     for path, mode, must_exist, is_dir in specs:

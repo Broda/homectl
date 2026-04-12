@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import stat
 import pytest
 import typer
 
@@ -716,3 +717,25 @@ def test_provision_bootstrap_wiring_rejects_missing_credentials(monkeypatch, tmp
 
     with pytest.raises(typer.BadParameter, match="could not find cloudflared tunnel credentials"):
         bootstrap.provision_bootstrap_wiring(config_path)
+
+
+def test_ensure_shared_cloudflared_permissions_makes_config_group_writable(monkeypatch, tmp_path: Path) -> None:
+    shared_dir = tmp_path / "shared"
+    config_path = shared_dir / "config.yml"
+    credentials_path = shared_dir / "tunnel.json"
+    shared_dir.mkdir(parents=True)
+    config_path.write_text("tunnel: test\n", encoding="utf-8")
+    credentials_path.write_text('{"TunnelID":"11111111-2222-4333-8444-555555555555"}\n', encoding="utf-8")
+
+    monkeypatch.setattr(bootstrap, "HOMESRVCTL_GROUP", grp_name := "homesrvctl")
+    monkeypatch.setattr(
+        bootstrap.grp,
+        "getgrnam",
+        lambda name: type("Group", (), {"gr_gid": 1005})() if name == grp_name else (_ for _ in ()).throw(KeyError(name)),
+    )
+    monkeypatch.setattr(bootstrap.os, "chown", lambda path, uid, gid: None)
+
+    bootstrap._ensure_shared_cloudflared_permissions(config_path, credentials_path, dry_run=False)
+
+    assert stat.S_IMODE(config_path.stat().st_mode) == 0o660
+    assert stat.S_IMODE(credentials_path.stat().st_mode) == 0o640

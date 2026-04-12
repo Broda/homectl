@@ -34,6 +34,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - TUI detail-pane polish: stack and domain detail views now use more operator-facing wording such as `compose file: exists`, `has local config: yes/no`, and `repairable: N/A/Yes/No`, and the domain pane now renders DNS and ingress rows in bordered table layouts for faster scanning.
 
 ### Fixed
+- Changed the shared-group `cloudflared` config guidance and bootstrap wiring permissions so `/srv/homesrvctl/cloudflared/config.yml` is now group-writable for trusted operators, while the tunnel credentials JSON remains non-public.
+- `cloudflared status`, `cloudflared setup`, and `bootstrap validate` now handle unreadable runtime/config paths as clean setup failures instead of crashing with a Python traceback.
 - Updated `bootstrap wiring` next-step guidance so it now points at the shipped `homesrvctl bootstrap validate` command instead of the old pre-release placeholder text.
 - Changed the first-class `cloudflared` operator model to use a dedicated `homesrvctl` group for secret tunnel credentials instead of recommending user-owned writable config files.
 - Changed `cloudflared setup` to generate shared-group migration commands and a systemd override that sets `Group=homesrvctl`.

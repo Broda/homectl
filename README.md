@@ -370,6 +370,7 @@ homesrvctl up example.com --dry-run
 - `bootstrap tunnel` is the first mutating bootstrap slice: it creates a locally managed Cloudflare tunnel when needed, reuses a safely recoverable local tunnel when credentials already exist, writes bootstrap credentials plus a minimal `cloudflared` config, and normalizes `tunnel_name` in the main config to the tunnel UUID.
 - `bootstrap tunnel` currently requires `--account-id` unless the current `cloudflared` credentials file is already readable and can supply the account ID.
 - `bootstrap wiring` is the shared-group cloudflared convergence command. It can create the main config when missing, normalize `cloudflared_config` to `/srv/homesrvctl/cloudflared/config.yml`, migrate tunnel credentials into the shared path, install the systemd unit or override needed for the active host, and enable the `cloudflared` service.
+- In the shared-group model, `/srv/homesrvctl/cloudflared/config.yml` is intended to be `root:homesrvctl` and group-writable so trusted operators can update ingress, while the tunnel credentials JSON remains secret material and should stay non-public.
 - `bootstrap tunnel` needs Cloudflare tunnel-write capability in addition to the existing DNS-oriented token permissions. The current practical token set is:
   - `Zone: Read`
   - `DNS: Edit`

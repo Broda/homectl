@@ -202,3 +202,48 @@ def test_inspect_cloudflared_setup_reports_ready_when_credentials_readable(monke
     assert setup.account_inspection_available is True
     assert setup.ingress_mutation_available is True
     assert setup.next_commands == []
+
+
+def test_inspect_cloudflared_setup_handles_unreadable_runtime_path(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "cloudflared" / "config.yml"
+    credentials_path = tmp_path / "cloudflared" / "tunnel.json"
+    runtime_path = tmp_path / "restricted" / "config.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("tunnel: test\ncredentials-file: tunnel.json\ningress:\n  - service: http_status:404\n", encoding="utf-8")
+    credentials_path.write_text('{"AccountTag": "account-123"}', encoding="utf-8")
+    runtime_path.write_text("tunnel: test\ncredentials-file: tunnel.json\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        cloudflared_service,
+        "inspect_cloudflared_systemd_unit",
+        lambda quiet=False: cloudflared_service.CloudflaredSystemdUnit(
+            present=True,
+            exec_start="argv[]=/usr/bin/cloudflared --no-autoupdate --config "
+            f"{runtime_path} tunnel run ;",
+            config_path=str(runtime_path),
+            user="root",
+            group="homesrvctl",
+        ),
+    )
+    runtime = cloudflared_service.CloudflaredRuntime(mode="systemd", active=True, detail="systemd service is active")
+    original_path_exists = cloudflared_service._path_exists
+    original_is_readable = cloudflared_service._path_is_readable
+
+    monkeypatch.setattr(
+        cloudflared_service,
+        "_path_exists",
+        lambda path: False if path == runtime_path else original_path_exists(path),
+    )
+    monkeypatch.setattr(
+        cloudflared_service,
+        "_path_is_readable",
+        lambda path: False if path == runtime_path else original_is_readable(path),
+    )
+
+    setup = cloudflared_service.inspect_cloudflared_setup(config_path, runtime=runtime)
+
+    assert setup.ok is False
+    assert setup.setup_state == "misaligned"
+    assert any(f"systemd cloudflared config path is missing: {runtime_path}" == issue for issue in setup.issues)
+    assert any(command == f"sudo chmod 660 {cloudflared_service.SHARED_CONFIG_PATH}" for command in setup.next_commands)

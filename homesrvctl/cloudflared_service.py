@@ -131,10 +131,10 @@ def detect_cloudflared_runtime(*, quiet: bool = False) -> CloudflaredRuntime:
 def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime | None = None, quiet: bool = False) -> CloudflaredSetupReport:
     resolved_runtime = runtime or detect_cloudflared_runtime(quiet=quiet)
     unit = inspect_cloudflared_systemd_unit(quiet=quiet)
-    configured_exists = config_path.exists()
+    configured_exists = _path_exists(config_path)
     configured_writable = _path_is_writable(config_path)
     runtime_path = unit.config_path if unit.present else None
-    runtime_exists = Path(runtime_path).exists() if runtime_path else None
+    runtime_exists = _path_exists(Path(runtime_path)) if runtime_path else None
     runtime_readable = _path_is_readable(Path(runtime_path)) if runtime_path else None
     paths_aligned = str(config_path) == runtime_path if runtime_path else None
 
@@ -179,7 +179,7 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
             issues.append(str(exc))
     else:
         configured_credentials_path = str(credentials_path)
-        configured_credentials_exists = credentials_path.exists()
+        configured_credentials_exists = _path_exists(credentials_path)
         if configured_credentials_exists:
             configured_credentials_readable = _path_is_readable(credentials_path)
             metadata = _path_metadata(credentials_path)
@@ -349,8 +349,15 @@ def _path_is_readable(path: Path) -> bool:
     return True
 
 
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
 def _path_is_writable(path: Path) -> bool:
-    if path.exists():
+    if _path_exists(path):
         return os.access(path, os.W_OK)
     target = path.parent
     try:
@@ -414,22 +421,24 @@ def _systemd_setup_commands(
         f"sudo usermod -aG {SHARED_GROUP_NAME} {current_user}",
         f"sudo install -d -o root -g {SHARED_GROUP_NAME} -m 750 {shlex.quote(str(SHARED_CONFIG_DIR))}",
     ]
-    source_config_path = configured_path if configured_path.exists() else runtime_path
+    source_config_path = configured_path if _path_exists(configured_path) else runtime_path
+    if source_config_path is not None and not _path_exists(source_config_path):
+        source_config_path = runtime_path if runtime_path is not None and _path_exists(runtime_path) else None
     rendered_config = _render_target_config_content(source_config_path, target_credentials_path)
     if rendered_config is not None:
         commands.append(
             f"sudo tee {shlex.quote(str(target_config_path))} >/dev/null <<'EOF'\n{rendered_config}\nEOF"
         )
         commands.append(f"sudo chown root:{SHARED_GROUP_NAME} {shlex.quote(str(target_config_path))}")
-        commands.append(f"sudo chmod 640 {shlex.quote(str(target_config_path))}")
+        commands.append(f"sudo chmod 660 {shlex.quote(str(target_config_path))}")
     elif runtime_path and runtime_exists:
         commands.append(
-            f"sudo install -o root -g {SHARED_GROUP_NAME} -m 640 {shlex.quote(str(runtime_path))} {shlex.quote(str(target_config_path))}"
+            f"sudo install -o root -g {SHARED_GROUP_NAME} -m 660 {shlex.quote(str(runtime_path))} {shlex.quote(str(target_config_path))}"
         )
     else:
         commands.append(f"sudoedit {shlex.quote(str(target_config_path))}")
 
-    if configured_credentials_path and configured_credentials_path.exists() and target_credentials_path is not None:
+    if configured_credentials_path and _path_exists(configured_credentials_path) and target_credentials_path is not None:
         commands.append(
             f"sudo install -o root -g {SHARED_GROUP_NAME} -m 640 {shlex.quote(str(configured_credentials_path))} {shlex.quote(str(target_credentials_path))}"
         )
@@ -453,7 +462,7 @@ def _render_target_config_content(config_path: Path | None, target_credentials_p
 
 
 def render_cloudflared_target_config_content(config_path: Path | None, target_credentials_path: Path | None) -> str | None:
-    if config_path is None or not config_path.exists():
+    if config_path is None or not _path_exists(config_path):
         return None
     try:
         parsed = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
