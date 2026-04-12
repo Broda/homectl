@@ -1140,7 +1140,7 @@ class HomesrvctlTextualApp(App[None]):
 
     def _command_bar_text(self) -> str:
         mode = f"auto refresh {self.refresh_seconds:g}s" if self.refresh_seconds > 0 else "manual refresh"
-        return f"w/s navigate  ·  b create  ·  d domain  ·  r refresh  ·  q quit  ·  status: {self.status_message}  ·  {mode}"
+        return f"status: {self.status_message}  ·  {mode}"
 
     def _stacks_summary_parts(self) -> tuple[str, str]:
         payload = self.snapshot.get("list")

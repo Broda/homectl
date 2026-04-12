@@ -880,8 +880,8 @@ def test_textual_app_summary_and_stack_list_text() -> None:
     assert "hostname: notes.example.com" in detail
     assert "Effective config" in detail
     assert "Domain status" in detail
-    assert "w/s navigate" in command_bar
-    assert "r refresh" in command_bar
+    assert "status:" in command_bar
+    assert "manual refresh" in command_bar
 
 
 def test_textual_app_config_tool_detail_text() -> None:
@@ -923,7 +923,7 @@ def test_textual_app_config_tool_detail_text() -> None:
     assert "docker network" in detail
     assert "web" in detail
     assert "profiles: 1" in detail
-    assert "w/s navigate" in command_bar
+    assert "status:" in command_bar
 
 
 def test_textual_app_tunnel_tool_detail_text() -> None:
@@ -1637,8 +1637,7 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
     assert "config detail: Validating rules" in detail
     assert "config detail: Validating rules\nOK" not in detail
     assert "· enter menu" not in detail
-    assert "w/s navigate" in command_bar
-    assert "q quit" in command_bar
+    assert "status:" in command_bar
 
 
 def test_textual_app_bootstrap_detail_text() -> None:
