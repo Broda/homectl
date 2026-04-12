@@ -29,6 +29,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Core dataclasses for config and stack-local settings.
 - [`homesrvctl/config.py`](homesrvctl/config.py)
   Config loading, default paths, and stack-local config helpers.
+- [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
+  Non-mutating fresh-host bootstrap assessment helpers.
 - [`homesrvctl/utils.py`](homesrvctl/utils.py)
   Shared filesystem and rendering helpers.
 - [`homesrvctl/templates.py`](homesrvctl/templates.py)
@@ -59,6 +61,8 @@ This document is a quick orientation guide to the repository. It is intentionall
 
 - [`homesrvctl/commands/config_cmd.py`](homesrvctl/commands/config_cmd.py)
   `config init` and related config-surface commands.
+- [`homesrvctl/commands/bootstrap_cmd.py`](homesrvctl/commands/bootstrap_cmd.py)
+  Fresh-host bootstrap assessment command surface.
 - [`homesrvctl/commands/site_cmd.py`](homesrvctl/commands/site_cmd.py)
   `site init` scaffold generation.
 - [`homesrvctl/commands/app_cmd.py`](homesrvctl/commands/app_cmd.py)

@@ -1483,12 +1483,30 @@ Desired first-run outcome:
 
 ### 12.1 Bootstrap Assessment
 
-Status: planned
+Status: completed
 
 Tasks:
 - Add a non-mutating first-run assessment path for fresh hosts.
 - Detect OS support, systemd presence, package/runtime prerequisites, token presence, and current local config state.
 - Report whether the host is ready for bootstrap or already partially provisioned.
+
+Completed in this milestone:
+- Added `homesrvctl bootstrap assess` as a non-mutating first bootstrap slice.
+- The assessment now reports:
+  - Debian-family OS support
+  - systemd presence
+  - Docker, Docker Compose, and `cloudflared` binary availability
+  - Traefik runtime presence
+  - `cloudflared` runtime status
+  - config-file presence/validity
+  - Docker network readiness
+  - Cloudflare API token presence and basic API reachability
+- The command now classifies the host as:
+  - `fresh`
+  - `partial`
+  - `ready`
+  - `unsupported`
+- Both text and JSON output now include actionable next-step guidance while keeping the slice assessment-only.
 
 ### 12.2 Cloudflare Remote Tunnel Provisioning
 

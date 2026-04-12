@@ -5024,6 +5024,153 @@ def test_validate_json_output(monkeypatch, tmp_path: Path) -> None:
     assert payload["checks"][0]["name"] == "cloudflared binary"
 
 
+def test_bootstrap_assess_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "assess_bootstrap",
+        lambda path=None, quiet=False: type(
+            "Assessment",
+            (),
+            {
+                "ok": True,
+                "bootstrap_state": "partial",
+                "bootstrap_ready": False,
+                "host_supported": True,
+                "detail": "host is partially provisioned relative to the current bootstrap target",
+                "config_path": str(home / ".config" / "homesrvctl" / "config.yml"),
+                "os": {
+                    "id": "debian",
+                    "version_id": "12",
+                    "pretty_name": "Debian GNU/Linux 12",
+                    "supported": True,
+                    "detail": "Debian-family host detected",
+                },
+                "systemd": {"present": True, "detail": "systemd detected"},
+                "packages": {
+                    "docker": True,
+                    "docker_detail": "found in PATH",
+                    "docker_compose": False,
+                    "docker_compose_detail": "docker compose unavailable",
+                    "cloudflared": True,
+                    "cloudflared_detail": "found in PATH",
+                },
+                "services": {
+                    "traefik_running": False,
+                    "traefik_detail": "no running container matched filter name=traefik",
+                    "cloudflared_active": False,
+                    "cloudflared_mode": "absent",
+                    "cloudflared_detail": "cloudflared not detected",
+                },
+                "config": {
+                    "path": str(home / ".config" / "homesrvctl" / "config.yml"),
+                    "exists": False,
+                    "valid": False,
+                    "detail": "config file not found",
+                    "docker_network": "web",
+                    "cloudflared_config": "/srv/homesrvctl/cloudflared/config.yml",
+                    "token_present": False,
+                    "token_source": "missing",
+                },
+                "network": {"name": "web", "exists": False, "detail": "docker network not found"},
+                "cloudflare": {
+                    "token_present": False,
+                    "token_source": "missing",
+                    "api_reachable": None,
+                    "detail": "Cloudflare API token is not configured",
+                },
+                "issues": ["Traefik is not running", "Cloudflare API token is missing"],
+                "next_steps": ["Install or start the baseline Traefik runtime expected by homesrvctl."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "assess", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_assess"
+    assert payload["bootstrap_state"] == "partial"
+    assert payload["host_supported"] is True
+    assert payload["packages"]["docker_compose"] is False
+    assert payload["cloudflare"]["token_present"] is False
+
+
+def test_bootstrap_assess_fails_for_unsupported_host(monkeypatch) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "assess_bootstrap",
+        lambda path=None, quiet=False: type(
+            "Assessment",
+            (),
+            {
+                "ok": False,
+                "bootstrap_state": "unsupported",
+                "bootstrap_ready": False,
+                "host_supported": False,
+                "detail": "host is outside the current bootstrap target",
+                "config_path": "/home/test/.config/homesrvctl/config.yml",
+                "os": {
+                    "id": "fedora",
+                    "version_id": "41",
+                    "pretty_name": "Fedora Linux 41",
+                    "supported": False,
+                    "detail": "unsupported OS family: fedora",
+                },
+                "systemd": {"present": True, "detail": "systemd detected"},
+                "packages": {
+                    "docker": False,
+                    "docker_detail": "missing from PATH",
+                    "docker_compose": False,
+                    "docker_compose_detail": "docker binary missing",
+                    "cloudflared": False,
+                    "cloudflared_detail": "missing from PATH",
+                },
+                "services": {
+                    "traefik_running": False,
+                    "traefik_detail": "docker binary missing",
+                    "cloudflared_active": False,
+                    "cloudflared_mode": "absent",
+                    "cloudflared_detail": "cloudflared not detected",
+                },
+                "config": {
+                    "path": "/home/test/.config/homesrvctl/config.yml",
+                    "exists": False,
+                    "valid": False,
+                    "detail": "config file not found",
+                    "docker_network": "web",
+                    "cloudflared_config": "/srv/homesrvctl/cloudflared/config.yml",
+                    "token_present": False,
+                    "token_source": "missing",
+                },
+                "network": {"name": "web", "exists": None, "detail": "docker binary missing"},
+                "cloudflare": {
+                    "token_present": False,
+                    "token_source": "missing",
+                    "api_reachable": None,
+                    "detail": "Cloudflare API token is not configured",
+                },
+                "issues": ["host is not in the first supported bootstrap target: Debian-family Linux with systemd"],
+                "next_steps": ["Use a Debian-family Raspberry Pi OS host with systemd for the first bootstrap target."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "assess"])
+
+    assert result.exit_code == 1, result.output
+    assert "bootstrap state: unsupported" in result.output
+    assert "host supported: no" in result.output
+
+
 def test_doctor_json_output(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import validate_cmd
 

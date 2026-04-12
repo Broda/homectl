@@ -9,6 +9,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 ## Unreleased
 
 ### Added
+- Added `homesrvctl bootstrap assess` as the first fresh-host bootstrap slice. It is assessment-only and reports whether the current host looks `fresh`, `partial`, `ready`, or `unsupported` relative to the first Debian-family Raspberry Pi bootstrap target.
 - Added `cloudflared setup` to assess whether the configured `cloudflared` config path is writable and aligned with the active runtime, and to print exact systemd override / migration commands when setup repair is needed.
 - Added setup-alignment reporting to `cloudflared status` plus a matching `Fix Setup` action in the TUI `Cloudflared` pane.
 - Added a global TUI stack-creation flow that can scaffold a new hostname through the existing `site init` and `app init` commands without requiring a pre-existing stack row.

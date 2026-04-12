@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from homesrvctl.commands.app_cmd import app_cli
+from homesrvctl.commands.bootstrap_cmd import bootstrap_cli
 from homesrvctl.commands.cloudflared_cmd import cloudflared_cli
 from homesrvctl.commands.config_cmd import config_cli
 from homesrvctl.commands.deploy_cmd import doctor, down, list_sites_with_format, restart, up
@@ -20,6 +21,7 @@ app = typer.Typer(
 )
 
 app.add_typer(config_cli, name="config")
+app.add_typer(bootstrap_cli, name="bootstrap")
 app.add_typer(cloudflared_cli, name="cloudflared")
 app.add_typer(domain_cli, name="domain")
 app.add_typer(tunnel_cli, name="tunnel")

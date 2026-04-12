@@ -59,7 +59,11 @@ Desired long-term first-run outcome:
 - end with Docker, Compose, Traefik, `cloudflared`, shared directories, service/group wiring, a Cloudflare tunnel, and a ready `homesrvctl` config
 - then use `domain add`, `site init`, `app init`, and `up` without separate manual Cloudflare dashboard setup
 
-This is roadmap work, not shipped behavior yet.
+Current shipped step in that direction:
+
+- `homesrvctl bootstrap assess` now reports whether the host looks fresh, partial, ready, or unsupported relative to the first bootstrap target
+
+The mutating bootstrap flow is still roadmap work.
 
 ## Installation
 
@@ -274,6 +278,7 @@ Inspect the stack:
 
 ```bash
 homesrvctl list
+homesrvctl bootstrap assess
 homesrvctl tui
 homesrvctl tunnel status
 homesrvctl cloudflared status
@@ -295,6 +300,7 @@ homesrvctl domain status example.com --json
 homesrvctl domain repair example.com --dry-run --json
 homesrvctl domain remove example.com --dry-run --json
 homesrvctl list --json
+homesrvctl bootstrap assess --json
 homesrvctl tunnel status --json
 homesrvctl cloudflared status --json
 homesrvctl cloudflared config-test --json
@@ -318,6 +324,7 @@ homesrvctl up example.com --dry-run
 
 - `homesrvctl config init [--path PATH] [--force] [--json]`
 - `homesrvctl config show [--path PATH] [--stack HOSTNAME] [--json]`
+- `homesrvctl bootstrap assess [--path PATH] [--json]`
 - `homesrvctl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
@@ -343,6 +350,7 @@ homesrvctl up example.com --dry-run
 - `domain add` uses the Cloudflare DNS API to manage apex and wildcard records for the requested zone.
 - `domain add`, `domain repair`, and `domain remove` support `--json` for machine-readable mutation results.
 - `domain add`, `domain repair`, and `domain remove` now preflight local ingress mutation safety before writing DNS: if the configured `cloudflared` config path is not writable by the current user, or if an active systemd service is pointed at a different config file, the command fails early with setup guidance instead of making a partial DNS-only change.
+- `bootstrap assess` is assessment-only in the current slice: it reports whether the host matches the first Debian-family Pi bootstrap target, but it does not install packages or mutate Cloudflare/local services yet.
 - all `--json` commands include a top-level `schema_version` so automation can pin to a known output shape.
 - `config init --json` reports whether the config file was created or overwritten.
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
