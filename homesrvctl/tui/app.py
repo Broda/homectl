@@ -995,34 +995,34 @@ class HomesrvctlTextualApp(App[None]):
         item = self._selected_control_item()
         if item.get("kind") == "stack":
             specs = [
-                ("Up", "up"),
-                ("Down", "down"),
-                ("Restart", "restart"),
-                ("Doctor", "doctor"),
-                ("Actions", "stack_action_menu"),
-                ("Create", "create_stack_flow"),
-                ("Onboard Domain", "domain_onboarding_flow"),
+                ("Up (u)", "up"),
+                ("Down (x)", "down"),
+                ("Restart (t)", "restart"),
+                ("Doctor (g)", "doctor"),
+                ("Actions (Enter)", "stack_action_menu"),
+                ("Create (b)", "create_stack_flow"),
+                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         elif item.get("tool") == "cloudflared":
             specs = [
                 ("Fix Setup", "cloudflared_setup"),
-                ("Config Test", "cloudflared_config_test"),
-                ("Reload", "cloudflared_reload"),
-                ("Restart CF", "cloudflared_restart"),
-                ("Create", "create_stack_flow"),
-                ("Onboard Domain", "domain_onboarding_flow"),
+                ("Config Test (c)", "cloudflared_config_test"),
+                ("Reload (l)", "cloudflared_reload"),
+                ("Restart CF (k)", "cloudflared_restart"),
+                ("Create (b)", "create_stack_flow"),
+                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         elif item.get("tool") == "bootstrap":
             specs = [
-                ("Refresh", "bootstrap_assess"),
-                ("Create", "create_stack_flow"),
-                ("Onboard Domain", "domain_onboarding_flow"),
+                ("Refresh (r)", "bootstrap_assess"),
+                ("Create (b)", "create_stack_flow"),
+                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         else:
             specs = [
-                ("Refresh", "refresh"),
-                ("Create", "create_stack_flow"),
-                ("Onboard Domain", "domain_onboarding_flow"),
+                ("Refresh (r)", "refresh"),
+                ("Create (b)", "create_stack_flow"),
+                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         self._detail_button_actions = {}
         for label, action in specs:
@@ -1273,7 +1273,6 @@ class HomesrvctlTextualApp(App[None]):
                 )
                 if isinstance(self.global_domain_status_view, dict):
                     lines.extend(["", *render_domain_status_detail(hostname, self.global_domain_status_view)])
-        lines.extend(["", "· enter menu  · b create  · d domain  · r refresh  · q quit"])
         return "\n".join(lines)
 
     def _stack_detail_text(self, hostname: str, compose: bool) -> str:
@@ -1294,8 +1293,6 @@ class HomesrvctlTextualApp(App[None]):
             *render_stack_config_detail(config_view),
             "",
             *render_domain_status_detail(hostname, domain_view),
-            "",
-            "· enter menu  · b create  · d domain  · u up  · x down  · t restart  · g doctor  · r refresh",
         ]
         cached = self.last_stack_actions.get(hostname)
         if isinstance(cached, dict):
@@ -1357,7 +1354,6 @@ class HomesrvctlTextualApp(App[None]):
             payload = cached.get("payload")
             if isinstance(action, str) and isinstance(payload, dict):
                 lines.extend(["", *render_tool_action_detail("cloudflared", action, payload)])
-        lines.extend(["", "· enter menu  · b create  · d domain  · r refresh  · q quit"])
         return "\n".join(lines)
 
     def _bootstrap_detail_text(self) -> str:
@@ -1371,7 +1367,6 @@ class HomesrvctlTextualApp(App[None]):
             action_payload = cached.get("payload")
             if isinstance(action, str) and isinstance(action_payload, dict):
                 lines.extend(["", *render_tool_action_detail("bootstrap", action, action_payload)])
-        lines.extend(["", "· enter menu  · b create  · d domain  · r refresh  · q quit"])
         return "\n".join(lines)
 
     def _config_detail_text(self) -> str:
@@ -1385,7 +1380,6 @@ class HomesrvctlTextualApp(App[None]):
             action_payload = cached.get("payload")
             if isinstance(action, str) and isinstance(action_payload, dict):
                 lines.extend(["", *render_tool_action_detail("config", action, action_payload)])
-        lines.extend(["", "· enter menu  · b create  · d domain  · r refresh  · q quit"])
         return "\n".join(lines)
 
     def _validate_detail_text(self) -> str:
@@ -1406,5 +1400,4 @@ class HomesrvctlTextualApp(App[None]):
                 lines.append(f"- [red]{check.get('name', '<unknown>')}[/red]: {check.get('detail', '')}")
             if len(failures) > 10:
                 lines.append(f"... {len(failures) - 10} more")
-        lines.extend(["", "· w/s navigate  · b create  · d domain  · r refresh  · q quit"])
         return "\n".join(lines)

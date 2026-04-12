@@ -1636,6 +1636,7 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
     assert "runtime: systemd" in detail
     assert "config detail: Validating rules" in detail
     assert "config detail: Validating rules\nOK" not in detail
+    assert "· enter menu" not in detail
     assert "w/s navigate" in command_bar
     assert "q quit" in command_bar
 
@@ -2576,11 +2577,11 @@ def test_detail_button_actions_stack_focus() -> None:
     item = app._selected_control_item()
     assert item.get("kind") == "stack"
     # Verify the expected button labels for stack focus
-    specs_labels = ["Up", "Down", "Restart", "Doctor", "Actions"]
+    specs_labels = ["Up (u)", "Down (x)", "Restart (t)", "Doctor (g)", "Actions (Enter)"]
     # The method builds _detail_button_actions; set it directly for test
     app._detail_button_actions = {label: action for label, action in [
-        ("Up", "up"), ("Down", "down"), ("Restart", "restart"),
-        ("Doctor", "doctor"), ("Actions", "stack_action_menu"),
+        ("Up (u)", "up"), ("Down (x)", "down"), ("Restart (t)", "restart"),
+        ("Doctor (g)", "doctor"), ("Actions (Enter)", "stack_action_menu"),
     ]}
     assert set(app._detail_button_actions.keys()) == set(specs_labels)
 
@@ -2601,14 +2602,14 @@ def test_detail_button_actions_cloudflared_focus() -> None:
     assert item.get("tool") == "cloudflared"
     app._detail_button_actions = {label: action for label, action in [
         ("Fix Setup", "cloudflared_setup"),
-        ("Config Test", "cloudflared_config_test"),
-        ("Reload", "cloudflared_reload"),
-        ("Restart CF", "cloudflared_restart"),
+        ("Config Test (c)", "cloudflared_config_test"),
+        ("Reload (l)", "cloudflared_reload"),
+        ("Restart CF (k)", "cloudflared_restart"),
     ]}
     assert "Fix Setup" in app._detail_button_actions
     assert app._detail_button_actions["Fix Setup"] == "cloudflared_setup"
-    assert "Config Test" in app._detail_button_actions
-    assert app._detail_button_actions["Config Test"] == "cloudflared_config_test"
+    assert "Config Test (c)" in app._detail_button_actions
+    assert app._detail_button_actions["Config Test (c)"] == "cloudflared_config_test"
 
 
 def test_detail_button_actions_bootstrap_focus() -> None:
@@ -2626,11 +2627,11 @@ def test_detail_button_actions_bootstrap_focus() -> None:
     item = app._selected_control_item()
     assert item.get("tool") == "bootstrap"
     app._detail_button_actions = {label: action for label, action in [
-        ("Refresh", "bootstrap_assess"),
-        ("Create", "create_stack_flow"),
-        ("Onboard Domain", "domain_onboarding_flow"),
+        ("Refresh (r)", "bootstrap_assess"),
+        ("Create (b)", "create_stack_flow"),
+        ("Onboard Domain (d)", "domain_onboarding_flow"),
     ]}
-    assert app._detail_button_actions["Refresh"] == "bootstrap_assess"
+    assert app._detail_button_actions["Refresh (r)"] == "bootstrap_assess"
 
 
 def test_bootstrap_summary_parts_partial() -> None:
@@ -2723,7 +2724,7 @@ def test_detail_button_press_dispatches_action(monkeypatch) -> None:
             await pilot.pause()
             # Click the Refresh button in the detail button strip
             buttons = list(app.query(TButton))
-            refresh_btns = [b for b in buttons if str(b.label) == "Refresh"]
+            refresh_btns = [b for b in buttons if str(b.label) == "Refresh (r)"]
             if refresh_btns:
                 await pilot.click(refresh_btns[0])
                 await pilot.pause()
