@@ -11,12 +11,12 @@ from homesrvctl.tui.data import (
     TOOL_ITEMS,
     normalize_config_validation_detail,
     build_dashboard_snapshot,
-    render_bordered_table,
     render_check_list_detail,
     render_bootstrap_assessment_detail,
     render_cloudflared_setup_detail,
     render_config_payload_detail,
     render_domain_status_detail,
+    format_key_value_lines,
     render_tool_action_detail,
     render_stack_config_detail,
     render_stack_action_detail,
@@ -1225,29 +1225,28 @@ class HomesrvctlTextualApp(App[None]):
         if not payload.get("ok") and payload.get("configured_tunnel") in {None, ""}:
             return f"error: {payload.get('detail') or payload.get('error', 'unknown error')}"
         rows = [
-            ["configured tunnel", str(payload.get("configured_tunnel", "<unknown>"))],
-            ["resolved tunnel id", str(payload.get("resolved_tunnel_id") or "<unresolved>")],
-            ["resolution source", str(payload.get("resolution_source") or "unknown")],
+            ("configured tunnel", str(payload.get("configured_tunnel", "<unknown>"))),
+            ("resolved tunnel id", str(payload.get("resolved_tunnel_id") or "<unresolved>")),
+            ("resolution source", str(payload.get("resolution_source") or "unknown")),
         ]
         lines = [
             "[bold #ffcf5a]Tunnel Detail[/bold #ffcf5a]",
             "",
-            *render_bordered_table(["Field", "Value"], rows),
+            *format_key_value_lines(rows),
         ]
         account_id = payload.get("account_id")
         if account_id:
-            lines.extend(["", *render_bordered_table(["Field", "Value"], [["account id", str(account_id)]])])
+            lines.extend(["", *format_key_value_lines([("account id", str(account_id))])])
         api_status = payload.get("api_status")
         if isinstance(api_status, dict):
             lines.extend(
                 [
                     "",
-                    *render_bordered_table(
-                        ["Field", "Value"],
+                    *format_key_value_lines(
                         [
-                            ["api tunnel name", str(api_status.get("name", "<unknown>"))],
-                            ["api tunnel status", str(api_status.get("status", "unknown"))],
-                        ],
+                            ("api tunnel name", str(api_status.get("name", "<unknown>"))),
+                            ("api tunnel status", str(api_status.get("status", "unknown"))),
+                        ]
                     ),
                 ]
             )
