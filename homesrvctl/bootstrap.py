@@ -470,7 +470,7 @@ def assess_bootstrap(config_path: Path | None = None, *, quiet: bool = False) ->
     )
 
     if bootstrap_state == "ready":
-        detail = "host matches the current bootstrap target and appears ready for the next bootstrap slice"
+        detail = "host matches the current shipped bootstrap baseline"
     elif bootstrap_state == "fresh":
         detail = "host looks mostly fresh relative to the current bootstrap target"
     elif bootstrap_state == "unsupported":
@@ -877,7 +877,7 @@ def _next_steps(
     docker_network: str,
 ) -> list[str]:
     if bootstrap_state == "ready":
-        return ["Host baseline is ready for the next bootstrap slice."]
+        return ["Host baseline is ready for first stack creation and domain onboarding."]
 
     steps: list[str] = []
     if not host_supported:
