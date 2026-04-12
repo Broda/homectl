@@ -489,6 +489,29 @@ def test_render_check_list_detail_formats_pass_and_fail_checks() -> None:
     assert "unreachable" in rendered
 
 
+def test_render_check_list_detail_trims_cloudflared_ingress_command_output() -> None:
+    lines = data.render_check_list_detail(
+        [
+            {
+                "name": "cloudflared ingress config",
+                "ok": True,
+                "detail": (
+                    "cloudflared tunnel --config /srv/homesrvctl/cloudflared/config.yml ingress validate: "
+                    "Validating rules from /srv/homesrvctl/cloudflared/config.yml\nOK"
+                ),
+                "severity": "pass",
+            }
+        ],
+        empty_message="none",
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "Validating rules from /srv/homesrvctl/cloudflared/config.yml" in rendered
+    assert "cloudflared tunnel --config" not in rendered
+    assert "\nOK" not in rendered
+
+
 def test_render_stack_action_detail_formats_command_results() -> None:
     lines = data.render_stack_action_detail(
         "up",

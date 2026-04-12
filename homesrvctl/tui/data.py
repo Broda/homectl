@@ -364,7 +364,14 @@ def render_check_list_detail(
         else:
             marker = "[red]FAIL[/red]"
             marker_width = len("FAIL")
-        rows.append((marker, marker_width, str(check.get("name", "<unknown>")), str(check.get("detail", ""))))
+        rows.append(
+            (
+                marker,
+                marker_width,
+                str(check.get("name", "<unknown>")),
+                normalize_check_detail(str(check.get("name", "<unknown>")), check.get("detail", "")),
+            )
+        )
 
     lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
     if rows:
@@ -376,6 +383,19 @@ def render_check_list_detail(
     if len(checks) > limit:
         lines.append(f"... {len(checks) - limit} more")
     return lines
+
+
+def normalize_check_detail(name: str, detail: object) -> str:
+    rendered = str(detail or "").strip()
+    lines = [line.strip() for line in rendered.splitlines() if line.strip()]
+    if len(lines) >= 2 and lines[-1] == "OK":
+        lines = lines[:-1]
+    rendered = "\n".join(lines) if lines else rendered
+    if name == "cloudflared ingress config":
+        prefix = "cloudflared tunnel"
+        if rendered.startswith(prefix) and ": " in rendered:
+            rendered = rendered.split(": ", 1)[1]
+    return rendered or "unknown"
 
 
 def summarize_tool_action(tool: str, action: str, payload: dict[str, object]) -> str:
