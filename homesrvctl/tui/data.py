@@ -502,7 +502,7 @@ def render_stack_config_detail(payload: dict[str, object]) -> list[str]:
         *format_key_value_lines(
             [
                 ("profile", str(stack.get("profile") or "none")),
-                ("has local config", str(stack.get("has_local_config", False))),
+                ("has local config", "yes" if stack.get("has_local_config", False) else "no"),
                 (
                     "docker network",
                     f"{effective.get('docker_network', '<unknown>')} ({effective_sources.get('docker_network', 'unknown')})",
@@ -549,8 +549,8 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
         *format_key_value_lines(
             [
                 ("overall", overall_markup),
-                ("repairable", str(payload.get("repairable", False))),
-                ("manual fix required", str(payload.get("manual_fix_required", False))),
+                ("repairable", _render_repairable(payload)),
+                ("manual fix required", "yes" if payload.get("manual_fix_required", False) else "no"),
                 (
                     "ingress mutations",
                     "yes" if payload.get("ingress_mutation_available", False) else "no",
@@ -597,27 +597,45 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
 
     dns = payload.get("dns")
     if isinstance(dns, list):
-        lines.extend(["", f"dns records: {len(dns)}"])
-        for item in dns[:2]:
+        rows: list[list[str]] = []
+        for item in dns:
             if not isinstance(item, dict):
                 continue
-            if item.get("matches_expected"):
-                status = "[green]ok[/green]"
-            else:
-                status = "[red]mismatch[/red]"
-            lines.append(f"- {item.get('record_name', '<unknown>')}: {status} | {item.get('detail', '')}")
+            rows.append(
+                [
+                    str(item.get("record_name", "<unknown>")),
+                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
+                    str(item.get("record_type") or "<unknown>"),
+                    str(item.get("content") or "<unknown>"),
+                    str(item.get("detail", "")),
+                ]
+            )
+        if rows:
+            lines.extend(["", "[bold #ffcf5a]DNS Records[/bold #ffcf5a]", "", *render_bordered_table(
+                ["hostname", "match", "type", "target", "detail"],
+                rows,
+            )])
 
     ingress = payload.get("ingress")
     if isinstance(ingress, list):
-        lines.extend(["", f"ingress routes: {len(ingress)}"])
-        for item in ingress[:2]:
+        rows = []
+        for item in ingress:
             if not isinstance(item, dict):
                 continue
-            if item.get("matches_expected"):
-                status = "[green]ok[/green]"
-            else:
-                status = "[red]mismatch[/red]"
-            lines.append(f"- {item.get('hostname', '<unknown>')}: {status} | {item.get('detail', '')}")
+            rows.append(
+                [
+                    str(item.get("hostname", "<unknown>")),
+                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
+                    str(item.get("service") or "<none>"),
+                    str(item.get("effective_service") or "<none>"),
+                    str(item.get("detail", "")),
+                ]
+            )
+        if rows:
+            lines.extend(["", "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]", "", *render_bordered_table(
+                ["hostname", "match", "configured", "effective", "detail"],
+                rows,
+            )])
 
     suggested_command = payload.get("suggested_command")
     if suggested_command:
@@ -631,6 +649,37 @@ def format_key_value_lines(items: list[tuple[str, str]]) -> list[str]:
         return []
     width = max(len(label) for label, _ in items)
     return [f"{label.rjust(width)} : {value}" for label, value in items]
+
+
+def render_bordered_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+    if not headers:
+        return []
+    if not rows:
+        return []
+    widths = [len(header) for header in headers]
+    for row in rows:
+        for index, cell in enumerate(row[: len(headers)]):
+            widths[index] = max(widths[index], len(str(cell)))
+
+    def _render_row(cells: list[str]) -> str:
+        padded = [str(cell).ljust(widths[index]) for index, cell in enumerate(cells[: len(headers)])]
+        return f"| {' | '.join(padded)} |"
+
+    border = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+    return [
+        border,
+        _render_row(headers),
+        border,
+        *[_render_row(row) for row in rows],
+        border,
+    ]
+
+
+def _render_repairable(payload: dict[str, object]) -> str:
+    overall = str(payload.get("overall", "unknown"))
+    if overall == "ok":
+        return "N/A"
+    return "Yes" if payload.get("repairable", False) else "No"
 
 
 def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:

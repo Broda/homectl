@@ -1254,7 +1254,7 @@ class HomesrvctlTextualApp(App[None]):
             "[bold #ffcf5a]Stack Detail[/bold #ffcf5a]",
             "",
             f"hostname: {hostname or '<unknown>'}",
-            f"compose file: {'yes' if compose else 'no'}",
+            f"compose file: {'exists' if compose else 'does not exist'}",
             "",
             *render_stack_config_detail(config_view),
             "",

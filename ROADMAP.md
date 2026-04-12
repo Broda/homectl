@@ -1359,7 +1359,7 @@ Why this is separate from Milestone 9:
 
 ### 10.1 Normalize boolean and status wording in stack and tool detail panes
 
-Status: planned
+Status: completed
 
 Tasks:
 - Replace machine-flavored boolean text with clearer operator-facing wording where the current display is too raw.
@@ -1381,6 +1381,13 @@ Subtasks:
 
 Current baseline:
 - The TUI is functionally complete for common creation/onboarding flows, but several detail-pane fields still render raw booleans or terse yes/no labels that do not read naturally in an operator dashboard.
+
+Completed:
+- Stack detail now renders `compose file: exists/does not exist`.
+- Effective config detail now renders `has local config: yes/no`.
+- Domain detail now renders `repairable` as `N/A`, `Yes`, or `No` depending on overall state.
+- Domain detail now renders `manual fix required: yes/no`.
+- DNS and ingress sections now render as bordered tables instead of loose line lists.
 
 ### 10.2 Define a broader wording pass for user-friendly TUI copy
 

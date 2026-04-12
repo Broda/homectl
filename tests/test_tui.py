@@ -607,7 +607,7 @@ def test_render_stack_config_detail_formats_effective_config() -> None:
     assert "profile" in rendered
     assert "edge" in rendered
     assert "has local config" in rendered
-    assert "True" in rendered
+    assert "yes" in rendered
     assert "docker network" in rendered
     assert "edge (profile:edge)" in rendered
     assert "traefik url" in rendered
@@ -651,13 +651,40 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "overall" in rendered
     assert "partial" in rendered
     assert "repairable" in rendered
-    assert "True" in rendered
+    assert "Yes" in rendered
     assert "coverage issues: 1" in rendered
     assert "ingress issues: 1 total, 1 blocking, 0 advisory" in rendered
-    assert "dns records: 2" in rendered
-    assert "ingress routes: 2" in rendered
+    assert "manual fix required" in rendered
+    assert "no" in rendered
+    assert "DNS Records" in rendered
+    assert "Ingress Routes" in rendered
+    assert "| hostname" in rendered
+    assert "example.com" in rendered
+    assert "*.example.com" in rendered
     assert "suggested command" in rendered
     assert "homesrvctl domain repair example.com" in rendered
+
+
+def test_render_domain_status_detail_uses_na_when_no_repair_needed() -> None:
+    lines = data.render_domain_status_detail(
+        "example.com",
+        {
+            "ok": True,
+            "domain": "example.com",
+            "overall": "ok",
+            "repairable": False,
+            "manual_fix_required": False,
+            "expected_tunnel_target": "1234.cfargotunnel.com",
+            "expected_ingress_service": "http://localhost:8081",
+            "dns": [],
+            "ingress": [],
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "repairable" in rendered
+    assert "N/A" in rendered
 
 
 def test_render_domain_status_detail_skips_subdomain_stacks() -> None:
