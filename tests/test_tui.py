@@ -471,6 +471,22 @@ def test_render_stack_action_detail_formats_doctor_checks() -> None:
     assert "[red]FAIL[/red] host-header request: request failed: connection refused" in rendered
 
 
+def test_render_check_list_detail_formats_pass_and_fail_checks() -> None:
+    lines = data.render_check_list_detail(
+        [
+            {"name": "cloudflared binary", "ok": True, "detail": "found in PATH", "severity": "pass"},
+            {"name": "Traefik URL", "ok": False, "detail": "unreachable", "severity": "blocking"},
+        ],
+        empty_message="none",
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "checks: 2 total, 1 failing, 0 advisory" in rendered
+    assert "[green]PASS[/green] cloudflared binary: found in PATH" in rendered
+    assert "[red]FAIL[/red] Traefik URL: unreachable" in rendered
+
+
 def test_render_stack_action_detail_formats_command_results() -> None:
     lines = data.render_stack_action_detail(
         "up",
@@ -1638,6 +1654,31 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
     assert "config detail: Validating rules\nOK" not in detail
     assert "· enter menu" not in detail
     assert "status:" in command_bar
+
+
+def test_textual_app_validate_detail_shows_all_checks() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": []},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {
+            "ok": False,
+            "checks": [
+                {"name": "cloudflared binary", "ok": True, "detail": "found in PATH", "severity": "pass"},
+                {"name": "Traefik URL", "ok": False, "detail": "unreachable", "severity": "blocking"},
+            ],
+        },
+    }
+    app.selected_control_index = 3
+
+    detail = app._detail_text()
+
+    assert "Validate Detail" in detail
+    assert "checks: 2 total, 1 failing, 0 advisory" in detail
+    assert "[green]PASS[/green] cloudflared binary: found in PATH" in detail
+    assert "[red]FAIL[/red] Traefik URL: unreachable" in detail
 
 
 def test_textual_app_bootstrap_detail_text() -> None:

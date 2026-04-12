@@ -339,6 +339,34 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
     return lines
 
 
+def render_check_list_detail(
+    checks: list[object],
+    *,
+    empty_message: str,
+    limit: int = 10,
+) -> list[str]:
+    if not checks:
+        return [empty_message]
+
+    failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
+    advisory_checks = [check for check in checks if isinstance(check, dict) and str(check.get("severity")) == "advisory"]
+    lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
+    for check in checks[:limit]:
+        if not isinstance(check, dict):
+            continue
+        severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
+        if severity == "advisory":
+            marker = "[yellow]WARN[/yellow]"
+        elif check.get("ok"):
+            marker = "[green]PASS[/green]"
+        else:
+            marker = "[red]FAIL[/red]"
+        lines.append(f"{marker} {check.get('name', '<unknown>')}: {check.get('detail', '')}")
+    if len(checks) > limit:
+        lines.append(f"... {len(checks) - limit} more")
+    return lines
+
+
 def summarize_tool_action(tool: str, action: str, payload: dict[str, object]) -> str:
     tool_label = str(tool)
     label = str(action)

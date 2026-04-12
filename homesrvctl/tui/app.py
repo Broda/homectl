@@ -11,6 +11,7 @@ from homesrvctl.tui.data import (
     TOOL_ITEMS,
     normalize_config_validation_detail,
     build_dashboard_snapshot,
+    render_check_list_detail,
     render_bootstrap_assessment_detail,
     render_cloudflared_setup_detail,
     render_config_payload_detail,
@@ -1388,16 +1389,10 @@ class HomesrvctlTextualApp(App[None]):
             return "Validate detail unavailable"
         if not payload.get("ok") and "checks" not in payload:
             return f"error: {payload.get('error', 'unknown error')}"
-        checks = payload.get("checks", [])
-        failures = [check for check in checks if not check.get("ok")]
         lines = ["[bold #ffcf5a]Validate Detail[/bold #ffcf5a]", ""]
-        if not failures:
-            lines.append("[green]All validation checks are currently passing.[/green]")
+        checks = payload.get("checks", [])
+        if isinstance(checks, list):
+            lines.extend(render_check_list_detail(checks, empty_message="[green]No validation checks were returned.[/green]"))
         else:
-            lines.append("Failing checks:")
-            lines.append("")
-            for check in failures[:10]:
-                lines.append(f"- [red]{check.get('name', '<unknown>')}[/red]: {check.get('detail', '')}")
-            if len(failures) > 10:
-                lines.append(f"... {len(failures) - 10} more")
+            lines.append("error: invalid validate payload")
         return "\n".join(lines)
