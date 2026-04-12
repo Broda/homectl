@@ -483,12 +483,10 @@ def test_render_check_list_detail_formats_pass_and_fail_checks() -> None:
     rendered = "\n".join(lines)
 
     assert "checks: 2 total, 1 failing, 0 advisory" in rendered
-    assert "| PASS" in rendered
-    assert "| cloudflared binary" in rendered
-    assert "| found in PATH" in rendered
-    assert "| FAIL" in rendered
-    assert "| Traefik URL" in rendered
-    assert "| unreachable" in rendered
+    assert "PASS  cloudflared binary" in rendered
+    assert "found in PATH" in rendered
+    assert "FAIL  Traefik URL" in rendered
+    assert "unreachable" in rendered
 
 
 def test_render_stack_action_detail_formats_command_results() -> None:
@@ -1684,12 +1682,10 @@ def test_textual_app_validate_detail_shows_all_checks() -> None:
 
     assert "Validate Detail" in detail
     assert "checks: 2 total, 1 failing, 0 advisory" in detail
-    assert "| PASS" in detail
-    assert "| cloudflared binary" in detail
-    assert "| found in PATH" in detail
-    assert "| FAIL" in detail
-    assert "| Traefik URL" in detail
-    assert "| unreachable" in detail
+    assert "PASS  cloudflared binary" in detail
+    assert "found in PATH" in detail
+    assert "FAIL  Traefik URL" in detail
+    assert "unreachable" in detail
 
 
 def test_textual_app_bootstrap_detail_text() -> None:
