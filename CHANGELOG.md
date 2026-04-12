@@ -20,9 +20,6 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added a global TUI stack-creation flow that can scaffold a new hostname through the existing `site init` and `app init` commands without requiring a pre-existing stack row.
 - Added sequential TUI prompts for new-stack hostname entry, create-mode selection, optional app-template selection, and optional routing overrides (`profile`, `docker_network`, `traefik_url`).
 - Added TUI overwrite confirmation for scaffold creation when the underlying CLI reports that generated files already exist.
-- Added a global TUI domain-onboarding flow that can run `domain add` for a new apex domain without requiring an existing focused stack row.
-- Added sequential TUI prompts for apex-domain entry plus optional `domain add` `--dry-run` and `--restart-cloudflared` choices.
-- Added post-run TUI follow-up visibility for global domain onboarding by surfacing the last domain-add result and `domain status` view in the `Tunnel` detail pane when no matching local stack row exists.
 - Defined the current “fully functional” TUI creation contract for common local onboarding, including what remains intentionally CLI-only and which broader creation/editing workflows stay out of scope.
 - Added `homesrvctl tunnel status` to report the configured tunnel reference, resolved tunnel UUID, resolution source, and Cloudflare API tunnel status when account-scoped tunnel inspection is available.
 - Added `Tunnel` as a first-class TUI tool item so `homesrvctl tui` can inspect the current `tunnel status` output and rerun tunnel inspection from the guided tool menu.
@@ -48,6 +45,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Keep `--json` status and validation output free of probe noise so the terminal dashboard can consume `cloudflared status`, `validate`, and `doctor` reliably.
 - Tightened `domain status` diagnostics so DNS and ingress conflicts now distinguish missing records, wrong types, wrong targets, duplicate ingress entries, shadowing, and manual-cleanup cases more explicitly.
 - Normalized `cloudflared` ingress issue severity so blocking semantic-danger states now fail health checks while broader wildcard-precedence risks remain advisory.
+- Changed the TUI `Create` flow so apex hostnames now auto-run `domain add` before scaffold creation, while subdomain creation remains scaffold-only and the standalone top-level TUI domain-onboarding entrypoint is no longer exposed.
 - Reduced domain tunnel-target lookup dependence on local `cloudflared tunnel info` by resolving the tunnel UUID through the Cloudflare API when local UUID sources are unavailable.
 - Reduced `validate` tunnel-reference dependence on local `cloudflared tunnel info` by resolving the configured tunnel through the Cloudflare API when the local `cloudflared` config includes tunnel credentials context.
 - Removed the remaining `cloudflared tunnel info` fallback from tunnel inspection helpers so tunnel resolution now stays explicit: local UUID sources first, then account-scoped API lookup when credentials context exists.

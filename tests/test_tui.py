@@ -1303,18 +1303,6 @@ def test_textual_app_domain_add_prompt_pushes_modal(monkeypatch) -> None:
     assert isinstance(pushed[0][0], prompts.ConfirmActionScreen)
 
 
-def test_textual_app_domain_onboarding_flow_pushes_domain_prompt(monkeypatch) -> None:
-    app = textual_app.HomesrvctlTextualApp()
-    pushed: list[tuple[object, object]] = []
-
-    monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
-
-    app.action_domain_onboarding_flow()
-
-    assert len(pushed) == 1
-    assert isinstance(pushed[0][0], prompts.TextEntryScreen)
-
-
 def test_textual_app_domain_remove_prompt_pushes_modal(monkeypatch) -> None:
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = {
@@ -1526,43 +1514,33 @@ def test_textual_app_domain_add_rejects_subdomain(monkeypatch) -> None:
     assert app.status_message == "domain add/remove is only available for apex stacks: notes.example.com"
 
 
-def test_textual_app_domain_onboarding_rejects_invalid_domain(monkeypatch) -> None:
-    app = textual_app.HomesrvctlTextualApp()
-    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
-
-    app._complete_domain_onboarding_domain("notes.example.com")
-
-    assert app.status_message.startswith("domain onboarding rejected domain:")
-
-
-def test_textual_app_domain_onboarding_pushes_dry_run_prompt(monkeypatch) -> None:
+def test_textual_app_create_marks_apex_for_auto_domain_add(monkeypatch) -> None:
     app = textual_app.HomesrvctlTextualApp()
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
 
-    app._complete_domain_onboarding_domain("example.com")
+    app._complete_create_hostname("example.com")
 
-    assert app.pending_domain_request == {"hostname": "example.com"}
+    assert app.pending_create_request == {"hostname": "example.com", "auto_domain_add": True}
     assert len(pushed) == 1
-    assert isinstance(pushed[0][0], prompts.BooleanChoiceScreen)
+    assert isinstance(pushed[0][0], prompts.CreationModeScreen)
 
 
-def test_textual_app_domain_onboarding_pushes_restart_prompt(monkeypatch) -> None:
+def test_textual_app_create_marks_subdomain_without_auto_domain_add(monkeypatch) -> None:
     app = textual_app.HomesrvctlTextualApp()
-    app.pending_domain_request = {"hostname": "example.com"}
     pushed: list[tuple[object, object]] = []
 
     monkeypatch.setattr(app, "push_screen", lambda screen, callback=None: pushed.append((screen, callback)))
 
-    app._complete_domain_onboarding_dry_run(True)
+    app._complete_create_hostname("notes.example.com")
 
-    assert app.pending_domain_request["dry_run"] is True
+    assert app.pending_create_request == {"hostname": "notes.example.com", "auto_domain_add": False}
     assert len(pushed) == 1
-    assert isinstance(pushed[0][0], prompts.BooleanChoiceScreen)
+    assert isinstance(pushed[0][0], prompts.CreationModeScreen)
 
 
-def test_textual_app_domain_onboarding_runs_and_focuses_tunnel_when_no_stack(monkeypatch) -> None:
+def test_textual_app_create_auto_onboards_apex_before_scaffold(monkeypatch) -> None:
     snapshots = [
         {
             "generated_at": "2026-04-08 12:00:00",
@@ -1603,10 +1581,13 @@ def test_textual_app_domain_onboarding_runs_and_focuses_tunnel_when_no_stack(mon
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
     app.selected_control_index = 0
-    app.pending_domain_request = {
+    app.pending_create_request = {
         "hostname": "example.com",
-        "dry_run": True,
-        "restart_cloudflared": True,
+        "auto_domain_add": True,
+        "action": "init-site",
+        "profile": None,
+        "docker_network": None,
+        "traefik_url": None,
     }
 
     monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
@@ -1614,7 +1595,11 @@ def test_textual_app_domain_onboarding_runs_and_focuses_tunnel_when_no_stack(mon
         textual_app,
         "run_stack_action",
         lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
-        or {"ok": True, "dry_run": True, "dns": [], "ingress": []},
+        or (
+            {"ok": True, "dns": [], "ingress": []}
+            if action == "domain-add"
+            else {"ok": True, "files": ["/srv/homesrvctl/sites/example.com/docker-compose.yml"]}
+        ),
     )
     monkeypatch.setattr(
         textual_app,
@@ -1624,12 +1609,87 @@ def test_textual_app_domain_onboarding_runs_and_focuses_tunnel_when_no_stack(mon
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app._refresh_snapshot("dashboard ready")
-    app._complete_domain_onboarding_restart(True)
+    app._run_pending_create_request()
 
-    assert calls == [("example.com", "domain-add", {"dry_run": True, "restart_cloudflared": True})]
-    assert app.status_message == "domain add succeeded for example.com"
-    assert app.selected_control_index == 1
+    assert calls == [
+        ("example.com", "domain-add", {}),
+        ("example.com", "init-site", {"template": None, "force": False, "profile": None, "docker_network": None, "traefik_url": None}),
+    ]
+    assert app.status_message == "create completed for example.com: domain add + site init"
     assert app.global_domain_action is not None
+
+
+def test_textual_app_create_stops_when_auto_domain_add_fails(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": []},
+        "tunnel": {"ok": True},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.pending_create_request = {
+        "hostname": "example.com",
+        "auto_domain_add": True,
+        "action": "init-site",
+        "profile": None,
+        "docker_network": None,
+        "traefik_url": None,
+    }
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_action",
+        lambda hostname, action, **kwargs: calls.append(action) or {"ok": False, "error": "zone not found"},
+    )
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_domain_status",
+        lambda hostname: {"ok": False, "error": "zone not found"},
+    )
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: app.snapshot)
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._run_pending_create_request()
+
+    assert calls == ["domain-add"]
+    assert app.status_message == "create failed for example.com: domain add failed"
+    assert app.pending_create_request is None
+
+
+def test_textual_app_create_skips_domain_add_for_subdomain(monkeypatch) -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": []},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+        "validate": {"ok": True, "checks": []},
+    }
+    app.pending_create_request = {
+        "hostname": "notes.example.com",
+        "auto_domain_add": False,
+        "action": "init-site",
+        "profile": None,
+        "docker_network": None,
+        "traefik_url": None,
+    }
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_action",
+        lambda hostname, action, **kwargs: calls.append(action) or {"ok": True, "files": []},
+    )
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: app.snapshot)
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._run_pending_create_request()
+
+    assert calls == ["init-site"]
+    assert app.status_message == "site init succeeded for notes.example.com"
 
 
 def test_textual_app_tunnel_detail_includes_last_domain_onboarding() -> None:
@@ -2179,7 +2239,7 @@ def test_textual_app_create_stack_flow_pushes_mode_after_hostname(monkeypatch) -
 
     app._complete_create_hostname("app.example.com")
 
-    assert app.pending_create_request == {"hostname": "app.example.com"}
+    assert app.pending_create_request == {"hostname": "app.example.com", "auto_domain_add": False}
     assert len(pushed) == 1
     assert isinstance(pushed[0][0], prompts.CreationModeScreen)
 
@@ -2718,11 +2778,11 @@ def test_detail_button_actions_stack_focus() -> None:
     item = app._selected_control_item()
     assert item.get("kind") == "stack"
     # Verify the expected button labels for stack focus
-    specs_labels = ["Up (u)", "Down (x)", "Restart (t)", "Doctor (g)", "Actions (Enter)"]
+    specs_labels = ["Up (u)", "Down (x)", "Restart (t)", "Doctor (g)", "Actions (Enter)", "Create (b)"]
     # The method builds _detail_button_actions; set it directly for test
     app._detail_button_actions = {label: action for label, action in [
         ("Up (u)", "up"), ("Down (x)", "down"), ("Restart (t)", "restart"),
-        ("Doctor (g)", "doctor"), ("Actions (Enter)", "stack_action_menu"),
+        ("Doctor (g)", "doctor"), ("Actions (Enter)", "stack_action_menu"), ("Create (b)", "create_stack_flow"),
     ]}
     assert set(app._detail_button_actions.keys()) == set(specs_labels)
 
@@ -2746,6 +2806,7 @@ def test_detail_button_actions_cloudflared_focus() -> None:
         ("Config Test (c)", "cloudflared_config_test"),
         ("Reload (l)", "cloudflared_reload"),
         ("Restart CF (k)", "cloudflared_restart"),
+        ("Create (b)", "create_stack_flow"),
     ]}
     assert "Fix Setup" in app._detail_button_actions
     assert app._detail_button_actions["Fix Setup"] == "cloudflared_setup"
@@ -2770,7 +2831,6 @@ def test_detail_button_actions_bootstrap_focus() -> None:
     app._detail_button_actions = {label: action for label, action in [
         ("Refresh (r)", "bootstrap_assess"),
         ("Create (b)", "create_stack_flow"),
-        ("Onboard Domain (d)", "domain_onboarding_flow"),
     ]}
     assert app._detail_button_actions["Refresh (r)"] == "bootstrap_assess"
 

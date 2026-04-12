@@ -390,7 +390,6 @@ class HomesrvctlTextualApp(App[None]):
         Binding("w,up", "previous_control", "Prev", show=False),
         Binding("s,down,tab", "next_control", "Next", show=False),
         Binding("b", "create_stack_flow", "Create", show=False),
-        Binding("d", "domain_onboarding_flow", "Domain", show=False),
         Binding("a", "app_init_prompt", "App Init", show=False),
         Binding("n", "domain_add_prompt", "Add Domain", show=False),
         Binding("p", "domain_repair", "Repair Domain", show=False),
@@ -416,7 +415,6 @@ class HomesrvctlTextualApp(App[None]):
         self.stack_domain_views: dict[str, dict[str, object]] = {}
         self.last_tool_actions: dict[str, dict[str, object]] = {}
         self.pending_create_request: dict[str, object] | None = None
-        self.pending_domain_request: dict[str, object] | None = None
         self.global_domain_action: dict[str, object] | None = None
         self.global_domain_status_view: dict[str, object] | None = None
 
@@ -474,17 +472,6 @@ class HomesrvctlTextualApp(App[None]):
                 placeholder="app.example.com",
             ),
             self._complete_create_hostname,
-        )
-
-    def action_domain_onboarding_flow(self) -> None:
-        self.pending_domain_request = None
-        self.push_screen(
-            TextEntryScreen(
-                "Onboard Apex Domain",
-                "Enter the bare domain to route through the configured tunnel. Press enter to continue or esc to cancel.",
-                placeholder="example.com",
-            ),
-            self._complete_domain_onboarding_domain,
         )
 
     def action_stack_action_menu(self) -> None:
@@ -664,7 +651,14 @@ class HomesrvctlTextualApp(App[None]):
             self.status_message = f"create flow rejected hostname: {exc}"
             self._render()
             return
-        self.pending_create_request = {"hostname": valid_hostname}
+        auto_domain_add = False
+        try:
+            validate_bare_domain(valid_hostname)
+        except Exception:
+            auto_domain_add = False
+        else:
+            auto_domain_add = True
+        self.pending_create_request = {"hostname": valid_hostname, "auto_domain_add": auto_domain_add}
         self.push_screen(CreationModeScreen(valid_hostname), self._complete_create_mode)
 
     def _complete_create_mode(self, action: str | None) -> None:
@@ -754,6 +748,26 @@ class HomesrvctlTextualApp(App[None]):
         request = dict(self.pending_create_request or {})
         hostname = str(request.get("hostname", ""))
         action = str(request.get("action", ""))
+        domain_add_payload = request.get("domain_add_payload")
+        if bool(request.get("auto_domain_add")) and not bool(request.get("domain_add_completed")):
+            domain_payload = run_stack_action(hostname, "domain-add")
+            request["domain_add_completed"] = True
+            request["domain_add_payload"] = domain_payload
+            self.pending_create_request = request
+            self.global_domain_action = {"hostname": hostname, "action": "domain-add", "payload": domain_payload}
+            self.global_domain_status_view = run_stack_domain_status(hostname)
+            if not domain_payload.get("ok"):
+                self.pending_create_request = None
+                self.last_stack_actions[hostname] = {"action": "domain-add", "payload": domain_payload}
+                self.status_message = self._summarize_create_flow(hostname, action, None, domain_payload)
+                self.snapshot = build_dashboard_snapshot()
+                self.stack_config_views = {}
+                self.stack_domain_views = {}
+                if self._has_stack(hostname):
+                    self._reselect_hostname(hostname)
+                self._render()
+                return
+            domain_add_payload = domain_payload
         template = request.get("template")
         payload = run_stack_action(
             hostname,
@@ -777,7 +791,12 @@ class HomesrvctlTextualApp(App[None]):
             return
         self.pending_create_request = None
         self.last_stack_actions[hostname] = {"action": action, "payload": payload}
-        self.status_message = summarize_stack_action(hostname, action, payload)
+        self.status_message = self._summarize_create_flow(
+            hostname,
+            action,
+            payload,
+            domain_add_payload if isinstance(domain_add_payload, dict) else None,
+        )
         self.snapshot = build_dashboard_snapshot()
         self.stack_config_views = {}
         self.stack_domain_views = {}
@@ -786,91 +805,17 @@ class HomesrvctlTextualApp(App[None]):
 
     def _complete_create_overwrite(self, confirmed: bool) -> None:
         if not confirmed:
+            request = dict(self.pending_create_request or {})
+            hostname = str(request.get("hostname", ""))
+            domain_add_payload = request.get("domain_add_payload")
             self.pending_create_request = None
-            self.status_message = "create overwrite cancelled"
+            if hostname and isinstance(domain_add_payload, dict) and domain_add_payload.get("ok"):
+                self.status_message = f"create stopped after domain add for {hostname}: scaffold overwrite cancelled"
+            else:
+                self.status_message = "create overwrite cancelled"
             self._render()
             return
         self._run_pending_create_request(force=True)
-
-    def _complete_domain_onboarding_domain(self, hostname: str | None) -> None:
-        if hostname is None:
-            self.pending_domain_request = None
-            self.status_message = "domain onboarding cancelled"
-            self._render()
-            return
-        try:
-            bare_domain = validate_bare_domain(hostname)
-        except Exception as exc:
-            self.pending_domain_request = None
-            self.status_message = f"domain onboarding rejected domain: {exc}"
-            self._render()
-            return
-        self.pending_domain_request = {"hostname": bare_domain}
-        self.push_screen(
-            BooleanChoiceScreen(
-                "Domain Add Dry Run",
-                f"Run domain add for {bare_domain} in dry-run mode?",
-                true_label="yes",
-                false_label="no",
-            ),
-            self._complete_domain_onboarding_dry_run,
-        )
-
-    def _complete_domain_onboarding_dry_run(self, dry_run: bool | None) -> None:
-        if dry_run is None:
-            self.pending_domain_request = None
-            self.status_message = "domain onboarding cancelled"
-            self._render()
-            return
-        if self.pending_domain_request is None:
-            self.pending_domain_request = {}
-        self.pending_domain_request["dry_run"] = dry_run
-        hostname = str(self.pending_domain_request.get("hostname", ""))
-        self.push_screen(
-            BooleanChoiceScreen(
-                "Restart Cloudflared",
-                f"Restart cloudflared automatically after domain add for {hostname} when ingress changes are written?",
-                true_label="yes",
-                false_label="no",
-            ),
-            self._complete_domain_onboarding_restart,
-        )
-
-    def _complete_domain_onboarding_restart(self, restart_cloudflared: bool | None) -> None:
-        if restart_cloudflared is None:
-            self.pending_domain_request = None
-            self.status_message = "domain onboarding cancelled"
-            self._render()
-            return
-        if self.pending_domain_request is None:
-            self.pending_domain_request = {}
-        self.pending_domain_request["restart_cloudflared"] = restart_cloudflared
-        self._run_pending_domain_request()
-
-    def _run_pending_domain_request(self) -> None:
-        request = dict(self.pending_domain_request or {})
-        hostname = str(request.get("hostname", ""))
-        dry_run = bool(request.get("dry_run", False))
-        restart_cloudflared = bool(request.get("restart_cloudflared", False))
-        payload = run_stack_action(
-            hostname,
-            "domain-add",
-            dry_run=dry_run,
-            restart_cloudflared=restart_cloudflared,
-        )
-        self.pending_domain_request = None
-        self.global_domain_action = {"hostname": hostname, "action": "domain-add", "payload": payload}
-        self.global_domain_status_view = run_stack_domain_status(hostname)
-        self.last_stack_actions[hostname] = {"action": "domain-add", "payload": payload}
-        self.status_message = summarize_stack_action(hostname, "domain-add", payload)
-        self.snapshot = build_dashboard_snapshot()
-        self.stack_config_views = {}
-        self.stack_domain_views = {}
-        if self._has_stack(hostname):
-            self._reselect_hostname(hostname)
-        else:
-            self.selected_control_index = 1
-        self._render()
 
     def _run_config_init(self, *, force: bool = False) -> None:
         payload = run_tool_action("config", "init", force=force)
@@ -943,6 +888,27 @@ class HomesrvctlTextualApp(App[None]):
         self._reselect_hostname(hostname)
         self._render()
 
+    def _summarize_create_flow(
+        self,
+        hostname: str,
+        action: str,
+        scaffold_payload: dict[str, object] | None,
+        domain_add_payload: dict[str, object] | None = None,
+    ) -> str:
+        scaffold_label = "app init" if action == "app-init" else "site init"
+        if not isinstance(domain_add_payload, dict):
+            if isinstance(scaffold_payload, dict):
+                return summarize_stack_action(hostname, action, scaffold_payload)
+            return f"create failed for {hostname}: {scaffold_label} not run"
+        if not domain_add_payload.get("ok"):
+            return f"create failed for {hostname}: domain add failed"
+        if isinstance(scaffold_payload, dict) and scaffold_payload.get("ok"):
+            return f"create completed for {hostname}: domain add + {scaffold_label}"
+        if isinstance(scaffold_payload, dict):
+            error = str(scaffold_payload.get('error') or scaffold_payload.get('detail') or 'command failed')
+            return f"create partially succeeded for {hostname}: domain add succeeded; {scaffold_label} failed: {error}"
+        return f"create stopped after domain add for {hostname}"
+
     def _run_selected_tool_action(self, tool: str, action: str, *, follow: bool = False) -> None:
         item = self._selected_control_item()
         if item.get("kind") != "tool" or item.get("tool") != tool:
@@ -1006,7 +972,6 @@ class HomesrvctlTextualApp(App[None]):
                 ("Doctor (g)", "doctor"),
                 ("Actions (Enter)", "stack_action_menu"),
                 ("Create (b)", "create_stack_flow"),
-                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         elif item.get("tool") == "cloudflared":
             specs = [
@@ -1015,19 +980,16 @@ class HomesrvctlTextualApp(App[None]):
                 ("Reload (l)", "cloudflared_reload"),
                 ("Restart CF (k)", "cloudflared_restart"),
                 ("Create (b)", "create_stack_flow"),
-                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         elif item.get("tool") == "bootstrap":
             specs = [
                 ("Refresh (r)", "bootstrap_assess"),
                 ("Create (b)", "create_stack_flow"),
-                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         else:
             specs = [
                 ("Refresh (r)", "refresh"),
                 ("Create (b)", "create_stack_flow"),
-                ("Onboard Domain (d)", "domain_onboarding_flow"),
             ]
         self._detail_button_actions = {}
         for label, action in specs:

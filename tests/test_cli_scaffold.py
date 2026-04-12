@@ -2775,7 +2775,7 @@ def test_domain_repair_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(
         domain_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -2785,7 +2785,7 @@ def test_domain_repair_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(
         domain_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -3393,7 +3393,7 @@ def test_domain_remove_updates_cloudflared_ingress(monkeypatch, tmp_path: Path) 
     monkeypatch.setattr(
         domain_cmd,
         "detect_cloudflared_runtime",
-        lambda: CloudflaredRuntime(
+        lambda quiet=False: CloudflaredRuntime(
             mode="systemd",
             active=True,
             detail="systemd service is active",
@@ -3482,7 +3482,7 @@ def test_domain_remove_restarts_cloudflared_when_requested(monkeypatch, tmp_path
     monkeypatch.setattr(
         domain_cmd,
         "inspect_cloudflared_setup",
-        lambda path: type(
+        lambda path, quiet=False: type(
             "Setup",
             (),
             {
