@@ -178,6 +178,224 @@ def test_assess_bootstrap_classifies_ready_host(monkeypatch, tmp_path: Path) -> 
     assert assessment.issues == []
 
 
+def test_validate_bootstrap_reports_ready_baseline(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+
+    assessment = bootstrap.BootstrapAssessment(
+        ok=True,
+        bootstrap_state="ready",
+        bootstrap_ready=True,
+        host_supported=True,
+        detail="host matches the current bootstrap target and appears ready for the next bootstrap slice",
+        config_path=str(config_path),
+        os={"supported": True},
+        systemd={"present": True},
+        packages={"docker": True, "docker_compose": True, "cloudflared": True},
+        services={"traefik_running": True, "cloudflared_active": True},
+        config={"path": str(config_path), "exists": True, "valid": True, "detail": "ok"},
+        network={"name": "web", "exists": True, "detail": '"web"'},
+        cloudflare={"token_present": True, "api_reachable": True, "detail": "Cloudflare token verified (active)"},
+        issues=[],
+        next_steps=["Host baseline is ready for the next bootstrap slice."],
+    )
+    monkeypatch.setattr(bootstrap, "assess_bootstrap", lambda path=None, quiet=False: assessment)
+    monkeypatch.setattr(
+        bootstrap,
+        "_config_assessment",
+        lambda path: (
+            {"path": str(path), "exists": True, "valid": True, "detail": "config file loaded successfully"},
+            HomesrvctlConfig(
+                tunnel_name="11111111-2222-4333-8444-555555555555",
+                cloudflared_config=tmp_path / "cloudflared" / "config.yml",
+                cloudflare_api_token="token",
+            ),
+        ),
+    )
+
+    class FakeTunnelStatus:
+        configured_tunnel = "11111111-2222-4333-8444-555555555555"
+        resolved_tunnel_id = "11111111-2222-4333-8444-555555555555"
+        resolution_source = "local_credentials"
+        account_id = "account-123"
+        api_available = True
+        api_status = type("ApiStatus", (), {"id": "11111111-2222-4333-8444-555555555555", "name": "home", "status": "healthy"})()
+        api_error = None
+        resolution_error = None
+
+    monkeypatch.setattr(bootstrap, "inspect_configured_tunnel", lambda config: FakeTunnelStatus())
+    monkeypatch.setattr(
+        bootstrap,
+        "detect_cloudflared_runtime",
+        lambda quiet=False: type("Runtime", (), {"mode": "systemd", "active": True, "detail": "systemd service is active"})(),
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "inspect_cloudflared_setup",
+        lambda config_path, runtime=None, quiet=False: type(
+            "Setup",
+            (),
+            {
+                "ok": True,
+                "setup_state": "ready",
+                "mode": "systemd",
+                "systemd_managed": True,
+                "active": True,
+                "configured_path": str(config_path),
+                "configured_exists": True,
+                "configured_writable": True,
+                "configured_credentials_path": str(tmp_path / "cloudflared" / "tunnel.json"),
+                "configured_credentials_exists": True,
+                "configured_credentials_readable": True,
+                "configured_credentials_group_readable": True,
+                "configured_credentials_owner": "root",
+                "configured_credentials_group": "homesrvctl",
+                "configured_credentials_mode": "0o640",
+                "runtime_path": str(config_path),
+                "runtime_exists": True,
+                "runtime_readable": True,
+                "paths_aligned": True,
+                "ingress_mutation_available": True,
+                "account_inspection_available": True,
+                "service_user": "root",
+                "service_group": "homesrvctl",
+                "shared_group": "homesrvctl",
+                "detail": "shared-group cloudflared setup is ready",
+                "issues": [],
+                "notes": [],
+                "next_commands": [],
+                "override_path": None,
+                "override_content": None,
+            },
+        )(),
+    )
+
+    from homesrvctl.commands import validate_cmd
+
+    monkeypatch.setattr(
+        validate_cmd,
+        "build_validate_report",
+        lambda config, quiet=False: [
+            validate_cmd.CheckResult("cloudflared binary", True, "found in PATH"),
+            validate_cmd.CheckResult("docker binary", True, "found in PATH"),
+        ],
+    )
+
+    validation = bootstrap.validate_bootstrap(config_path)
+
+    assert validation.ok is True
+    assert validation.validation_state == "ready"
+    assert validation.bootstrap_ready is True
+    assert validation.validate_blocking_failures == 0
+    assert validation.tunnel["ok"] is True
+    assert validation.cloudflared_setup["setup_state"] == "ready"
+
+
+def test_validate_bootstrap_reports_missing_tunnel_and_partial_setup(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    assessment = bootstrap.BootstrapAssessment(
+        ok=True,
+        bootstrap_state="partial",
+        bootstrap_ready=False,
+        host_supported=True,
+        detail="host is partially provisioned relative to the current bootstrap target",
+        config_path=str(config_path),
+        os={"supported": True},
+        systemd={"present": True},
+        packages={"docker": True, "docker_compose": True, "cloudflared": True},
+        services={"traefik_running": True, "cloudflared_active": True},
+        config={"path": str(config_path), "exists": True, "valid": True, "detail": "ok"},
+        network={"name": "web", "exists": True, "detail": '"web"'},
+        cloudflare={"token_present": True, "api_reachable": True, "detail": "Cloudflare token verified (active)"},
+        issues=["cloudflared is not active"],
+        next_steps=["Install or start the cloudflared service for the shared host tunnel."],
+    )
+    monkeypatch.setattr(bootstrap, "assess_bootstrap", lambda path=None, quiet=False: assessment)
+    monkeypatch.setattr(
+        bootstrap,
+        "_config_assessment",
+        lambda path: (
+            {"path": str(path), "exists": True, "valid": True, "detail": "config file loaded successfully"},
+            HomesrvctlConfig(
+                tunnel_name="homesrvctl-tunnel",
+                cloudflared_config=tmp_path / "cloudflared" / "config.yml",
+                cloudflare_api_token="token",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "detect_cloudflared_runtime",
+        lambda quiet=False: type("Runtime", (), {"mode": "systemd", "active": True, "detail": "systemd service is active"})(),
+    )
+
+    def fail_tunnel(config):  # noqa: ANN001,ANN202
+        raise bootstrap.CloudflareApiError("configured tunnel could not be resolved")
+
+    monkeypatch.setattr(bootstrap, "inspect_configured_tunnel", fail_tunnel)
+    monkeypatch.setattr(
+        bootstrap,
+        "inspect_cloudflared_setup",
+        lambda config_path, runtime=None, quiet=False: type(
+            "Setup",
+            (),
+            {
+                "ok": True,
+                "setup_state": "partial",
+                "mode": "systemd",
+                "systemd_managed": True,
+                "active": True,
+                "configured_path": str(config_path),
+                "configured_exists": True,
+                "configured_writable": True,
+                "configured_credentials_path": str(tmp_path / "cloudflared" / "tunnel.json"),
+                "configured_credentials_exists": True,
+                "configured_credentials_readable": False,
+                "configured_credentials_group_readable": False,
+                "configured_credentials_owner": "root",
+                "configured_credentials_group": "root",
+                "configured_credentials_mode": "0o600",
+                "runtime_path": str(config_path),
+                "runtime_exists": True,
+                "runtime_readable": True,
+                "paths_aligned": True,
+                "ingress_mutation_available": True,
+                "account_inspection_available": False,
+                "service_user": "root",
+                "service_group": "homesrvctl",
+                "shared_group": "homesrvctl",
+                "detail": "ingress mutations are ready, but account inspection is unavailable from the current user",
+                "issues": [],
+                "notes": ["account inspection unavailable: cloudflared credentials are not readable by the current user"],
+                "next_commands": ["homesrvctl cloudflared setup"],
+                "override_path": None,
+                "override_content": None,
+            },
+        )(),
+    )
+
+    from homesrvctl.commands import validate_cmd
+
+    monkeypatch.setattr(
+        validate_cmd,
+        "build_validate_report",
+        lambda config, quiet=False: [
+            validate_cmd.CheckResult("cloudflared binary", True, "found in PATH"),
+            validate_cmd.CheckResult("Traefik URL", False, "http://localhost:8081 unreachable: connection refused"),
+        ],
+    )
+
+    validation = bootstrap.validate_bootstrap(config_path)
+
+    assert validation.ok is False
+    assert validation.validation_state == "not_ready"
+    assert validation.bootstrap_ready is False
+    assert validation.validate_blocking_failures == 1
+    assert validation.tunnel["ok"] is False
+    assert validation.cloudflared_setup["setup_state"] == "partial"
+    assert any("validate blocking failure: Traefik URL" in issue for issue in validation.issues)
+    assert any("tunnel status: configured tunnel could not be resolved" in issue for issue in validation.issues)
+
+
 def test_provision_bootstrap_tunnel_creates_local_material(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
     cloudflared_config = tmp_path / "cloudflared" / "config.yml"

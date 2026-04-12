@@ -5172,6 +5172,133 @@ def test_bootstrap_assess_fails_for_unsupported_host(monkeypatch) -> None:
     assert "host supported: no" in result.output
 
 
+def test_bootstrap_validate_json_output(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "validate_bootstrap",
+        lambda path=None, quiet=False: type(
+            "Validation",
+            (),
+            {
+                "ok": True,
+                "validation_state": "ready",
+                "bootstrap_ready": True,
+                "detail": "bootstrap baseline is ready for stack creation and domain onboarding",
+                "config_path": str(config_path),
+                "assessment": type(
+                    "Assessment",
+                    (),
+                    {
+                        "ok": True,
+                        "bootstrap_state": "ready",
+                        "bootstrap_ready": True,
+                        "host_supported": True,
+                        "detail": "host matches the current bootstrap target and appears ready for the next bootstrap slice",
+                        "config_path": str(config_path),
+                        "os": {"pretty_name": "Debian GNU/Linux 12", "supported": True},
+                        "systemd": {"present": True},
+                        "packages": {"docker": True, "docker_compose": True, "cloudflared": True},
+                        "services": {"traefik_running": True, "cloudflared_active": True},
+                        "config": {"exists": True, "valid": True},
+                        "network": {"name": "web", "exists": True},
+                        "cloudflare": {"token_present": True, "api_reachable": True},
+                        "issues": [],
+                        "next_steps": ["Host baseline is ready for the next bootstrap slice."],
+                    },
+                )(),
+                "validate_ok": True,
+                "validate_blocking_failures": 0,
+                "validate_advisories": 1,
+                "validate_checks": [
+                    {"name": "cloudflared binary", "ok": True, "detail": "found in PATH", "severity": "pass"}
+                ],
+                "tunnel": {"ok": True, "resolved_tunnel_id": "11111111-2222-4333-8444-555555555555"},
+                "cloudflared_setup": {"ok": True, "setup_state": "ready", "detail": "shared-group cloudflared setup is ready"},
+                "issues": [],
+                "next_steps": ["Host baseline is ready for first stack creation and domain onboarding."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "validate", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "bootstrap_validate"
+    assert payload["validation_state"] == "ready"
+    assert payload["bootstrap_ready"] is True
+    assert payload["validate"]["blocking_failures"] == 0
+    assert payload["cloudflared_setup"]["setup_state"] == "ready"
+
+
+def test_bootstrap_validate_fails_when_not_ready(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import bootstrap_cmd
+
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    monkeypatch.setattr(
+        bootstrap_cmd,
+        "validate_bootstrap",
+        lambda path=None, quiet=False: type(
+            "Validation",
+            (),
+            {
+                "ok": False,
+                "validation_state": "not_ready",
+                "bootstrap_ready": False,
+                "detail": "bootstrap baseline is not ready yet",
+                "config_path": str(config_path),
+                "assessment": type(
+                    "Assessment",
+                    (),
+                    {
+                        "ok": True,
+                        "bootstrap_state": "partial",
+                        "bootstrap_ready": False,
+                        "host_supported": True,
+                        "detail": "host is partially provisioned relative to the current bootstrap target",
+                        "config_path": str(config_path),
+                        "os": {"pretty_name": "Debian GNU/Linux 12", "supported": True},
+                        "systemd": {"present": True},
+                        "packages": {"docker": True, "docker_compose": True, "cloudflared": True},
+                        "services": {"traefik_running": True, "cloudflared_active": False},
+                        "config": {"exists": True, "valid": True},
+                        "network": {"name": "web", "exists": True},
+                        "cloudflare": {"token_present": True, "api_reachable": True},
+                        "issues": ["cloudflared is not active"],
+                        "next_steps": ["Install or start the cloudflared service for the shared host tunnel."],
+                    },
+                )(),
+                "validate_ok": False,
+                "validate_blocking_failures": 2,
+                "validate_advisories": 0,
+                "validate_checks": [
+                    {"name": "cloudflared service", "ok": False, "detail": "service not active", "severity": "blocking"}
+                ],
+                "tunnel": {"ok": False, "detail": "configured tunnel could not be resolved"},
+                "cloudflared_setup": {
+                    "ok": True,
+                    "setup_state": "partial",
+                    "detail": "ingress mutations are ready, but account inspection is unavailable from the current user",
+                },
+                "issues": ["cloudflared is not active", "tunnel status: configured tunnel could not be resolved"],
+                "next_steps": ["Run `homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>`."],
+            },
+        )(),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["bootstrap", "validate"])
+
+    assert result.exit_code == 1, result.output
+    assert "validation state: not_ready" in result.output
+    assert "bootstrap ready: no" in result.output
+
+
 def test_bootstrap_tunnel_json_output(monkeypatch, tmp_path: Path) -> None:
     from homesrvctl.commands import bootstrap_cmd
 

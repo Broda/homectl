@@ -30,7 +30,7 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/config.py`](homesrvctl/config.py)
   Config loading, default paths, and stack-local config helpers.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
-  Fresh-host bootstrap assessment plus tunnel/runtime/wiring provisioning helpers.
+  Fresh-host bootstrap assessment, final readiness aggregation, and tunnel/runtime/wiring provisioning helpers.
 - [`homesrvctl/utils.py`](homesrvctl/utils.py)
   Shared filesystem and rendering helpers.
 - [`homesrvctl/templates.py`](homesrvctl/templates.py)
@@ -62,7 +62,7 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/commands/config_cmd.py`](homesrvctl/commands/config_cmd.py)
   `config init` and related config-surface commands.
 - [`homesrvctl/commands/bootstrap_cmd.py`](homesrvctl/commands/bootstrap_cmd.py)
-  Fresh-host bootstrap assessment plus tunnel/runtime/wiring provisioning command surface.
+  Fresh-host bootstrap assessment, readiness reporting, and tunnel/runtime/wiring provisioning command surface.
 - [`homesrvctl/commands/site_cmd.py`](homesrvctl/commands/site_cmd.py)
   `site init` scaffold generation.
 - [`homesrvctl/commands/app_cmd.py`](homesrvctl/commands/app_cmd.py)

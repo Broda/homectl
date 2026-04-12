@@ -17,6 +17,7 @@ from homesrvctl.cloudflare import (
     CloudflareApiError,
     account_id_from_cloudflared_config,
     generate_local_tunnel_secret,
+    inspect_configured_tunnel,
 )
 from homesrvctl.cloudflared import (
     CloudflaredConfigError,
@@ -28,13 +29,15 @@ from homesrvctl.cloudflared_service import (
     SHARED_CONFIG_PATH,
     SYSTEMD_OVERRIDE_PATH,
     SYSTEMD_UNIT_PATH,
+    CloudflaredSetupReport,
     inspect_cloudflared_systemd_unit,
+    inspect_cloudflared_setup,
     render_cloudflared_systemd_override,
     render_cloudflared_systemd_unit,
     render_cloudflared_target_config_content,
 )
 from homesrvctl.config import default_config_data, default_config_path, init_config, load_config_details, update_config
-from homesrvctl.models import HomesrvctlConfig
+from homesrvctl.models import CheckResult, HomesrvctlConfig
 from homesrvctl.shell import command_exists, run_command
 
 
@@ -123,6 +126,24 @@ class BootstrapWiringProvisioning:
     systemd_path: str
     systemd_written: bool
     service_enabled: bool
+    next_steps: list[str]
+
+
+@dataclass(slots=True)
+class BootstrapValidation:
+    ok: bool
+    validation_state: str
+    bootstrap_ready: bool
+    detail: str
+    config_path: str
+    assessment: BootstrapAssessment
+    validate_ok: bool
+    validate_checks: list[dict[str, object]]
+    validate_blocking_failures: int
+    validate_advisories: int
+    tunnel: dict[str, object]
+    cloudflared_setup: dict[str, object]
+    issues: list[str]
     next_steps: list[str]
 
 
@@ -476,6 +497,169 @@ def assess_bootstrap(config_path: Path | None = None, *, quiet: bool = False) ->
     )
 
 
+def validate_bootstrap(config_path: Path | None = None, *, quiet: bool = False) -> BootstrapValidation:
+    from homesrvctl.commands.validate_cmd import build_validate_report
+
+    target_path = config_path or default_config_path()
+    assessment = assess_bootstrap(target_path, quiet=quiet)
+    config_info, config = _config_assessment(target_path)
+
+    validate_checks: list[CheckResult] = []
+    validate_ok = False
+    validate_blocking_failures = 0
+    validate_advisories = 0
+    if config_info["valid"]:
+        validate_checks = build_validate_report(config, quiet=quiet)
+        validate_blocking_failures = sum(1 for check in validate_checks if _bootstrap_check_is_blocking_failure(check))
+        validate_advisories = sum(1 for check in validate_checks if _bootstrap_check_severity(check) == "advisory")
+        validate_ok = validate_blocking_failures == 0
+    validate_payload = [_bootstrap_check_to_dict(check) for check in validate_checks]
+
+    tunnel_payload: dict[str, object]
+    if config_info["valid"]:
+        try:
+            tunnel = inspect_configured_tunnel(config)
+        except (CloudflareApiError, typer.BadParameter) as exc:
+            tunnel_payload = {
+                "ok": False,
+                "configured_tunnel": config.tunnel_name,
+                "resolved_tunnel_id": None,
+                "resolution_source": None,
+                "account_id": None,
+                "api_available": False,
+                "api_status": None,
+                "api_error": None,
+                "detail": str(exc),
+            }
+        else:
+            tunnel_payload = {
+                "ok": tunnel.resolved_tunnel_id is not None,
+                "configured_tunnel": tunnel.configured_tunnel,
+                "resolved_tunnel_id": tunnel.resolved_tunnel_id,
+                "resolution_source": tunnel.resolution_source,
+                "account_id": tunnel.account_id,
+                "api_available": tunnel.api_available,
+                "api_status": (
+                    None
+                    if tunnel.api_status is None
+                    else {
+                        "id": tunnel.api_status.id,
+                        "name": tunnel.api_status.name,
+                        "status": tunnel.api_status.status,
+                    }
+                ),
+                "api_error": tunnel.api_error,
+                "detail": tunnel.resolution_error if tunnel.resolved_tunnel_id is None else None,
+            }
+    else:
+        tunnel_payload = {
+            "ok": False,
+            "configured_tunnel": "",
+            "resolved_tunnel_id": None,
+            "resolution_source": None,
+            "account_id": None,
+            "api_available": False,
+            "api_status": None,
+            "api_error": None,
+            "detail": f"skipped because config is not valid: {config_info['detail']}",
+        }
+
+    setup_payload: dict[str, object]
+    if config_info["valid"]:
+        runtime = detect_cloudflared_runtime(quiet=quiet)
+        setup = inspect_cloudflared_setup(config.cloudflared_config, runtime=runtime, quiet=quiet)
+        setup_payload = _bootstrap_setup_payload(setup)
+    else:
+        setup_payload = {
+            "ok": False,
+            "setup_state": "repair needed",
+            "mode": "unknown",
+            "systemd_managed": False,
+            "active": False,
+            "configured_path": str(config.cloudflared_config),
+            "configured_exists": False,
+            "configured_writable": False,
+            "configured_credentials_path": None,
+            "configured_credentials_exists": None,
+            "configured_credentials_readable": None,
+            "configured_credentials_group_readable": None,
+            "configured_credentials_owner": None,
+            "configured_credentials_group": None,
+            "configured_credentials_mode": None,
+            "runtime_path": None,
+            "runtime_exists": None,
+            "runtime_readable": None,
+            "paths_aligned": None,
+            "ingress_mutation_available": False,
+            "account_inspection_available": False,
+            "service_user": None,
+            "service_group": None,
+            "shared_group": "homesrvctl",
+            "detail": f"skipped because config is not valid: {config_info['detail']}",
+            "issues": [f"skipped because config is not valid: {config_info['detail']}"],
+            "notes": [],
+            "next_commands": [],
+            "override_path": None,
+            "override_content": None,
+        }
+
+    setup_ready = setup_payload["setup_state"] == "ready"
+    tunnel_ok = bool(tunnel_payload["ok"])
+    bootstrap_ready = assessment.bootstrap_ready and validate_ok and tunnel_ok and setup_ready
+    if not assessment.host_supported:
+        validation_state = "unsupported"
+    elif bootstrap_ready:
+        validation_state = "ready"
+    else:
+        validation_state = "not_ready"
+
+    issues = list(assessment.issues)
+    if not config_info["valid"]:
+        issues.append(f"bootstrap validation skipped command-level checks because config is not valid: {config_info['detail']}")
+    else:
+        issues.extend(
+            f"validate blocking failure: {check['name']}: {check['detail']}"
+            for check in validate_payload
+            if not bool(check["ok"]) and str(check["severity"]) != "advisory"
+        )
+        if not tunnel_ok and tunnel_payload.get("detail"):
+            issues.append(f"tunnel status: {tunnel_payload['detail']}")
+        if not setup_ready:
+            issues.append(f"cloudflared setup: {setup_payload['detail']}")
+
+    next_steps = _bootstrap_validation_next_steps(
+        assessment=assessment,
+        validate_ok=validate_ok,
+        validate_blocking_failures=validate_blocking_failures,
+        tunnel=tunnel_payload,
+        setup=setup_payload,
+    )
+
+    if validation_state == "ready":
+        detail = "bootstrap baseline is ready for stack creation and domain onboarding"
+    elif validation_state == "unsupported":
+        detail = "host is outside the current bootstrap target"
+    else:
+        detail = "bootstrap baseline is not ready yet"
+
+    return BootstrapValidation(
+        ok=bootstrap_ready,
+        validation_state=validation_state,
+        bootstrap_ready=bootstrap_ready,
+        detail=detail,
+        config_path=str(target_path),
+        assessment=assessment,
+        validate_ok=validate_ok,
+        validate_checks=validate_payload,
+        validate_blocking_failures=validate_blocking_failures,
+        validate_advisories=validate_advisories,
+        tunnel=tunnel_payload,
+        cloudflared_setup=setup_payload,
+        issues=issues,
+        next_steps=next_steps,
+    )
+
+
 def _os_assessment() -> dict[str, object]:
     os_release = Path("/etc/os-release")
     if not os_release.exists():
@@ -758,6 +942,91 @@ def _bootstrap_credentials_filename(config: HomesrvctlConfig) -> str:
     if candidate and all(char in "0123456789abcdef-" for char in candidate) and len(candidate) == 36:
         return f"{candidate}.json"
     return "tunnel-credentials.json"
+
+
+def _bootstrap_check_severity(check: CheckResult) -> str:
+    if check.severity:
+        return check.severity
+    return "pass" if check.ok else "blocking"
+
+
+def _bootstrap_check_is_blocking_failure(check: CheckResult) -> bool:
+    return not check.ok and _bootstrap_check_severity(check) != "advisory"
+
+
+def _bootstrap_check_to_dict(check: CheckResult) -> dict[str, object]:
+    return {
+        "name": check.name,
+        "ok": check.ok,
+        "detail": check.detail,
+        "severity": _bootstrap_check_severity(check),
+    }
+
+
+def _bootstrap_setup_payload(setup: CloudflaredSetupReport) -> dict[str, object]:
+    return {
+        "ok": setup.ok,
+        "setup_state": setup.setup_state,
+        "mode": setup.mode,
+        "systemd_managed": setup.systemd_managed,
+        "active": setup.active,
+        "configured_path": setup.configured_path,
+        "configured_exists": setup.configured_exists,
+        "configured_writable": setup.configured_writable,
+        "configured_credentials_path": setup.configured_credentials_path,
+        "configured_credentials_exists": setup.configured_credentials_exists,
+        "configured_credentials_readable": setup.configured_credentials_readable,
+        "configured_credentials_group_readable": setup.configured_credentials_group_readable,
+        "configured_credentials_owner": setup.configured_credentials_owner,
+        "configured_credentials_group": setup.configured_credentials_group,
+        "configured_credentials_mode": setup.configured_credentials_mode,
+        "runtime_path": setup.runtime_path,
+        "runtime_exists": setup.runtime_exists,
+        "runtime_readable": setup.runtime_readable,
+        "paths_aligned": setup.paths_aligned,
+        "ingress_mutation_available": setup.ingress_mutation_available,
+        "account_inspection_available": setup.account_inspection_available,
+        "service_user": setup.service_user,
+        "service_group": setup.service_group,
+        "shared_group": setup.shared_group,
+        "detail": setup.detail,
+        "issues": setup.issues,
+        "notes": setup.notes or [],
+        "next_commands": setup.next_commands,
+        "override_path": setup.override_path,
+        "override_content": setup.override_content,
+    }
+
+
+def _bootstrap_validation_next_steps(
+    *,
+    assessment: BootstrapAssessment,
+    validate_ok: bool,
+    validate_blocking_failures: int,
+    tunnel: dict[str, object],
+    setup: dict[str, object],
+) -> list[str]:
+    if (
+        assessment.bootstrap_ready
+        and validate_ok
+        and bool(tunnel["ok"])
+        and str(setup["setup_state"]) == "ready"
+    ):
+        return ["Host baseline is ready for first stack creation and domain onboarding."]
+
+    steps = list(assessment.next_steps)
+    if not validate_ok and validate_blocking_failures:
+        steps.append("Run `homesrvctl validate --json` to inspect the remaining blocking host validation failures.")
+    if not bool(tunnel["ok"]):
+        steps.append(
+            "Run `homesrvctl bootstrap tunnel --account-id <cloudflare-account-id>` to create or reuse the shared host tunnel."
+        )
+    setup_state = str(setup["setup_state"])
+    if setup_state in {"misaligned", "repair needed"}:
+        steps.append("Run `sudo homesrvctl bootstrap wiring` to converge the shared cloudflared config and service wiring.")
+    elif setup_state == "partial":
+        steps.append("Run `homesrvctl cloudflared setup` to review the shared-group credential access commands.")
+    return list(dict.fromkeys(steps))
 
 
 def _debian_codename(os_info: dict[str, object]) -> str:

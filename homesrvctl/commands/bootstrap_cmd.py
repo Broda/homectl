@@ -7,6 +7,7 @@ import typer
 
 from homesrvctl.bootstrap import (
     assess_bootstrap,
+    validate_bootstrap,
     provision_bootstrap_runtime,
     provision_bootstrap_tunnel,
     provision_bootstrap_wiring,
@@ -93,6 +94,87 @@ def bootstrap_assess(
                 typer.echo(f"- {step}")
 
     if not assessment.ok:
+        raise typer.Exit(code=1)
+
+
+@bootstrap_cli.command("validate")
+def bootstrap_validate(
+    path: Path | None = typer.Option(
+        None,
+        "--path",
+        help="Read homesrvctl config from a custom path instead of the default user config location.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print the bootstrap readiness result as JSON."),
+) -> None:
+    """Report whether the current host matches the completed bootstrap baseline."""
+    validation = validate_bootstrap(path, quiet=json_output)
+    payload = with_json_schema(
+        {
+            "action": "bootstrap_validate",
+            "ok": validation.ok,
+            "validation_state": validation.validation_state,
+            "bootstrap_ready": validation.bootstrap_ready,
+            "detail": validation.detail,
+            "config_path": validation.config_path,
+            "assessment": {
+                "ok": validation.assessment.ok,
+                "bootstrap_state": validation.assessment.bootstrap_state,
+                "bootstrap_ready": validation.assessment.bootstrap_ready,
+                "host_supported": validation.assessment.host_supported,
+                "detail": validation.assessment.detail,
+                "config_path": validation.assessment.config_path,
+                "os": validation.assessment.os,
+                "systemd": validation.assessment.systemd,
+                "packages": validation.assessment.packages,
+                "services": validation.assessment.services,
+                "config": validation.assessment.config,
+                "network": validation.assessment.network,
+                "cloudflare": validation.assessment.cloudflare,
+                "issues": validation.assessment.issues,
+                "next_steps": validation.assessment.next_steps,
+            },
+            "validate": {
+                "ok": validation.validate_ok,
+                "blocking_failures": validation.validate_blocking_failures,
+                "advisories": validation.validate_advisories,
+                "checks": validation.validate_checks,
+            },
+            "tunnel": validation.tunnel,
+            "cloudflared_setup": validation.cloudflared_setup,
+            "issues": validation.issues,
+            "next_steps": validation.next_steps,
+        }
+    )
+
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        if validation.validation_state == "ready":
+            success(validation.detail)
+        elif validation.validation_state == "unsupported":
+            warn(validation.detail)
+        else:
+            info(validation.detail)
+        info(f"validation state: {validation.validation_state}")
+        info(f"bootstrap ready: {'yes' if validation.bootstrap_ready else 'no'}")
+        info(f"config path: {validation.config_path}")
+        info(f"assessment state: {validation.assessment.bootstrap_state}")
+        info(f"validate blocking failures: {validation.validate_blocking_failures}")
+        info(f"validate advisories: {validation.validate_advisories}")
+        info(f"tunnel ready: {'yes' if validation.tunnel.get('ok') else 'no'}")
+        info(f"cloudflared setup state: {validation.cloudflared_setup.get('setup_state', 'unknown')}")
+        if validation.issues:
+            typer.echo("")
+            warn(f"issues: {len(validation.issues)}")
+            for issue in validation.issues:
+                typer.echo(f"- {issue}")
+        if validation.next_steps:
+            typer.echo("")
+            info("next steps:")
+            for step in validation.next_steps:
+                typer.echo(f"- {step}")
+
+    if not validation.ok:
         raise typer.Exit(code=1)
 
 

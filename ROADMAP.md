@@ -1570,12 +1570,26 @@ Completed in this milestone:
 
 ### 12.5 First-Run Validation
 
-Status: planned
+Status: completed
 
 Tasks:
 - Validate the freshly bootstrapped host through existing health and status commands.
 - Ensure the resulting state is ready for first domain onboarding and stack creation.
 - Update docs and operator guidance so the new first-run story is explicit.
+
+Completed in this milestone:
+- Added `homesrvctl bootstrap validate` as the explicit final bootstrap-readiness command.
+- The command now supports `--json`.
+- The validation slice now composes:
+  - `bootstrap assess`
+  - the existing `validate` host checks
+  - `tunnel status` tunnel resolution
+  - shared-group `cloudflared` setup readiness
+- The final result now reports a single top-level bootstrap validation state:
+  - `ready`
+  - `not_ready`
+  - `unsupported`
+- The shipped bootstrap story now ends in one explicit host-readiness result for first stack creation and domain onboarding.
 
 ## Cross-Cutting Working Rules
 
