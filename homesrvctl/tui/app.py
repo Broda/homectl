@@ -9,6 +9,7 @@ from textual.widgets import Button, Header, Label, Static
 
 from homesrvctl.tui.data import (
     TOOL_ITEMS,
+    normalize_config_validation_detail,
     build_dashboard_snapshot,
     render_bootstrap_assessment_detail,
     render_cloudflared_setup_detail,
@@ -1329,7 +1330,7 @@ class HomesrvctlTextualApp(App[None]):
                     "",
                     f"config ok: {config_ok_markup}",
                     f"config severity: {config_validation.get('max_severity', 'none')}",
-                    f"config detail: {config_validation.get('detail', 'unknown')}",
+                    f"config detail: {normalize_config_validation_detail(config_validation.get('detail', 'unknown'))}",
                 ]
             )
             warnings = config_validation.get("warnings", [])

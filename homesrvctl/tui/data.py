@@ -428,7 +428,7 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
                     [
                         ("config ok", str(config_validation.get("ok", False))),
                         ("config severity", max_severity),
-                        ("config detail", str(config_validation.get("detail", "unknown"))),
+                        ("config detail", normalize_config_validation_detail(config_validation.get("detail", "unknown"))),
                     ]
                 ),
             ]
@@ -462,6 +462,14 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
         lines.extend(["", *render_cloudflared_setup_detail(setup)])
 
     return lines
+
+
+def normalize_config_validation_detail(detail: object) -> str:
+    rendered = str(detail or "unknown")
+    lines = [line.strip() for line in rendered.splitlines() if line.strip()]
+    if len(lines) >= 2 and lines[-1] == "OK":
+        lines = lines[:-1]
+    return lines[0] if len(lines) == 1 else "\n".join(lines)
 
 
 def render_config_payload_detail(payload: dict[str, object]) -> list[str]:
