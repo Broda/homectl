@@ -378,7 +378,7 @@ def provision_bootstrap_wiring(
     next_steps = [
         "Run `homesrvctl cloudflared status` to confirm the shared-group config path and credential readability.",
         "Run `homesrvctl tunnel status` to confirm the service-backed tunnel resolves correctly.",
-        "Final bootstrap validation remains the next slice.",
+        "Run `homesrvctl bootstrap validate` to confirm the completed bootstrap baseline is ready.",
     ]
     detail = "cloudflared config and systemd wiring converged for the shared-group bootstrap model"
     if dry_run:
