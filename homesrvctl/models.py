@@ -44,6 +44,7 @@ class RenderContext:
     hostname: str
     safe_name: str
     docker_network: str
+    traefik_host_rule: str
     service_name: str = "web"
 
 

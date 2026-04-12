@@ -226,6 +226,10 @@ def run_stack_domain_status(hostname: str) -> dict[str, object]:
 def summarize_stack_action(hostname: str, action: str, payload: dict[str, object]) -> str:
     label = action_label(action)
     if payload.get("ok"):
+        restart = payload.get("restart")
+        if action in {"domain-add", "domain-repair", "domain-remove"} and isinstance(restart, dict) and not restart.get("ok", True):
+            detail = str(restart.get("detail") or "cloudflared restart did not complete")
+            return f"{label} partially succeeded for {hostname}: {detail}"
         return f"{label} succeeded for {hostname}"
     checks = payload.get("checks")
     if isinstance(checks, list):
@@ -273,6 +277,18 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
     template = payload.get("template")
     if template:
         lines.extend(format_key_value_lines([("template", str(template))]))
+
+    restart = payload.get("restart")
+    if isinstance(restart, dict):
+        restart_status = "[green]ok[/green]" if restart.get("ok") else "[red]failed[/red]"
+        restart_pairs: list[tuple[str, str]] = [("apply status", restart_status)]
+        restart_detail = restart.get("detail")
+        if restart_detail:
+            restart_pairs.append(("apply detail", str(restart_detail)))
+        restart_command = restart.get("restart_command")
+        if isinstance(restart_command, list) and restart_command:
+            restart_pairs.append(("apply command", " ".join(str(part) for part in restart_command)))
+        lines.extend(["", *format_key_value_lines(restart_pairs)])
 
     checks = payload.get("checks")
     if isinstance(checks, list):
@@ -670,6 +686,14 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
             lines.append(f"- {issue}")
         if len(coverage_issues) > 4:
             lines.append(f"... {len(coverage_issues) - 4} more")
+
+    dns_warnings = payload.get("dns_warnings")
+    if isinstance(dns_warnings, list):
+        lines.extend(["", *format_key_value_lines([("dns warnings", str(len(dns_warnings)))])])
+        for warning in dns_warnings[:3]:
+            lines.append(f"- {warning}")
+        if len(dns_warnings) > 3:
+            lines.append(f"... {len(dns_warnings) - 3} more")
 
     ingress_warnings = payload.get("ingress_warnings")
     if isinstance(ingress_warnings, list):

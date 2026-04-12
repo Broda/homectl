@@ -112,6 +112,20 @@ def test_site_init_scaffolds_files(monkeypatch, tmp_path: Path) -> None:
     assert "test.example.com" in index_file.read_text(encoding="utf-8")
 
 
+def test_site_init_scaffolds_apex_www_host_rule(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["site", "init", "example.com"])
+
+    assert result.exit_code == 0, result.output
+    compose = (sites_root / "example.com" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "traefik.http.routers.example-com.rule=Host(`example.com`) || Host(`www.example.com`)" in compose
+
+
 def test_site_init_template_artifacts_stay_coherent(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"
@@ -2314,6 +2328,21 @@ def test_domain_add_dry_run_uses_api_tunnel_lookup_when_local_uuid_missing(monke
     config["cloudflared_config"] = str(cloudflared_config)
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     monkeypatch.setenv("HOME", str(home))
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
     class FakeClient:
         def __init__(self, api_token: str) -> None:
@@ -4261,6 +4290,90 @@ def test_domain_status_json_reports_repairable(monkeypatch, tmp_path: Path) -> N
     assert payload["coverage_issues"] == [
         "DNS coverage is apex-only; wildcard DNS is missing",
         "Ingress coverage is apex-only; wildcard ingress is missing",
+    ]
+    assert payload["dns_warnings"] == []
+
+
+def test_domain_status_json_reports_www_override_warning(monkeypatch, tmp_path: Path) -> None:
+    from homesrvctl.commands import domain_cmd
+
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    _write_cloudflared_config(cloudflared_config)
+    config_path = home / ".config" / "homesrvctl" / "config.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["cloudflared_config"] = str(cloudflared_config)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    cloudflared_config.write_text(
+        yaml.safe_dump(
+            {
+                "tunnel": "11111111-2222-4333-8444-555555555555",
+                "credentials-file": "/etc/cloudflared/example.json",
+                "ingress": [
+                    {"hostname": "example.com", "service": "http://localhost:8081"},
+                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"service": "http_status:404"},
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, api_token: str) -> None:
+            assert api_token == "test-token"
+
+        def get_zone(self, zone_name: str) -> dict[str, str]:
+            return {"id": "zone-123"}
+
+        def get_dns_record_status(self, zone_id: str, record_name: str, expected_content: str):  # noqa: ANN202
+            if record_name == f"www.example.com":
+                return type(
+                    "Status",
+                    (),
+                    {
+                        "record_name": record_name,
+                        "exists": True,
+                        "record_type": "A",
+                        "content": "75.119.201.23",
+                        "proxied": True,
+                        "matches_expected": False,
+                        "detail": "A -> 75.119.201.23 (proxied); expected CNAME -> 11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)",
+                    },
+                )()
+            return type(
+                "Status",
+                (),
+                {
+                    "record_name": record_name,
+                    "exists": True,
+                    "record_type": "CNAME",
+                    "content": expected_content,
+                    "proxied": True,
+                    "matches_expected": True,
+                    "detail": f"CNAME -> {expected_content} (proxied)",
+                },
+            )()
+
+    monkeypatch.setattr(domain_cmd, "CloudflareApiClient", FakeClient)
+    monkeypatch.setattr(
+        domain_cmd,
+        "tunnel_cname_target",
+        lambda config: "11111111-2222-4333-8444-555555555555.cfargotunnel.com",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["domain", "status", "example.com", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["overall"] == "ok"
+    assert payload["dns_warnings"] == [
+        "explicit DNS record www.example.com overrides the wildcard tunnel route: A -> 75.119.201.23 (proxied); expected CNAME -> 11111111-2222-4333-8444-555555555555.cfargotunnel.com (proxied)"
     ]
 
 

@@ -440,6 +440,19 @@ def test_summarize_stack_action_labels_domain_add_and_remove() -> None:
     assert remove_summary == "domain remove failed for example.com: permission denied"
 
 
+def test_summarize_stack_action_reports_domain_apply_failure() -> None:
+    summary = data.summarize_stack_action(
+        "example.com",
+        "domain-repair",
+        {
+            "ok": True,
+            "restart": {"ok": False, "detail": "permission denied"},
+        },
+    )
+
+    assert summary == "domain repair partially succeeded for example.com: permission denied"
+
+
 def test_render_stack_action_detail_formats_doctor_checks() -> None:
     lines = data.render_stack_action_detail(
         "doctor",
@@ -537,6 +550,27 @@ def test_render_stack_action_detail_formats_command_results() -> None:
     assert "no" in rendered
     assert "rc=0 docker compose up -d" in rendered
     assert "stdout: container started" in rendered
+
+
+def test_render_stack_action_detail_shows_domain_apply_status() -> None:
+    lines = data.render_stack_action_detail(
+        "domain-repair",
+        {
+            "ok": True,
+            "restart": {
+                "ok": True,
+                "detail": "systemd service is active",
+                "restart_command": ["systemctl", "restart", "cloudflared"],
+            },
+        },
+    )
+
+    rendered = "\n".join(lines)
+
+    assert "apply status" in rendered
+    assert "apply detail" in rendered
+    assert "apply command" in rendered
+    assert "systemctl restart cloudflared" in rendered
 
 
 def test_render_tool_action_detail_formats_cloudflared_result() -> None:
@@ -732,6 +766,7 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
             "expected_tunnel_target": "1234.cfargotunnel.com",
             "expected_ingress_service": "http://localhost:8081",
             "coverage_issues": ["Ingress coverage is apex-only; wildcard ingress is missing"],
+            "dns_warnings": ["explicit DNS record www.example.com overrides the wildcard tunnel route: A -> 192.0.2.10"],
             "ingress_warnings": ["earlier ingress rule *.com may shadow later hostname example.com"],
             "ingress_issues": [
                 {
@@ -759,6 +794,7 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "repairable" in rendered
     assert "Yes" in rendered
     assert "coverage issues : 1" in rendered
+    assert "dns warnings : 1" in rendered
     assert "ingress issues : 1 total, 1 blocking, 0 advisory" in rendered
     assert "manual fix required" in rendered
     assert "no" in rendered
@@ -782,6 +818,7 @@ def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
             "manual_fix_required": False,
             "expected_tunnel_target": "1234.cfargotunnel.com",
             "expected_ingress_service": "http://localhost:8081",
+            "dns_warnings": ["explicit DNS record www.example.com overrides the wildcard tunnel route: A -> 192.0.2.10"],
             "dns": [
                 {
                     "record_name": "example.com",
@@ -801,6 +838,7 @@ def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
     rendered = "\n".join(lines)
 
     assert "detail : CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
+    assert "dns warnings : 1" in rendered
     assert "ancillary records : MX -> route1.mx.cloudflare.net" in rendered
     assert "TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"" in rendered
 
@@ -1612,7 +1650,7 @@ def test_textual_app_create_auto_onboards_apex_before_scaffold(monkeypatch) -> N
     app._run_pending_create_request()
 
     assert calls == [
-        ("example.com", "domain-add", {}),
+        ("example.com", "domain-add", {"restart_cloudflared": True}),
         ("example.com", "init-site", {"template": None, "force": False, "profile": None, "docker_network": None, "traefik_url": None}),
     ]
     assert app.status_message == "create completed for example.com: domain add + site init"
@@ -2019,7 +2057,7 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
             "validate": {"ok": True, "checks": []},
         },
     ]
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, dict[str, object]]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
     app.selected_control_index = 5
@@ -2028,14 +2066,15 @@ def test_textual_app_selected_stack_action_refreshes_status(monkeypatch) -> None
     monkeypatch.setattr(
         textual_app,
         "run_stack_action",
-        lambda hostname, action: calls.append((hostname, action)) or {"ok": True},
+        lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
+        or {"ok": True, "restart": {"ok": True, "detail": "systemd service is active", "restart_command": ["systemctl", "restart", "cloudflared"]}},
     )
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app._refresh_snapshot("dashboard ready")
     app._run_selected_stack_action("up")
 
-    assert calls == [("example.com", "up")]
+    assert calls == [("example.com", "up", {})]
     assert app.status_message == "up succeeded for example.com"
     assert app.snapshot["list"]["sites"][0]["compose"] is True
     assert app.last_stack_actions["example.com"]["action"] == "up"
@@ -2058,7 +2097,7 @@ def test_textual_app_domain_repair_refreshes_status(monkeypatch) -> None:
             "validate": {"ok": True, "checks": []},
         },
     ]
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, dict[str, object]]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
     app.selected_control_index = 5
@@ -2067,14 +2106,15 @@ def test_textual_app_domain_repair_refreshes_status(monkeypatch) -> None:
     monkeypatch.setattr(
         textual_app,
         "run_stack_action",
-        lambda hostname, action: calls.append((hostname, action)) or {"ok": True},
+        lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
+        or {"ok": True, "restart": {"ok": True, "detail": "systemd service is active", "restart_command": ["systemctl", "restart", "cloudflared"]}},
     )
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app._refresh_snapshot("dashboard ready")
     app.action_domain_repair()
 
-    assert calls == [("example.com", "domain-repair")]
+    assert calls == [("example.com", "domain-repair", {"restart_cloudflared": True})]
     assert app.status_message == "domain repair succeeded for example.com"
     assert app.last_stack_actions["example.com"]["action"] == "domain-repair"
 
@@ -2096,7 +2136,7 @@ def test_textual_app_domain_add_refreshes_status(monkeypatch) -> None:
             "validate": {"ok": True, "checks": []},
         },
     ]
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, dict[str, object]]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
     app.selected_control_index = 5
@@ -2105,14 +2145,15 @@ def test_textual_app_domain_add_refreshes_status(monkeypatch) -> None:
     monkeypatch.setattr(
         textual_app,
         "run_stack_action",
-        lambda hostname, action: calls.append((hostname, action)) or {"ok": True},
+        lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
+        or {"ok": True, "restart": {"ok": True, "detail": "systemd service is active", "restart_command": ["systemctl", "restart", "cloudflared"]}},
     )
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app._refresh_snapshot("dashboard ready")
     app._complete_domain_confirmation("example.com", "domain-add", True)
 
-    assert calls == [("example.com", "domain-add")]
+    assert calls == [("example.com", "domain-add", {"restart_cloudflared": True})]
     assert app.status_message == "domain add succeeded for example.com"
     assert app.last_stack_actions["example.com"]["action"] == "domain-add"
 
@@ -2134,7 +2175,7 @@ def test_textual_app_domain_remove_refreshes_status(monkeypatch) -> None:
             "validate": {"ok": True, "checks": []},
         },
     ]
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, dict[str, object]]] = []
     app = textual_app.HomesrvctlTextualApp()
     app.snapshot = snapshots[0]
     app.selected_control_index = 5
@@ -2143,14 +2184,15 @@ def test_textual_app_domain_remove_refreshes_status(monkeypatch) -> None:
     monkeypatch.setattr(
         textual_app,
         "run_stack_action",
-        lambda hostname, action: calls.append((hostname, action)) or {"ok": True},
+        lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
+        or {"ok": True, "restart": {"ok": True, "detail": "systemd service is active", "restart_command": ["systemctl", "restart", "cloudflared"]}},
     )
     monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
 
     app._refresh_snapshot("dashboard ready")
     app._complete_domain_confirmation("example.com", "domain-remove", True)
 
-    assert calls == [("example.com", "domain-remove")]
+    assert calls == [("example.com", "domain-remove", {"restart_cloudflared": True})]
     assert app.status_message == "domain remove succeeded for example.com"
     assert app.last_stack_actions["example.com"]["action"] == "domain-remove"
 

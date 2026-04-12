@@ -13,7 +13,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network={{ docker_network }}
-      - traefik.http.routers.{{ safe_name }}-site.rule=Host(`{{ hostname }}`)
+      - traefik.http.routers.{{ safe_name }}-site.rule={{ traefik_host_rule }}
       - traefik.http.routers.{{ safe_name }}-site.entrypoints=web
       - traefik.http.services.{{ safe_name }}-site.loadbalancer.server.port=80
     networks:
@@ -33,7 +33,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network={{ docker_network }}
-      - traefik.http.routers.{{ safe_name }}-api.rule=Host(`{{ hostname }}`) && PathPrefix(`/api`)
+      - traefik.http.routers.{{ safe_name }}-api.rule=({{ traefik_host_rule }}) && PathPrefix(`/api`)
       - traefik.http.routers.{{ safe_name }}-api.entrypoints=web
       - traefik.http.routers.{{ safe_name }}-api.priority=100
       - traefik.http.services.{{ safe_name }}-api.loadbalancer.server.port=8000

@@ -231,6 +231,8 @@ homesrvctl site init example.com
 homesrvctl up example.com
 ```
 
+For bare apex domains, scaffolded Traefik rules now match both the apex hostname and `www.<domain>`.
+
 Scaffold and run a subdomain site:
 
 ```bash
@@ -386,6 +388,7 @@ homesrvctl up example.com --dry-run
 - `config show` reports global config values and can also report the effective `docker_network` and `traefik_url` for a specific stack after stack-local overrides are applied.
 - stack-local config may select a named routing profile with `profile`, and direct stack-local overrides still win over profile-provided values.
 - `domain status` reports expected tunnel target, apex and wildcard DNS state, apex and wildcard `cloudflared` ingress state, whether a route is missing, duplicated, shadowed by an earlier ingress rule, or pointed at the wrong target, whether Cloudflare DNS is missing, of the wrong type, pointed at the wrong target, or ambiguous because multiple conflicting records exist, whether coverage is apex-only or wildcard-only, and whether `homesrvctl domain repair` is likely to fix the current state automatically.
+- `domain status` now also warns when a common explicit hostname such as `www.<domain>` has its own DNS record that overrides the wildcard tunnel route.
 - `domain status` also reports routing context for the apex stack, including the default ingress target, effective ingress target, selected profile, and source attribution for the effective target.
 - `domain status` now also surfaces normalized ingress issues from the configured `cloudflared` file, separating blocking states from advisory wildcard-precedence risks.
 - Blocking ingress issues include duplicate exact hostname entries and exact hostnames shadowed by an earlier broader rule; advisory issues keep direct remediation hints for risky wildcard ordering.
@@ -412,7 +415,7 @@ homesrvctl up example.com --dry-run
 - The TUI also accepts mouse input: clicking a control row, summary card, modal option, or detail action button is equivalent to selecting it with the keyboard, and mouse and keyboard selection share the same highlighted row. Mouse support is additive — every click target is also reachable by keyboard — and is quietly ignored when the host terminal does not report mouse events.
 - The TUI now exposes a global stack-creation flow with `b` or the `Create` detail button, so operators can scaffold a brand-new hostname without first creating a placeholder row in the CLI.
 - The guided create flow stays layered over the existing `site init` and `app init` commands, including hostname entry, create-mode selection, optional app-template selection, optional `profile` / `docker_network` / `traefik_url` inputs, and overwrite confirmation when the scaffold path already exists.
-- When `Create` is used for a bare apex domain like `example.com`, the TUI now runs `domain add` automatically before scaffold creation so apex onboarding and stack creation happen in one guided path.
+- When `Create` is used for a bare apex domain like `example.com`, the TUI now runs `domain add --restart-cloudflared` automatically before scaffold creation so apex onboarding, ingress application, and stack creation happen in one guided path.
 - When `Create` is used for a subdomain like `app.example.com`, the TUI only scaffolds the stack and does not try to onboard the apex domain automatically.
 - When a stack is focused, `a` opens a small Textual template picker for `app init`, and the scaffold result stays visible in the stack detail pane after the prompt completes.
 - The TUI now includes a `Config` tool item that renders the base `config show` output, and focused stack details also surface the effective per-stack config derived from `config show --stack`.
@@ -422,8 +425,8 @@ homesrvctl up example.com --dry-run
 - When the `Cloudflared` tool is focused, the TUI now also exposes a `Fix Setup` action that runs `cloudflared setup` and keeps the generated repair guidance visible in the detail pane.
 - The guided `Config` tool flow can now run the default-path `config init` path from inside the TUI, and it asks for overwrite confirmation only when the existing config file would need `--force`.
 - Focused apex stacks now also surface `domain status` detail in the TUI, including overall state, repairability, coverage issues, and suggested repair command when available.
-- Focused apex stacks can now run `domain repair` from the TUI with `p`, using the same CLI mutation path underneath and surfacing the result back in the stack pane.
-- Focused apex stacks can now also confirm `domain add` with `n` and `domain remove` with `m` through a small modal prompt before the mutation runs.
+- Focused apex stacks can now run `domain repair` from the TUI with `p`, using the same CLI mutation path underneath, automatically requesting a `cloudflared` restart when ingress changes are written, and surfacing the apply result back in the stack pane.
+- Focused apex stacks can now also confirm `domain add` with `n` and `domain remove` with `m` through a small modal prompt before the mutation runs, and those guided domain mutations now also request a `cloudflared` restart when ingress changes are written.
 - Focused stacks can also open a guided action menu with `Enter` or `o`, which lists the currently available stack actions and apex-domain actions for the selected hostname.
 - When the `Cloudflared` tool is focused, the TUI can run `config-test` with `c`, `reload` with `l`, and `restart` with `k`, and the detail pane keeps the last tool result visible.
 - The guided `Cloudflared` tool flow now also covers `cloudflared logs`, including a choice between standard and `--follow` guidance, and the suggested runtime log command stays visible in the detail pane after the prompt completes.

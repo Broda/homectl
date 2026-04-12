@@ -750,7 +750,7 @@ class HomesrvctlTextualApp(App[None]):
         action = str(request.get("action", ""))
         domain_add_payload = request.get("domain_add_payload")
         if bool(request.get("auto_domain_add")) and not bool(request.get("domain_add_completed")):
-            domain_payload = run_stack_action(hostname, "domain-add")
+            domain_payload = run_stack_action(hostname, "domain-add", restart_cloudflared=True)
             request["domain_add_completed"] = True
             request["domain_add_payload"] = domain_payload
             self.pending_create_request = request
@@ -876,10 +876,13 @@ class HomesrvctlTextualApp(App[None]):
         self._run_stack_action_for_hostname(hostname, action)
 
     def _run_stack_action_for_hostname(self, hostname: str, action: str, template: str | None = None) -> None:
+        action_kwargs: dict[str, object] = {}
+        if action in {"domain-add", "domain-repair", "domain-remove"}:
+            action_kwargs["restart_cloudflared"] = True
         if template is None:
-            payload = run_stack_action(hostname, action)
+            payload = run_stack_action(hostname, action, **action_kwargs)
         else:
-            payload = run_stack_action(hostname, action, template=template)
+            payload = run_stack_action(hostname, action, template=template, **action_kwargs)
         self.last_stack_actions[hostname] = {"action": action, "payload": payload}
         self.status_message = summarize_stack_action(hostname, action, payload)
         self.snapshot = build_dashboard_snapshot()

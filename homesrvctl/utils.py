@@ -67,6 +67,15 @@ def validate_bare_domain(domain: str) -> str:
     )
 
 
+def traefik_host_rule(hostname: str) -> str:
+    valid_hostname = validate_hostname(hostname)
+    try:
+        apex = validate_bare_domain(valid_hostname)
+    except typer.BadParameter:
+        return f"Host(`{valid_hostname}`)"
+    return f"Host(`{apex}`) || Host(`www.{apex}`)"
+
+
 def ensure_directory(path: Path, dry_run: bool = False, quiet: bool = False) -> None:
     if dry_run:
         if not quiet:

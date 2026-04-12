@@ -12,6 +12,7 @@ from homesrvctl.utils import (
     ensure_directory,
     hostname_to_safe_name,
     success,
+    traefik_host_rule,
     validate_hostname,
     with_json_schema,
     write_text_file,
@@ -72,6 +73,7 @@ def app_init(
             hostname=valid_hostname,
             safe_name=safe_name,
             docker_network=effective_docker_network,
+            traefik_host_rule=traefik_host_rule(valid_hostname),
             service_name="app",
         )
         render_context = {
@@ -79,6 +81,7 @@ def app_init(
             "template": template_spec.name,
             "safe_name": context.safe_name,
             "docker_network": context.docker_network,
+            "traefik_host_rule": context.traefik_host_rule,
             "service_name": context.service_name,
         }
         for output_path, template_name in outputs:

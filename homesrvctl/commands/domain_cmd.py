@@ -229,6 +229,7 @@ def domain_status(
         records = [bare_domain, f"*.{bare_domain}"]
 
         dns_statuses = [client.get_dns_record_status(zone_id, record_name, target) for record_name in records]
+        dns_warnings = _common_subdomain_dns_warnings(client, zone_id, bare_domain, target)
         ingress_statuses = _build_domain_ingress_statuses(
             config.cloudflared_config,
             bare_domain,
@@ -257,6 +258,7 @@ def domain_status(
             "manual_fix_required": not repairable and overall != "ok",
             "suggested_command": suggested_command,
             "coverage_issues": coverage_issues,
+            "dns_warnings": dns_warnings,
             "ingress_warnings": [issue.render() for issue in ingress_issues if issue.severity == "advisory"],
             "ingress_issues": [_ingress_issue_to_dict(issue) for issue in ingress_issues],
             "ingress_mutation_available": setup.ingress_mutation_available,
@@ -326,6 +328,8 @@ def domain_status(
                 str(status["detail"]),
                 ok,
             )
+        for warning_message in dns_warnings:
+            warn(f"DNS warning: {warning_message}")
         for issue in ingress_issues:
             prefix = "Ingress advisory" if issue.severity == "advisory" else "Ingress blocking issue"
             warn(f"{prefix}: {issue.render()}")
@@ -703,6 +707,21 @@ def _coverage_issues(dns_statuses, ingress_statuses) -> list[str]:  # noqa: ANN0
     if wildcard_ingress_exists and not apex_ingress_exists:
         issues.append("Ingress coverage is wildcard-only; apex ingress is missing")
     return issues
+
+
+def _common_subdomain_dns_warnings(
+    client: CloudflareApiClient,
+    zone_id: str,
+    domain: str,
+    expected_target: str,
+) -> list[str]:
+    warnings: list[str] = []
+    www_status = client.get_dns_record_status(zone_id, f"www.{domain}", expected_target)
+    if www_status.exists and not www_status.matches_expected:
+        warnings.append(
+            f"explicit DNS record www.{domain} overrides the wildcard tunnel route: {www_status.detail}"
+        )
+    return warnings
 
 
 def _dns_result_to_dict(result) -> dict[str, object]:

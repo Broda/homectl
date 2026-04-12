@@ -32,6 +32,10 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - TUI detail-pane polish: stack and domain detail views now use more operator-facing wording such as `compose file: exists`, `has local config: yes/no`, and `repairable: N/A/Yes/No`, and the domain pane now renders DNS and ingress rows in bordered table layouts for faster scanning.
 
 ### Fixed
+- Bare-domain scaffolds now render Traefik host rules for both the apex hostname and `www.<domain>`, so wildcard tunnel traffic for `www` no longer falls through to Traefik's default 404 on freshly scaffolded apex stacks.
+- `domain status` and the TUI stack pane now warn when an explicit `www.<domain>` DNS record overrides the wildcard tunnel route, which catches common legacy-hosting leftovers that apex-plus-wildcard checks alone would miss.
+- TUI apex-domain mutations now request `--restart-cloudflared` by default so guided `domain add`, `domain repair`, `domain remove`, and apex `Create` flows apply ingress changes to the running service instead of only rewriting the config file on disk.
+- TUI stack action detail now surfaces the domain-mutation apply step explicitly, including restart success/failure and the restart command when available.
 - The TUI detail panes no longer show inline command-hint footer text; shortcut keys now appear directly in the detail-button labels instead.
 - The TUI cloudflared detail pane now trims the redundant trailing `OK` line from config-validation detail text.
 - Changed the shared-group `cloudflared` config guidance and bootstrap wiring permissions so `/srv/homesrvctl/cloudflared/config.yml` is now group-writable for trusted operators, while the tunnel credentials JSON remains non-public.
