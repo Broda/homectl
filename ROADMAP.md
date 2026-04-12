@@ -1451,6 +1451,17 @@ Tasks:
 - Surface setup readiness through `domain status` and the TUI so operators can see mutation availability before running a repair.
 - Add a `Fix Setup` path in the TUI `Cloudflared` pane that renders the same setup guidance as the CLI.
 
+### 11.4 Add shared credential access guidance
+
+Status: completed
+
+Tasks:
+- Treat the tunnel credentials JSON as secret material that should stay non-public.
+- Adopt a first-class shared-group setup model around `root:homesrvctl` for `/srv/homesrvctl/cloudflared`.
+- Extend `cloudflared status` and `cloudflared setup` to report credential readability, account-inspection availability, and service user/group context.
+- Generate group-based migration commands and a systemd override that sets `Group=homesrvctl`.
+- Keep unreadable credentials non-fatal for tunnel health when local tunnel resolution still succeeds, while surfacing setup guidance in the CLI and TUI.
+
 ## Cross-Cutting Working Rules
 
 These are not standalone deliverables, but they should constrain all future milestones.

@@ -533,15 +533,23 @@ def test_render_tool_action_detail_formats_setup_guidance() -> None:
         {
             "ok": False,
             "detail": "systemd cloudflared service uses /etc/cloudflared/config.yml, but homesrvctl is configured for /srv/homesrvctl/cloudflared/config.yml",
+            "setup_state": "misaligned",
             "configured_path": "/srv/homesrvctl/cloudflared/config.yml",
+            "configured_credentials_path": "/etc/cloudflared/example.json",
+            "configured_credentials_readable": False,
+            "configured_credentials_owner": "root",
+            "configured_credentials_group": "root",
+            "configured_credentials_mode": "600",
             "runtime_path": "/etc/cloudflared/config.yml",
             "paths_aligned": False,
             "configured_exists": False,
             "configured_writable": False,
+            "account_inspection_available": False,
             "ingress_mutation_available": False,
             "issues": ["configured cloudflared config is missing: /srv/homesrvctl/cloudflared/config.yml"],
-            "next_commands": ["sudo install -d -o broda -g broda -m 755 /srv/homesrvctl/cloudflared"],
+            "next_commands": ["sudo groupadd -f homesrvctl"],
             "override_path": "/etc/systemd/system/cloudflared.service.d/override.conf",
+            "shared_group": "homesrvctl",
         },
     )
 
@@ -550,7 +558,9 @@ def test_render_tool_action_detail_formats_setup_guidance() -> None:
     assert "setup" in rendered
     assert "next commands: 1" in rendered
     assert "override path" in rendered
-    assert "sudo install -d -o broda -g broda -m 755 /srv/homesrvctl/cloudflared" in rendered
+    assert "sudo groupadd -f homesrvctl" in rendered
+    assert "setup state" in rendered
+    assert "credentials path" in rendered
 
 
 def test_render_config_payload_detail_formats_global_config() -> None:
@@ -891,7 +901,7 @@ def test_textual_app_tunnel_detail_downgrades_credentials_permission_denied() ->
             "account_id": None,
             "api_available": False,
             "api_status": None,
-            "api_error": "unable to read cloudflared credentials file /etc/cloudflared/example.json: [Errno 13] Permission denied",
+            "api_error": "cloudflared credentials are not readable by the current user: /etc/cloudflared/example.json: [Errno 13] Permission denied",
         },
         "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
         "validate": {"ok": True, "checks": []},
@@ -900,7 +910,10 @@ def test_textual_app_tunnel_detail_downgrades_credentials_permission_denied() ->
 
     detail = app._detail_text()
 
-    assert "api note: account-scoped tunnel inspection unavailable from current user permissions" in detail
+    assert (
+        "api note: account inspection unavailable: cloudflared credentials are not readable by the current user "
+        "(run `homesrvctl cloudflared setup` for shared-group guidance)"
+    ) in detail
     assert "Permission denied" not in detail
 
 
@@ -1510,12 +1523,22 @@ def test_textual_app_tool_detail_and_command_bar_text() -> None:
             "detail": "systemd service is active",
             "setup": {
                 "ok": True,
+                "setup_state": "ready",
                 "configured_path": "/srv/homesrvctl/cloudflared/config.yml",
+                "configured_credentials_path": "/srv/homesrvctl/cloudflared/11111111-2222-4333-8444-555555555555.json",
+                "configured_credentials_readable": True,
+                "configured_credentials_owner": "root",
+                "configured_credentials_group": "homesrvctl",
+                "configured_credentials_mode": "640",
                 "runtime_path": "/srv/homesrvctl/cloudflared/config.yml",
                 "paths_aligned": True,
                 "configured_exists": True,
                 "configured_writable": True,
+                "account_inspection_available": True,
                 "ingress_mutation_available": True,
+                "service_user": "root",
+                "service_group": "homesrvctl",
+                "shared_group": "homesrvctl",
                 "issues": [],
                 "notes": [],
                 "next_commands": [],

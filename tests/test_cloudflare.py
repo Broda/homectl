@@ -402,7 +402,7 @@ def test_inspect_configured_tunnel_errors_without_local_uuid_or_api_context(tmp_
     assert inspection.resolution_source is None
     assert inspection.api_available is False
     assert inspection.resolution_error is not None
-    assert "unable to read cloudflared config" in inspection.resolution_error
+    assert "cloudflared config file missing" in inspection.resolution_error
 
 
 def test_client_requires_api_token() -> None:

@@ -174,6 +174,17 @@ def collect_cloudflared_config_issues(config_path: Path) -> list[str]:
     return [issue.render() for issue in inspect_cloudflared_config_issues(config_path)]
 
 
+def cloudflared_credentials_path(config_path: Path) -> Path:
+    parsed = _load_config(config_path)
+    credentials_value = str(parsed.get("credentials-file", "")).strip()
+    if not credentials_value:
+        raise CloudflaredConfigError(f"cloudflared config missing credentials-file: {config_path}")
+    credentials_path = Path(credentials_value)
+    if not credentials_path.is_absolute():
+        credentials_path = config_path.parent / credentials_path
+    return credentials_path
+
+
 def inspect_cloudflared_config_warnings(config_path: Path) -> list[CloudflaredConfigWarning]:
     return [
         CloudflaredConfigWarning(code=issue.code, detail=issue.detail, hint=issue.hint)

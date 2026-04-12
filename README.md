@@ -104,6 +104,17 @@ cloudflare_api_token: ""
 
 Existing installs remain non-breaking: `homesrvctl` continues to honor whatever explicit `cloudflared_config` path is already stored in your config file.
 
+The first-class shared setup model now uses:
+
+- config: `/srv/homesrvctl/cloudflared/config.yml`
+- tunnel credentials JSON: `/srv/homesrvctl/cloudflared/<tunnel-id>.json`
+- ownership: `root:homesrvctl`
+- permissions:
+  - directory `750`
+  - files `640`
+
+The tunnel credentials JSON is secret material. It should not be world-readable. If you want unprivileged `homesrvctl` tunnel inspection, grant access through the dedicated `homesrvctl` group rather than broad file permissions.
+
 The top-level `docker_network` and `traefik_url` values are the implicit default routing profile for stacks that do not opt into anything else.
 
 Optional routing profiles may also be defined in the main config:
@@ -321,10 +332,11 @@ homesrvctl up example.com --dry-run
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.
-- `cloudflared status` reports the detected runtime mode, whether it is active, the restart command when one is available, and a setup-alignment report for the configured `cloudflared_config` path.
-- `cloudflared setup` assesses whether `homesrvctl` and the active runtime are pointed at the same config path, whether the configured file is writable by the current user, and prints exact next-step commands when a systemd override or config migration is needed.
+- `cloudflared status` reports the detected runtime mode, whether it is active, the restart command when one is available, and a setup-alignment report for the configured `cloudflared_config` path and tunnel credentials JSON.
+- `cloudflared setup` assesses whether `homesrvctl` and the active runtime are pointed at the same config path, whether ingress mutations are safe, whether account-scoped tunnel inspection is available from the current user, and prints exact shared-group migration commands when a systemd override or credential/config migration is needed.
 - The first-class setup/repair path is systemd-focused. Docker and bare-process runtimes still get status visibility, but setup repair remains advisory there.
 - `homesrvctl` does not prompt for `sudo` inside the CLI or TUI. When setup changes require elevated privileges, it prints the exact commands to run manually.
+- The first-class setup model uses a dedicated `homesrvctl` Unix group so `cloudflared` and unprivileged operators can share read access to the tunnel credentials JSON without making it public.
 - `tui` launches a terminal dashboard backed by the existing JSON commands for `list`, `config show`, `tunnel status`, `cloudflared status`, and `validate`.
 - The Textual app title is `Home Server Controller`, which is the human-readable product name for the terminal UI.
 - `tui` now launches a Textual app; reinstall the package or refresh the local dev venv after upgrading so the new dependency is present.
@@ -342,7 +354,7 @@ homesrvctl up example.com --dry-run
 - The guided domain flow stays layered over `domain add`, including apex-domain entry plus optional `--dry-run` and `--restart-cloudflared` choices, and when the domain does not yet map to a local stack row the resulting action and `domain status` follow-up stay visible from the `Tunnel` detail pane.
 - When a stack is focused, `a` opens a small Textual template picker for `app init`, and the scaffold result stays visible in the stack detail pane after the prompt completes.
 - The TUI now includes a `Config` tool item that renders the base `config show` output, and focused stack details also surface the effective per-stack config derived from `config show --stack`.
-- The TUI now also includes a `Tunnel` tool item that renders the current `tunnel status` output, including the configured reference, resolved UUID, resolution source, and API tunnel status when available.
+- The TUI now also includes a `Tunnel` tool item that renders the current `tunnel status` output, including the configured reference, resolved UUID, resolution source, API tunnel status when available, and a non-alarming note when account inspection is unavailable only because the current user cannot read the local credentials JSON.
 - Focused `Config`, `Tunnel`, and `Cloudflared` tool items can now open guided tool menus with `Enter` or `o`, so low-frequency global actions stay discoverable without replacing the underlying CLI verbs.
 - When the `Cloudflared` tool is focused, the TUI now also exposes a `Fix Setup` action that runs `cloudflared setup` and keeps the generated repair guidance visible in the detail pane.
 - The guided `Config` tool flow can now run the default-path `config init` path from inside the TUI, and it asks for overwrite confirmation only when the existing config file would need `--force`.

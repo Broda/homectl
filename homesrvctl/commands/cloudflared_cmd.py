@@ -71,12 +71,29 @@ def cloudflared_status(
         if setup is not None:
             if setup.ok:
                 info(f"setup: {setup.detail}")
+                info(f"setup state: {getattr(setup, 'setup_state', 'ready')}")
+                info(
+                    "account inspection available: "
+                    f"{'yes' if getattr(setup, 'account_inspection_available', False) else 'no'}"
+                )
+                credentials_path = getattr(setup, "configured_credentials_path", None)
+                if credentials_path:
+                    info(f"credentials path: {credentials_path}")
+                if getattr(setup, "notes", None):
+                    for note in setup.notes:
+                        info(f"setup note: {note}")
+                if getattr(setup, "next_commands", None):
+                    info("run `homesrvctl cloudflared setup` for the shared-group migration commands")
             else:
                 warn(f"setup: {setup.detail}")
+                warn(f"setup state: {getattr(setup, 'setup_state', 'repair needed')}")
                 for issue in setup.issues:
                     warn(f"setup issue: {issue}")
-                if setup.next_commands:
-                    info("run `homesrvctl cloudflared setup` for exact repair commands")
+                if getattr(setup, "notes", None):
+                    for note in setup.notes:
+                        info(f"setup note: {note}")
+                if getattr(setup, "next_commands", None):
+                    info("run `homesrvctl cloudflared setup` for the shared-group migration commands")
     if not overall_ok:
         raise typer.Exit(code=1)
 
@@ -93,8 +110,10 @@ def cloudflared_setup(
     if json_output:
         typer.echo(json.dumps(payload, indent=2))
     else:
-        if setup.ok:
+        if setup.ok and setup.setup_state == "ready":
             success(setup.detail)
+        elif setup.ok:
+            info(setup.detail)
         else:
             warn(setup.detail)
         info(f"configured path: {setup.configured_path}")
@@ -102,8 +121,15 @@ def cloudflared_setup(
         info(f"paths aligned: {'yes' if setup.paths_aligned else 'no' if setup.paths_aligned is False else 'unknown'}")
         info(f"configured exists: {'yes' if setup.configured_exists else 'no'}")
         info(f"configured writable: {'yes' if setup.configured_writable else 'no'}")
+        info(f"credentials path: {getattr(setup, 'configured_credentials_path', None) or '<unavailable>'}")
+        info(
+            "credentials readable: "
+            f"{'yes' if getattr(setup, 'configured_credentials_readable', None) else 'no' if getattr(setup, 'configured_credentials_readable', None) is False else 'unknown'}"
+        )
         info(f"ingress mutations available: {'yes' if setup.ingress_mutation_available else 'no'}")
-        if setup.notes:
+        info(f"account inspection available: {'yes' if getattr(setup, 'account_inspection_available', False) else 'no'}")
+        info(f"setup state: {getattr(setup, 'setup_state', 'repair needed' if not setup.ok else 'ready')}")
+        if getattr(setup, "notes", None):
             for note in setup.notes:
                 info(f"note: {note}")
         if setup.issues:
@@ -314,17 +340,29 @@ def _config_validation_payload(result) -> dict[str, object]:  # noqa: ANN001
 def _setup_payload(setup) -> dict[str, object]:  # noqa: ANN001
     return {
         "ok": setup.ok,
+        "setup_state": getattr(setup, "setup_state", "repair needed" if not setup.ok else "ready"),
         "mode": setup.mode,
         "systemd_managed": setup.systemd_managed,
         "active": setup.active,
         "configured_path": setup.configured_path,
         "configured_exists": setup.configured_exists,
         "configured_writable": setup.configured_writable,
+        "configured_credentials_path": getattr(setup, "configured_credentials_path", None),
+        "configured_credentials_exists": getattr(setup, "configured_credentials_exists", None),
+        "configured_credentials_readable": getattr(setup, "configured_credentials_readable", None),
+        "configured_credentials_group_readable": getattr(setup, "configured_credentials_group_readable", None),
+        "configured_credentials_owner": getattr(setup, "configured_credentials_owner", None),
+        "configured_credentials_group": getattr(setup, "configured_credentials_group", None),
+        "configured_credentials_mode": getattr(setup, "configured_credentials_mode", None),
         "runtime_path": setup.runtime_path,
         "runtime_exists": setup.runtime_exists,
         "runtime_readable": setup.runtime_readable,
         "paths_aligned": setup.paths_aligned,
         "ingress_mutation_available": setup.ingress_mutation_available,
+        "account_inspection_available": getattr(setup, "account_inspection_available", False),
+        "service_user": getattr(setup, "service_user", None),
+        "service_group": getattr(setup, "service_group", None),
+        "shared_group": getattr(setup, "shared_group", "homesrvctl"),
         "detail": setup.detail,
         "issues": setup.issues,
         "notes": setup.notes or [],

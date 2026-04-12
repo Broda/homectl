@@ -12,6 +12,7 @@ import typer
 import yaml
 
 from homesrvctl import __version__
+from homesrvctl.cloudflared import CloudflaredConfigError, cloudflared_credentials_path
 from homesrvctl.models import HomesrvctlConfig
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -83,10 +84,19 @@ def summarize_tunnel_api_detail(
         normalized = api_error.lower()
         if (
             resolved_tunnel_id is not None
-            and "unable to read cloudflared credentials file" in normalized
-            and "permission denied" in normalized
+            and (
+                "cloudflared credentials are not readable by the current user" in normalized
+                or (
+                    "unable to read cloudflared credentials file" in normalized
+                    and "permission denied" in normalized
+                )
+            )
         ):
-            return "account-scoped tunnel inspection unavailable from current user permissions", False
+            return (
+                "account inspection unavailable: cloudflared credentials are not readable by the current user "
+                "(run `homesrvctl cloudflared setup` for shared-group guidance)",
+                False,
+            )
         return api_error, True
     if not api_available:
         return "account-scoped tunnel inspection unavailable from local cloudflared credentials", False
@@ -445,19 +455,18 @@ def account_id_from_zone(zone: dict[str, object]) -> str:
 
 
 def account_id_from_cloudflared_config(config_path: Path) -> str:
-    parsed = _load_cloudflared_yaml(config_path)
-    credentials_value = str(parsed.get("credentials-file", "")).strip()
-    if not credentials_value:
-        raise CloudflareApiError(f"cloudflared config missing credentials-file: {config_path}")
-    credentials_path = Path(credentials_value)
-    if not credentials_path.is_absolute():
-        credentials_path = config_path.parent / credentials_path
+    try:
+        credentials_path = cloudflared_credentials_path(config_path)
+    except (CloudflaredConfigError, typer.BadParameter) as exc:
+        raise CloudflareApiError(str(exc)) from exc
     if not credentials_path.exists():
         raise CloudflareApiError(f"cloudflared credentials file missing: {credentials_path}")
     try:
         payload = json.loads(credentials_path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise CloudflareApiError(f"unable to read cloudflared credentials file {credentials_path}: {exc}") from exc
+        raise CloudflareApiError(
+            f"cloudflared credentials are not readable by the current user: {credentials_path}: {exc}"
+        ) from exc
     except json.JSONDecodeError as exc:
         raise CloudflareApiError(f"invalid cloudflared credentials JSON: {credentials_path}: {exc}") from exc
     account_id = str(payload.get("AccountTag", "")).strip()

@@ -67,7 +67,8 @@ Responsibilities:
 - reconcile ingress entries for domain lifecycle commands
 - detect `cloudflared` runtime mode
 - inspect whether the configured `cloudflared` path is aligned with the active runtime
-- generate systemd-oriented setup guidance when the runtime and configured path diverge
+- inspect whether the current user can read the configured tunnel credentials JSON
+- generate systemd-oriented setup guidance for the supported shared-group `root:homesrvctl` layout when the runtime, config path, or credentials access diverge
 - select restart/log commands appropriate for the detected runtime
 
 Keep a clear separation between:

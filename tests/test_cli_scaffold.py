@@ -57,17 +57,29 @@ def _default_domain_cloudflared_setup(monkeypatch) -> None:
             (),
             {
                 "ok": True,
+                "setup_state": "ready",
                 "mode": "systemd",
                 "systemd_managed": False,
                 "active": True,
                 "configured_path": str(path),
                 "configured_exists": True,
                 "configured_writable": True,
+                "configured_credentials_path": None,
+                "configured_credentials_exists": None,
+                "configured_credentials_readable": None,
+                "configured_credentials_group_readable": None,
+                "configured_credentials_owner": None,
+                "configured_credentials_group": None,
+                "configured_credentials_mode": None,
                 "runtime_path": None,
                 "runtime_exists": None,
                 "runtime_readable": None,
                 "paths_aligned": None,
                 "ingress_mutation_available": True,
+                "account_inspection_available": False,
+                "service_user": None,
+                "service_group": None,
+                "shared_group": "homesrvctl",
                 "detail": "configured cloudflared path is ready for homesrvctl mutations",
                 "issues": [],
                 "next_commands": [],
@@ -1456,22 +1468,34 @@ def test_cloudflared_status_json_reports_setup_alignment(monkeypatch) -> None:
             (),
             {
                 "ok": False,
+                "setup_state": "misaligned",
                 "mode": "systemd",
                 "systemd_managed": True,
                 "active": True,
                 "configured_path": str(path),
                 "configured_exists": False,
                 "configured_writable": False,
+                "configured_credentials_path": "/etc/cloudflared/example.json",
+                "configured_credentials_exists": True,
+                "configured_credentials_readable": False,
+                "configured_credentials_group_readable": False,
+                "configured_credentials_owner": "root",
+                "configured_credentials_group": "root",
+                "configured_credentials_mode": "600",
                 "runtime_path": "/etc/cloudflared/config.yml",
                 "runtime_exists": True,
                 "runtime_readable": True,
                 "paths_aligned": False,
                 "ingress_mutation_available": False,
+                "account_inspection_available": False,
+                "service_user": "root",
+                "service_group": "root",
+                "shared_group": "homesrvctl",
                 "detail": "systemd cloudflared service uses /etc/cloudflared/config.yml, but homesrvctl is configured for /srv/homesrvctl/cloudflared/config.yml",
                 "issues": ["configured cloudflared config is missing: /srv/homesrvctl/cloudflared/config.yml"],
                 "next_commands": ["sudo systemctl daemon-reload"],
                 "override_path": "/etc/systemd/system/cloudflared.service.d/override.conf",
-                "override_content": "[Service]\nExecStart=\nExecStart=/usr/bin/cloudflared --no-autoupdate --config /srv/homesrvctl/cloudflared/config.yml tunnel run",
+                "override_content": "[Service]\nGroup=homesrvctl\nExecStart=\nExecStart=/usr/bin/cloudflared --no-autoupdate --config /srv/homesrvctl/cloudflared/config.yml tunnel run",
                 "notes": [],
             },
         )(),
@@ -1515,22 +1539,34 @@ def test_cloudflared_setup_json_reports_commands(monkeypatch) -> None:
             (),
             {
                 "ok": False,
+                "setup_state": "misaligned",
                 "mode": "systemd",
                 "systemd_managed": True,
                 "active": True,
                 "configured_path": str(path),
                 "configured_exists": False,
                 "configured_writable": False,
+                "configured_credentials_path": "/etc/cloudflared/example.json",
+                "configured_credentials_exists": True,
+                "configured_credentials_readable": False,
+                "configured_credentials_group_readable": False,
+                "configured_credentials_owner": "root",
+                "configured_credentials_group": "root",
+                "configured_credentials_mode": "600",
                 "runtime_path": "/etc/cloudflared/config.yml",
                 "runtime_exists": True,
                 "runtime_readable": True,
                 "paths_aligned": False,
                 "ingress_mutation_available": False,
+                "account_inspection_available": False,
+                "service_user": "root",
+                "service_group": "root",
+                "shared_group": "homesrvctl",
                 "detail": "setup mismatch",
                 "issues": ["configured path missing"],
-                "next_commands": ["sudo install -d -o broda -g broda -m 755 /srv/homesrvctl/cloudflared"],
+                "next_commands": ["sudo groupadd -f homesrvctl"],
                 "override_path": "/etc/systemd/system/cloudflared.service.d/override.conf",
-                "override_content": "[Service]\nExecStart=\nExecStart=/usr/bin/cloudflared --no-autoupdate --config /srv/homesrvctl/cloudflared/config.yml tunnel run",
+                "override_content": "[Service]\nGroup=homesrvctl\nExecStart=\nExecStart=/usr/bin/cloudflared --no-autoupdate --config /srv/homesrvctl/cloudflared/config.yml tunnel run",
                 "notes": [],
             },
         )(),
@@ -1543,7 +1579,9 @@ def test_cloudflared_setup_json_reports_commands(monkeypatch) -> None:
     payload = json.loads(result.output)
     _assert_schema_version(payload)
     assert payload["ok"] is False
-    assert payload["next_commands"] == ["sudo install -d -o broda -g broda -m 755 /srv/homesrvctl/cloudflared"]
+    assert payload["setup_state"] == "misaligned"
+    assert payload["shared_group"] == "homesrvctl"
+    assert payload["next_commands"] == ["sudo groupadd -f homesrvctl"]
     assert payload["override_path"] == "/etc/systemd/system/cloudflared.service.d/override.conf"
 
 
@@ -2112,7 +2150,10 @@ def test_tunnel_status_text_downgrades_credentials_permission_denied(monkeypatch
 
     assert result.exit_code == 0, result.output
     assert "configured tunnel: homesrvctl-tunnel" in result.output
-    assert "api note: account-scoped tunnel inspection unavailable from current user permissions" in result.output
+    assert (
+        "api note: account inspection unavailable: cloudflared credentials are not readable by the current user "
+        "(run `homesrvctl cloudflared setup` for shared-group guidance)"
+    ) in result.output
     assert "Permission denied" not in result.output
 
 

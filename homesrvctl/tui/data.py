@@ -367,6 +367,9 @@ def render_tool_action_detail(tool: str, action: str, payload: dict[str, object]
     if detail:
         lines.extend(["", *format_key_value_lines([("detail", str(detail))])])
 
+    if tool == "cloudflared" and action == "setup":
+        lines.extend(["", *render_cloudflared_setup_detail(payload)])
+
     next_commands = payload.get("next_commands")
     if isinstance(next_commands, list) and next_commands:
         lines.extend(["", f"next commands: {len(next_commands)}", ""])
@@ -688,7 +691,9 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
         "",
         *format_key_value_lines(
             [
+                ("setup state", str(payload.get("setup_state", "unknown"))),
                 ("configured path", str(payload.get("configured_path", "<unknown>"))),
+                ("credentials path", str(payload.get("configured_credentials_path") or "<unavailable>")),
                 ("runtime path", str(payload.get("runtime_path") or "<unavailable>")),
                 (
                     "paths aligned",
@@ -697,12 +702,40 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
                 ("configured exists", "yes" if payload.get("configured_exists") else "no"),
                 ("configured writable", "yes" if payload.get("configured_writable") else "no"),
                 (
+                    "credentials readable",
+                    "yes"
+                    if payload.get("configured_credentials_readable")
+                    else "no"
+                    if payload.get("configured_credentials_readable") is False
+                    else "unknown",
+                ),
+                (
+                    "account inspection available",
+                    "yes" if payload.get("account_inspection_available") else "no",
+                ),
+                (
                     "ingress mutations available",
                     "yes" if payload.get("ingress_mutation_available") else "no",
                 ),
             ]
         ),
     ]
+
+    metadata_items: list[tuple[str, str]] = []
+    if payload.get("configured_credentials_owner"):
+        metadata_items.append(("credentials owner", str(payload.get("configured_credentials_owner"))))
+    if payload.get("configured_credentials_group"):
+        metadata_items.append(("credentials group", str(payload.get("configured_credentials_group"))))
+    if payload.get("configured_credentials_mode"):
+        metadata_items.append(("credentials mode", str(payload.get("configured_credentials_mode"))))
+    if payload.get("service_user"):
+        metadata_items.append(("service user", str(payload.get("service_user"))))
+    if payload.get("service_group"):
+        metadata_items.append(("service group", str(payload.get("service_group"))))
+    if payload.get("shared_group"):
+        metadata_items.append(("shared group", str(payload.get("shared_group"))))
+    if metadata_items:
+        lines.extend(["", *format_key_value_lines(metadata_items)])
 
     notes = payload.get("notes")
     if isinstance(notes, list):

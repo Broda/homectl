@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from homesrvctl import cloudflared_service
 from homesrvctl.cloudflared_service import CloudflaredServiceError
 from homesrvctl.shell import CommandResult
@@ -131,3 +133,72 @@ def test_reload_cloudflared_service_errors_when_unsupported(monkeypatch) -> None
         assert "reload is not supported" in str(exc)
     else:
         raise AssertionError("expected CloudflaredServiceError")
+
+
+def test_inspect_cloudflared_setup_reports_partial_when_credentials_unreadable(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "cloudflared" / "config.yml"
+    credentials_path = tmp_path / "cloudflared" / "tunnel.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("tunnel: test\ncredentials-file: tunnel.json\ningress:\n  - service: http_status:404\n", encoding="utf-8")
+    credentials_path.write_text('{"AccountTag": "account-123"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        cloudflared_service,
+        "inspect_cloudflared_systemd_unit",
+        lambda quiet=False: cloudflared_service.CloudflaredSystemdUnit(
+            present=True,
+            exec_start="argv[]=/usr/bin/cloudflared --no-autoupdate --config "
+            f"{config_path} tunnel run ;",
+            config_path=str(config_path),
+            user="root",
+            group="root",
+        ),
+    )
+    runtime = cloudflared_service.CloudflaredRuntime(mode="systemd", active=True, detail="systemd service is active")
+    original_is_readable = cloudflared_service._path_is_readable
+    monkeypatch.setattr(
+        cloudflared_service,
+        "_path_is_readable",
+        lambda path: False if path == credentials_path else original_is_readable(path),
+    )
+
+    setup = cloudflared_service.inspect_cloudflared_setup(config_path, runtime=runtime)
+
+    assert setup.ok is True
+    assert setup.setup_state == "partial"
+    assert setup.ingress_mutation_available is True
+    assert setup.account_inspection_available is False
+    assert setup.configured_credentials_path == str(credentials_path)
+    assert setup.override_content is not None
+    assert "Group=homesrvctl" in setup.override_content
+    assert any(command == "sudo groupadd -f homesrvctl" for command in setup.next_commands)
+
+
+def test_inspect_cloudflared_setup_reports_ready_when_credentials_readable(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "cloudflared" / "config.yml"
+    credentials_path = tmp_path / "cloudflared" / "tunnel.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("tunnel: test\ncredentials-file: tunnel.json\ningress:\n  - service: http_status:404\n", encoding="utf-8")
+    credentials_path.write_text('{"AccountTag": "account-123"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        cloudflared_service,
+        "inspect_cloudflared_systemd_unit",
+        lambda quiet=False: cloudflared_service.CloudflaredSystemdUnit(
+            present=True,
+            exec_start="argv[]=/usr/bin/cloudflared --no-autoupdate --config "
+            f"{config_path} tunnel run ;",
+            config_path=str(config_path),
+            user="root",
+            group="homesrvctl",
+        ),
+    )
+    runtime = cloudflared_service.CloudflaredRuntime(mode="systemd", active=True, detail="systemd service is active")
+
+    setup = cloudflared_service.inspect_cloudflared_setup(config_path, runtime=runtime)
+
+    assert setup.ok is True
+    assert setup.setup_state == "ready"
+    assert setup.account_inspection_available is True
+    assert setup.ingress_mutation_available is True
+    assert setup.next_commands == []

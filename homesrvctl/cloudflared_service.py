@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import getpass
+import grp
 import os
 from pathlib import Path
+import pwd
 import shlex
+import stat
 
+import typer
+import yaml
+
+from homesrvctl.cloudflared import CloudflaredConfigError, cloudflared_credentials_path
 from homesrvctl.shell import run_command
+
+SHARED_GROUP_NAME = "homesrvctl"
+SHARED_CONFIG_DIR = Path("/srv/homesrvctl/cloudflared")
+SHARED_CONFIG_PATH = SHARED_CONFIG_DIR / "config.yml"
 
 
 @dataclass(slots=True)
@@ -31,17 +42,29 @@ class CloudflaredSystemdUnit:
 @dataclass(slots=True)
 class CloudflaredSetupReport:
     ok: bool
+    setup_state: str
     mode: str
     systemd_managed: bool
     active: bool
     configured_path: str
     configured_exists: bool
     configured_writable: bool
+    configured_credentials_path: str | None
+    configured_credentials_exists: bool | None
+    configured_credentials_readable: bool | None
+    configured_credentials_group_readable: bool | None
+    configured_credentials_owner: str | None
+    configured_credentials_group: str | None
+    configured_credentials_mode: str | None
     runtime_path: str | None
     runtime_exists: bool | None
     runtime_readable: bool | None
     paths_aligned: bool | None
     ingress_mutation_available: bool
+    account_inspection_available: bool
+    service_user: str | None
+    service_group: str | None
+    shared_group: str
     detail: str
     issues: list[str]
     next_commands: list[str]
@@ -117,8 +140,17 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
     notes: list[str] = []
     next_commands: list[str] = []
     override_path = "/etc/systemd/system/cloudflared.service.d/override.conf" if unit.present else None
-    override_content = _systemd_override_content(config_path) if unit.present else None
     current_user = getpass.getuser()
+    configured_credentials_path: str | None = None
+    configured_credentials_exists: bool | None = None
+    configured_credentials_readable: bool | None = None
+    configured_credentials_group_readable: bool | None = None
+    configured_credentials_owner: str | None = None
+    configured_credentials_group: str | None = None
+    configured_credentials_mode: str | None = None
+    target_config_path = SHARED_CONFIG_PATH if unit.present else config_path
+    target_credentials_path: Path | None = None
+    override_content = _systemd_override_content(target_config_path) if unit.present else None
 
     if not configured_exists:
         issues.append(f"configured cloudflared config is missing: {config_path}")
@@ -133,6 +165,37 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
     if unit.present and runtime_path and runtime_exists and runtime_readable is False:
         issues.append(f"systemd cloudflared config path is not readable by the current user: {runtime_path}")
 
+    try:
+        credentials_path = cloudflared_credentials_path(config_path)
+    except (CloudflaredConfigError, typer.BadParameter) as exc:
+        credentials_path = None
+        if configured_exists:
+            issues.append(str(exc))
+    except Exception as exc:  # pragma: no cover - defensive
+        credentials_path = None
+        if configured_exists:
+            issues.append(str(exc))
+    else:
+        configured_credentials_path = str(credentials_path)
+        configured_credentials_exists = credentials_path.exists()
+        if configured_credentials_exists:
+            configured_credentials_readable = _path_is_readable(credentials_path)
+            metadata = _path_metadata(credentials_path)
+            configured_credentials_group_readable = metadata["group_readable"]
+            configured_credentials_owner = metadata["owner"]
+            configured_credentials_group = metadata["group"]
+            configured_credentials_mode = metadata["mode"]
+            if configured_credentials_readable:
+                target_credentials_path = credentials_path
+            else:
+                notes.append(
+                    "account inspection unavailable: cloudflared credentials are not readable by the current user"
+                )
+                target_credentials_path = SHARED_CONFIG_DIR / credentials_path.name
+        else:
+            issues.append(f"cloudflared credentials file missing: {credentials_path}")
+            target_credentials_path = SHARED_CONFIG_DIR / credentials_path.name
+
     if resolved_runtime.mode in {"docker", "process"}:
         notes.append(
             f"{resolved_runtime.mode} runtime detected; automatic setup repair is only modeled for systemd in this slice"
@@ -141,61 +204,64 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
         notes.append("cloudflared runtime not detected; setup guidance is based on the configured path only")
 
     ingress_mutation_available = configured_exists and configured_writable and (paths_aligned is not False)
+    account_inspection_available = bool(configured_credentials_exists and configured_credentials_readable)
 
-    if unit.present and runtime_path and not paths_aligned:
+    if unit.present and paths_aligned is False:
+        setup_state = "misaligned"
+    elif issues:
+        setup_state = "repair needed"
+    elif account_inspection_available:
+        setup_state = "ready"
+    else:
+        setup_state = "partial"
+
+    if unit.present and setup_state in {"misaligned", "repair needed", "partial"}:
         next_commands.extend(
-            [
-                f"sudo install -d -o {current_user} -g {current_user} -m 755 {config_path.parent}",
-                *(
-                    [f"sudo cp {shlex.quote(runtime_path)} {shlex.quote(str(config_path))}"]
-                    if runtime_exists
-                    else []
-                ),
-                f"sudo chown {current_user}:{current_user} {shlex.quote(str(config_path))}",
-                f"sudo install -d -m 755 /etc/systemd/system/cloudflared.service.d",
-                f"sudo tee {override_path} >/dev/null <<'EOF'\n{override_content}\nEOF",
-                "sudo systemctl daemon-reload",
-                "sudo systemctl restart cloudflared",
-            ]
-        )
-    elif not configured_exists:
-        next_commands.extend(
-            [
-                f"sudo install -d -o {current_user} -g {current_user} -m 755 {config_path.parent}",
-                (
-                    f"sudo cp {shlex.quote(runtime_path)} {shlex.quote(str(config_path))}"
-                    if runtime_path and runtime_exists
-                    else f"sudoedit {shlex.quote(str(config_path))}"
-                ),
-                f"sudo chown {current_user}:{current_user} {shlex.quote(str(config_path))}",
-            ]
-        )
-    elif not configured_writable:
-        next_commands.extend(
-            [
-                f"sudo chown {current_user}:{current_user} {shlex.quote(str(config_path))}",
-                f"sudo chmod 644 {shlex.quote(str(config_path))}",
-            ]
+            _systemd_setup_commands(
+                current_user=current_user,
+                configured_path=config_path,
+                runtime_path=Path(runtime_path) if runtime_path else None,
+                runtime_exists=runtime_exists is True,
+                configured_credentials_path=Path(configured_credentials_path) if configured_credentials_path else None,
+                target_config_path=target_config_path,
+                target_credentials_path=target_credentials_path,
+                override_path=override_path,
+                override_content=override_content,
+            )
         )
 
-    if not issues:
-        detail = f"configured cloudflared path is ready for homesrvctl mutations: {config_path}"
+    if setup_state == "ready":
+        detail = f"shared-group cloudflared setup is ready: {config_path}"
+    elif setup_state == "partial":
+        detail = "ingress mutations are ready, but account inspection is unavailable from the current user"
     else:
         detail = issues[0]
 
     return CloudflaredSetupReport(
-        ok=not issues,
+        ok=setup_state in {"ready", "partial"},
+        setup_state=setup_state,
         mode=resolved_runtime.mode,
         systemd_managed=unit.present,
         active=resolved_runtime.active,
         configured_path=str(config_path),
         configured_exists=configured_exists,
         configured_writable=configured_writable,
+        configured_credentials_path=configured_credentials_path,
+        configured_credentials_exists=configured_credentials_exists,
+        configured_credentials_readable=configured_credentials_readable,
+        configured_credentials_group_readable=configured_credentials_group_readable,
+        configured_credentials_owner=configured_credentials_owner,
+        configured_credentials_group=configured_credentials_group,
+        configured_credentials_mode=configured_credentials_mode,
         runtime_path=runtime_path,
         runtime_exists=runtime_exists,
         runtime_readable=runtime_readable,
         paths_aligned=paths_aligned,
         ingress_mutation_available=ingress_mutation_available,
+        account_inspection_available=account_inspection_available,
+        service_user=unit.user,
+        service_group=unit.group,
+        shared_group=SHARED_GROUP_NAME,
         detail=detail,
         issues=issues,
         next_commands=next_commands,
@@ -296,7 +362,100 @@ def _systemd_override_content(config_path: Path) -> str:
     return "\n".join(
         [
             "[Service]",
+            f"Group={SHARED_GROUP_NAME}",
             "ExecStart=",
             f"ExecStart=/usr/bin/cloudflared --no-autoupdate --config {config_path} tunnel run",
         ]
     )
+
+
+def _systemd_setup_commands(
+    *,
+    current_user: str,
+    configured_path: Path,
+    runtime_path: Path | None,
+    runtime_exists: bool,
+    configured_credentials_path: Path | None,
+    target_config_path: Path,
+    target_credentials_path: Path | None,
+    override_path: str | None,
+    override_content: str | None,
+) -> list[str]:
+    commands = [
+        f"sudo groupadd -f {SHARED_GROUP_NAME}",
+        f"sudo usermod -aG {SHARED_GROUP_NAME} {current_user}",
+        f"sudo install -d -o root -g {SHARED_GROUP_NAME} -m 750 {shlex.quote(str(SHARED_CONFIG_DIR))}",
+    ]
+    source_config_path = configured_path if configured_path.exists() else runtime_path
+    rendered_config = _render_target_config_content(source_config_path, target_credentials_path)
+    if rendered_config is not None:
+        commands.append(
+            f"sudo tee {shlex.quote(str(target_config_path))} >/dev/null <<'EOF'\n{rendered_config}\nEOF"
+        )
+        commands.append(f"sudo chown root:{SHARED_GROUP_NAME} {shlex.quote(str(target_config_path))}")
+        commands.append(f"sudo chmod 640 {shlex.quote(str(target_config_path))}")
+    elif runtime_path and runtime_exists:
+        commands.append(
+            f"sudo install -o root -g {SHARED_GROUP_NAME} -m 640 {shlex.quote(str(runtime_path))} {shlex.quote(str(target_config_path))}"
+        )
+    else:
+        commands.append(f"sudoedit {shlex.quote(str(target_config_path))}")
+
+    if configured_credentials_path and configured_credentials_path.exists() and target_credentials_path is not None:
+        commands.append(
+            f"sudo install -o root -g {SHARED_GROUP_NAME} -m 640 {shlex.quote(str(configured_credentials_path))} {shlex.quote(str(target_credentials_path))}"
+        )
+    elif target_credentials_path is not None:
+        commands.append(f"sudoedit {shlex.quote(str(target_credentials_path))}")
+
+    if override_path and override_content:
+        commands.extend(
+            [
+                "sudo install -d -m 755 /etc/systemd/system/cloudflared.service.d",
+                f"sudo tee {override_path} >/dev/null <<'EOF'\n{override_content}\nEOF",
+                "sudo systemctl daemon-reload",
+                "sudo systemctl restart cloudflared",
+            ]
+        )
+    return commands
+
+
+def _render_target_config_content(config_path: Path | None, target_credentials_path: Path | None) -> str | None:
+    if config_path is None or not config_path.exists():
+        return None
+    try:
+        parsed = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    if target_credentials_path is not None:
+        parsed["credentials-file"] = str(target_credentials_path)
+    return yaml.safe_dump(parsed, sort_keys=False).rstrip()
+
+
+def _path_metadata(path: Path) -> dict[str, object]:
+    try:
+        stat_result = path.stat()
+    except OSError:
+        return {
+            "owner": None,
+            "group": None,
+            "mode": None,
+            "group_readable": None,
+        }
+    mode = stat.S_IMODE(stat_result.st_mode)
+    try:
+        owner = pwd.getpwuid(stat_result.st_uid).pw_name
+    except KeyError:
+        owner = str(stat_result.st_uid)
+    try:
+        group = grp.getgrgid(stat_result.st_gid).gr_name
+    except KeyError:
+        group = str(stat_result.st_gid)
+    return {
+        "owner": owner,
+        "group": group,
+        "mode": format(mode, "03o"),
+        "group_readable": bool(mode & stat.S_IRGRP),
+    }
