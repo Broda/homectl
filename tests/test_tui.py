@@ -800,7 +800,7 @@ def test_no_args_invokes_tui(monkeypatch) -> None:
     from homesrvctl import main as main_mod
 
     calls: list[str] = []
-    monkeypatch.setattr(main_mod, "tui", lambda: calls.append("tui"))
+    monkeypatch.setattr(main_mod, "launch_tui", lambda: calls.append("tui"))
 
     runner = CliRunner()
     result = runner.invoke(app, [])

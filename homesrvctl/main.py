@@ -10,7 +10,7 @@ from homesrvctl.commands.deploy_cmd import doctor, down, list_sites_with_format,
 from homesrvctl.commands.domain_cmd import domain_cli
 from homesrvctl.commands.site_cmd import site_cli
 from homesrvctl.commands.tunnel_cmd import tunnel_cli
-from homesrvctl.commands.tui_cmd import tui
+from homesrvctl.commands.tui_cmd import launch_tui, tui
 from homesrvctl.commands.validate_cmd import validate_with_format
 
 app = typer.Typer(
@@ -41,7 +41,7 @@ app.command("tui")(tui)
 @app.callback()
 def main_callback(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
-        tui()
+        launch_tui()
 
 
 def run() -> None:
