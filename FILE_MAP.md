@@ -18,6 +18,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Human-facing release summary and notable project changes.
 - [`FILE_MAP.md`](FILE_MAP.md)
   This file. Repository structure and ownership notes.
+- [`scripts/check_wiki_sync.sh`](scripts/check_wiki_sync.sh)
+  Advisory check that reminds you to update the sibling GitHub wiki checkout when user-facing repo surfaces changed.
 
 ## Python Package
 

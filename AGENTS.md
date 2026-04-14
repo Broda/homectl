@@ -47,6 +47,7 @@ For code changes that affect public behavior, operator workflows, configuration,
 - update the relevant repo docs in the same slice
 - update the GitHub wiki in the same slice when the change affects user-facing guidance
 - prefer committing code and the matching docs/wiki updates together rather than treating docs as a later cleanup
+- when a sibling wiki checkout exists at `../homesrvctl.wiki`, run `scripts/check_wiki_sync.sh` before closing the slice
 
 ## Verification Expectations
 
@@ -61,6 +62,7 @@ python3 -m compileall homesrvctl tests
 At minimum:
 - run compile plus tests for code changes
 - run the build step when packaging, release, or metadata changes are involved
+- run `scripts/check_wiki_sync.sh` when user-facing behavior, scaffolds, commands, or docs changed and a sibling wiki checkout is present
 
 ## Architectural Boundaries
 

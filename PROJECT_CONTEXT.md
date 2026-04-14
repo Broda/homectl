@@ -130,6 +130,8 @@ When making meaningful changes:
 - update [`ROADMAP.md`](ROADMAP.md) if scope or milestone direction changes
 - update [`ARCHITECTURE.md`](ARCHITECTURE.md) if structure or module boundaries change
 - update [`FILE_MAP.md`](FILE_MAP.md) if new top-level docs, modules, or template families are added
+- update the sibling GitHub wiki checkout at `../homesrvctl.wiki` when the change affects user-facing guidance and that checkout exists locally
+- run [`scripts/check_wiki_sync.sh`](scripts/check_wiki_sync.sh) as an advisory guard before closing a user-facing slice
 
 ## Current Development Focus
 
