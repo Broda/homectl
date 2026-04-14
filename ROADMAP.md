@@ -1834,6 +1834,215 @@ Success criteria:
 - the mutation surface stays narrow, convergent, and domain-focused
 - the TUI can expose provider readiness using the existing JSON-backed tool pattern without introducing a second, TUI-only contract
 
+## Milestone 14: Existing App Adoption And Hosting Wrappers
+
+Status: proposed
+
+Goal: help operators bring an existing site or app repo into the `homesrvctl` hosting model without turning the project into a general framework generator or repo-management tool.
+
+Why this fits:
+- many operators already have an app repo and do not need `homesrvctl` to generate the app itself
+- the strongest `homesrvctl` value is often the hosting wrapper:
+  - Compose wiring
+  - Traefik labels
+  - stack-local config
+  - operator-facing README guidance
+- adoption flows fit the project better than adding a long tail of framework-specific templates
+
+Scope guardrails:
+- `homesrvctl` should own the hosting wrapper it generates, not the entire adopted app
+- the first slices should stay explicit and inspectable rather than trying to infer and mutate everything automatically
+- adoption should focus on a narrow set of known app families before considering a broader ecosystem surface
+
+Explicit non-goals:
+- generic repo synchronization or git remote management
+- CI/CD pipeline setup
+- automatic framework migration
+- automatic database provisioning
+- large framework-specific importers
+- rewriting an app’s internal architecture to fit a template
+
+### 14.1 Source Detection And Family Validation
+
+Status: proposed
+
+Goal: add a safe, inspect-only source analysis step before any wrapper generation or adoption mutation exists.
+
+Candidate commands:
+- `homesrvctl app detect <source_path> [--json]`
+- `homesrvctl app inspect-source <source_path> [--json]`
+
+Target outcomes:
+- identify whether a directory looks like a known hosting family:
+  - `static`
+  - `node`
+  - `python`
+  - `jekyll`
+  - `dockerfile`
+  - `unknown`
+- surface the detection result as advisory, not magical truth
+- explain which files or signals caused the detected match
+- report obvious adoption blockers early:
+  - missing source path
+  - unsupported or ambiguous family
+  - missing entrypoint/build hints where the wrapper would need them
+
+Detection inputs may include:
+- `package.json`
+- `requirements.txt`
+- `pyproject.toml`
+- `Dockerfile`
+- Jekyll config files
+- expected build output directories
+- known runtime entrypoints
+
+First-slice JSON candidate shape:
+- `action`
+- `source_path`
+- `family`
+- `confidence`
+- `signals`
+- `issues`
+- `next_steps`
+
+Success criteria:
+- operators can ask “what is this repo?” without mutating it
+- detection remains understandable and evidence-based
+- command output stays useful even when the answer is `unknown`
+
+### 14.2 Generate Hosting Wrapper Around Existing Source
+
+Status: proposed
+
+Goal: generate the minimal `homesrvctl` hosting wrapper around an existing repo or source tree without claiming ownership of the app’s internal code.
+
+Candidate command:
+- `homesrvctl app wrap <hostname> --source <source_path> [--family FAMILY] [--force] [--json]`
+
+Target outcomes:
+- generate the hosting wrapper for an existing app:
+  - `compose.yml`
+  - Traefik labels
+  - optional stack-local `homesrvctl.yml`
+  - operator README guidance
+  - wrapper-only files needed for healthchecks or runtime packaging
+- reuse source detection when `--family` is omitted
+- require an explicit family only when detection is ambiguous or unsupported
+- preserve the current scaffold philosophy:
+  - small deployable baseline
+  - explicit file ownership
+  - minimal runtime assumptions
+
+Wrapper ownership rules:
+- `homesrvctl` owns only the files it generates in the stack wrapper
+- the adopted app source remains operator-owned
+- wrapper generation should avoid modifying app source files unless a later explicit subcommand is introduced for that purpose
+
+Open design decision:
+- prefer a stack-local wrapper layout over external path references in v1
+- avoid making external host-path coupling the default operator model
+
+Suggested initial family coverage:
+- `static`
+- `node`
+- `python`
+- `jekyll`
+- `dockerfile`
+
+Success criteria:
+- operators can host an existing repo behind the current stack model without manually recreating Traefik/Compose wiring
+- generated wrappers stay small and readable
+- wrapper generation is idempotent and explicit about overwrite behavior
+
+### 14.3 Full Adoption Flow
+
+Status: proposed
+
+Goal: add a guided adoption path only after source detection and wrapper ownership rules have proven stable.
+
+Candidate command:
+- `homesrvctl app adopt <hostname> --source <source_path> [--family FAMILY] [--force] [--json]`
+
+Target outcomes:
+- create a new stack directory for the hostname
+- generate the hosting wrapper
+- place or copy the app source into the expected stack-local layout when the chosen family supports a stable adoption shape
+- keep the first supported adoption model explicit rather than supporting multiple ambiguous source-placement strategies at once
+
+Adoption model constraints:
+- do not default to fragile external path references
+- make copy/move behavior explicit if introduced
+- fail early when an existing target stack would be overwritten unexpectedly
+- keep app adoption separate from domain onboarding in v1
+
+Success criteria:
+- an existing repo can be brought into the `homesrvctl` stack layout in one operator-facing flow
+- the resulting stack remains understandable without hidden linkages to arbitrary external directories
+- failure modes stay concrete and repairable
+
+### 14.4 Template-Family Validation Against Existing Source
+
+Status: proposed
+
+Goal: let operators validate whether an existing directory already matches a known `homesrvctl` family closely enough for wrapper generation or adoption.
+
+Candidate command:
+- `homesrvctl app validate-source <source_path> --family FAMILY [--json]`
+
+Target outcomes:
+- confirm whether a source tree is compatible with a requested family
+- explain what is missing or mismatched:
+  - expected build files
+  - expected runtime entrypoint
+  - expected static output layout
+  - missing health endpoint assumptions where applicable
+- help operators choose between:
+  - wrapping as-is
+  - changing families
+  - falling back to a generic Dockerfile-based flow
+
+Success criteria:
+- validation failures are operator-readable and actionable
+- family validation reduces accidental mis-wrapping
+- generic Dockerfile fallback remains available when stronger family validation does not fit
+
+### 14.5 TUI Coverage For Detection And Wrapper Flows
+
+Status: proposed
+
+Goal: expose the adoption path in the Textual TUI only after the CLI contract is clear, keeping the TUI layered over the JSON command surface.
+
+Target outcomes:
+- add a guided global “Adopt Existing App” flow from the existing creation-oriented dashboard model
+- support:
+  - source path entry
+  - optional detected-family confirmation
+  - wrapper versus adoption mode selection when both are shipped
+- render detection output and wrapper/adoption results in the detail pane using the existing action-result pattern
+
+TUI design constraints:
+- do not invent a TUI-only adoption backend
+- do not add source-tree browsing assumptions beyond simple path entry in the first slice
+- keep the first TUI flow focused on detection and wrapper generation before full adoption mutation is exposed
+
+Suggested rollout:
+- Phase 1:
+  - add `app detect`
+  - optionally add `app validate-source`
+- Phase 2:
+  - add `app wrap`
+  - document wrapper-owned versus source-owned files clearly
+- Phase 3:
+  - add TUI detection and wrapper flow
+- Phase 4:
+  - add `app adopt` once the source-placement model is stable
+
+Product discipline for this milestone:
+- prefer adoption flows over adding many framework-specific templates
+- keep detection advisory rather than magical
+- keep generated output small and hosting-focused
+- preserve the public contract discipline for scaffold/wrapper output and JSON status shapes
+
 ## Cross-Cutting Working Rules
 
 These are not standalone deliverables, but they should constrain all future milestones.
