@@ -86,7 +86,7 @@ pip install homesrvctl
 From a tagged GitHub release:
 
 ```bash
-pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/v0.2.0.tar.gz"
+pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/vX.Y.Z.tar.gz"
 ```
 
 The published Python distribution name is `homesrvctl`. The CLI command is also `homesrvctl`.
@@ -97,6 +97,7 @@ The published Python distribution name is `homesrvctl`. The CLI command is also 
 
 - Wiki home: `https://github.com/Broda/homesrvctl/wiki`
 - Getting started: `https://github.com/Broda/homesrvctl/wiki/Getting-Started`
+- Bootstrap plan: `https://github.com/Broda/homesrvctl/wiki/Bootstrap-Plan`
 - Configuration: `https://github.com/Broda/homesrvctl/wiki/Configuration`
 - Domain workflow: `https://github.com/Broda/homesrvctl/wiki/Domain-Workflow`
 - Tunnel inspection: `https://github.com/Broda/homesrvctl/wiki/Tunnel-Inspection`
@@ -129,6 +130,7 @@ docker_network: web
 traefik_url: http://localhost:8081
 cloudflared_config: /srv/homesrvctl/cloudflared/config.yml
 cloudflare_api_token: ""
+profiles: {}
 ```
 
 Existing installs remain non-breaking: `homesrvctl` continues to honor whatever explicit `cloudflared_config` path is already stored in your config file.
@@ -342,6 +344,7 @@ homesrvctl up example.com --dry-run
 - `homesrvctl bootstrap tunnel [--path PATH] [--account-id ACCOUNT_ID] [--name NAME] [--force] [--json]`
 - `homesrvctl bootstrap wiring [--path PATH] [--force] [--dry-run] [--json]`
 - `homesrvctl bootstrap validate [--path PATH] [--json]`
+- `homesrvctl tunnel status [--json]`
 - `homesrvctl domain add <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain status <domain> [--json]`
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`

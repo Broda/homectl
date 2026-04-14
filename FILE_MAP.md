@@ -94,8 +94,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Static site plus small Python API scaffold.
 - [`homesrvctl/templates/app/jekyll`](homesrvctl/templates/app/jekyll)
   Jekyll build-and-serve app scaffold.
-- [`homesrvctl/templates/site`](homesrvctl/templates/site)
-  Static site scaffold assets.
+- [`homesrvctl/templates/static`](homesrvctl/templates/static)
+  Minimal `site init` scaffold assets.
 
 ## CI And Release Automation
 

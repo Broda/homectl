@@ -79,7 +79,7 @@ Keep a clear separation between:
 
 - [`homesrvctl/templates.py`](homesrvctl/templates.py)
 - [`homesrvctl/template_catalog.py`](homesrvctl/template_catalog.py)
-- [`homesrvctl/templates/site`](homesrvctl/templates/site)
+- [`homesrvctl/templates/static`](homesrvctl/templates/static)
 - [`homesrvctl/templates/app`](homesrvctl/templates/app)
 
 Responsibilities:

@@ -1303,8 +1303,9 @@ Subtasks:
 - Reuse the existing `domain status` and `tunnel status` surfaces for follow-up visibility.
 
 Current baseline:
-- The TUI now provides a first-class creation-oriented domain entry flow when the operator starts from “I want to onboard a new domain” rather than from an already focused apex stack.
-- The flow stays layered over `domain add`, including optional dry-run and restart choices, and reuses the existing `domain status` and `tunnel status` surfaces for follow-up visibility after the mutation completes.
+- The shipped TUI no longer exposes a standalone top-level domain-onboarding entrypoint.
+- Apex-domain onboarding now happens through the global `Create` flow for bare domains, which auto-runs `domain add --restart-cloudflared` before scaffold creation.
+- Focused apex stacks still expose `domain add`, `domain repair`, and `domain remove` through the stack action menu and direct hotkeys.
 
 ### 9.3 Define the operator model for “fully functional” TUI creation
 
