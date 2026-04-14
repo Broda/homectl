@@ -572,7 +572,7 @@ Completed in this milestone:
 
 ## Milestone 4: API Reliability and Cloudflare Coverage
 
-Status: shipped
+Status: in progress
 
 Goal: decide whether more Cloudflare interactions should move from CLI-assisted flows to API-managed flows.
 
@@ -1168,7 +1168,7 @@ Subtasks:
 
 ## Milestone 7: Release and Distribution Maturity
 
-Status: later
+Status: ongoing
 
 Goal: keep the project easy to ship and easy to consume as the public surface evolves.
 
@@ -1220,7 +1220,7 @@ Subtasks:
 
 ## Milestone 8: Scaffold Surface Consolidation
 
-Status: later
+Status: planned
 
 Goal: revisit whether the scaffold catalog should grow from the current lightweight app-template registry into a broader unified scaffold registry without changing public command surfaces casually.
 
@@ -1349,7 +1349,7 @@ Decision:
 
 ## Milestone 10: TUI Operator-Facing Polish
 
-Status: planned
+Status: in progress
 
 Goal: make the Textual TUI read more like an operator dashboard and less like raw internal state by tightening wording, value formatting, and status presentation in the detail panes.
 
@@ -1465,7 +1465,7 @@ Tasks:
 
 ## Milestone 12: Fresh Host Bootstrap
 
-Status: planned
+Status: completed
 
 Goal: make a fresh Debian-family Raspberry Pi host capable of bootstrapping the full `homesrvctl` platform instead of assuming Docker, Traefik, `cloudflared`, and the first tunnel already exist.
 
@@ -1594,6 +1594,8 @@ Completed in this milestone:
 
 ## Milestone 13: Cloudflare Control-Plane Extensions
 
+Status: planned
+
 This milestone covers Cloudflare-adjacent features that fit the current operator model:
 
 - one shared host tunnel
@@ -1693,7 +1695,7 @@ Target outcomes:
 - inspect whether a supported redirect profile is already active
 - avoid exposing the full Cloudflare Rules product surface in v1
 
-### 13.7 Mail Provider Inspection And SES First Implementation
+## Milestone 14: Mail Provider Inspection And SES First Implementation
 
 Status: proposed
 
@@ -1834,7 +1836,7 @@ Success criteria:
 - the mutation surface stays narrow, convergent, and domain-focused
 - the TUI can expose provider readiness using the existing JSON-backed tool pattern without introducing a second, TUI-only contract
 
-## Milestone 14: Existing App Adoption And Hosting Wrappers
+## Milestone 15: Existing App Adoption And Hosting Wrappers
 
 Status: proposed
 
