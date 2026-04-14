@@ -57,6 +57,22 @@ Responsibilities:
 
 This module should stay focused on Cloudflare control-plane behavior, not local runtime orchestration.
 
+Future note:
+- If mail-provider admin support is introduced, it should not be added to `cloudflare.py` or folded into existing domain command wiring as ad hoc boto or SMTP calls.
+- The frontend surface may use a generic `mail` command family, but provider logic should remain provider-specific.
+- A future generic `mail` command surface may accept `--provider`, but the default should stay `ses` until another provider is actually shipped.
+- A future layout such as:
+  - [`homesrvctl/mail_models.py`](homesrvctl/mail_models.py)
+  - [`homesrvctl/mail_providers/ses.py`](homesrvctl/mail_providers/ses.py)
+  can provide normalized output models plus provider-specific implementations without forcing a fake universal SMTP abstraction.
+- Shared mail models should normalize only the parts that genuinely generalize:
+  - provider name
+  - domain/account inspection status
+  - DNS record readiness
+  - repairability
+  - operator-facing issues and next steps
+- Provider-specific detail such as SES DKIM state, custom MAIL FROM state, or account sandbox status should remain in provider-owned logic and may surface under explicit `provider_detail` output fields.
+
 ### Cloudflared ingress and runtime integration
 
 - [`homesrvctl/cloudflared.py`](homesrvctl/cloudflared.py)
@@ -191,6 +207,13 @@ The current repo still assumes the host platform already exists. A planned futur
 - Cloudflare tunnel creation through the API
 
 That future bootstrap layer should remain an orchestrator. It should call into the existing Cloudflare and `cloudflared` helpers where possible rather than scattering host-provisioning logic across unrelated command modules.
+
+If the planned mail-provider milestone lands, the same rule should apply:
+
+- a future [`homesrvctl/commands/mail_cmd.py`](homesrvctl/commands/mail_cmd.py) should define the operator-facing mail verbs
+- a future provider module such as [`homesrvctl/mail_providers/ses.py`](homesrvctl/mail_providers/ses.py) should own AWS SDK/API interactions, identity inspection, and SES-specific status normalization
+- the TUI should consume mail-provider behavior through the JSON command surface rather than reaching into provider helpers directly
+- app templates should remain separate from the mail admin surface; per-app mail runtime wiring is not the same concern as domain/admin inspection
 
 ## Testing Model
 

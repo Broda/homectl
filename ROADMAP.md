@@ -1693,6 +1693,147 @@ Target outcomes:
 - inspect whether a supported redirect profile is already active
 - avoid exposing the full Cloudflare Rules product surface in v1
 
+### 13.7 Mail Provider Inspection And SES First Implementation
+
+Status: proposed
+
+Goal: add a narrow mail-admin surface that helps operators verify domain-level outbound mail readiness without turning `homesrvctl` into a general cloud administration tool or an application mailer.
+
+Scope fit:
+- treat outbound mail readiness as a domain-adjacent control plane similar to DNS/auth readiness rather than as an app runtime feature
+- start with SES as the first provider implementation
+- focus on identity state, required DNS records, and account sending readiness
+- keep the first slice read-focused, with narrow convergent mutations only after the inspect surface is stable
+
+Explicit non-goals for the first mail-admin slice:
+- sending email content through providers
+- mailbox/receipt-rule management
+- bulk email or template management
+- broad cloud/IAM/account bootstrap
+- per-app mail runtime wiring
+
+Candidate commands:
+- `homesrvctl mail status [--provider PROVIDER] [--region REGION] [--json]`
+- `homesrvctl mail domain status <domain> [--provider PROVIDER] [--region REGION] [--json]`
+- `homesrvctl mail domain enable <domain> [--provider PROVIDER] [--region REGION] [--json] [--dry-run]`
+- `homesrvctl mail domain repair <domain> [--provider PROVIDER] [--region REGION] [--json] [--dry-run]`
+
+Provider model:
+- keep the frontend command family generic as `mail`
+- implement only `ses` in the first slice
+- accept `--provider`, but default it to `ses` when omitted so the first shipped UX stays concise
+- add another provider only when there is a real operator use case, not just speculative extensibility pressure
+- avoid a lowest-common-denominator `smtp` abstraction; provider APIs such as SES expose identity, DKIM, MAIL FROM, and account-state features that do not map cleanly to generic SMTP settings
+
+Candidate TUI integration:
+- add `SES` as a first-class global tool item alongside `Config`, `Tunnel`, `Cloudflared`, `Validate`, and `Bootstrap`
+- back the tool detail view with `mail status --json`
+- keep the first TUI slice read-focused:
+  - refresh account readiness
+  - show region, production access, sending state, and top-level issues
+- reuse the existing tool-action pattern so the SES pane can start with a simple `Refresh` action instead of a bespoke workflow
+- consider a second TUI slice for focused apex stacks:
+  - surface `mail domain status <domain>` in the stack detail pane for bare domains only
+  - only add mutation actions such as `enable` or `repair` after the CLI commands and JSON output have stabilized
+
+TUI design constraints:
+- do not add SES-specific state management in the TUI before the CLI JSON contract exists
+- prefer one new tool item over spreading SES fragments across multiple panes in v1
+- keep SES separate from `Tunnel` and `Cloudflared`; outbound mail readiness is a different operator concern than ingress/runtime state
+
+Operator model:
+- `mail status` defaults to `ses` and reports account-level readiness for the configured AWS region:
+  - production access versus sandbox
+  - sending enabled/paused state
+  - send quota and rate when available
+  - whether the current AWS credentials can inspect SES state
+- `mail domain status` defaults to `ses` and reports whether the requested domain has an SES identity and whether its DNS/auth setup appears ready:
+  - identity exists or missing
+  - verification status
+  - DKIM status
+  - custom MAIL FROM status if configured
+  - required DNS records and whether they match the expected SES values
+- `mail domain enable` defaults to `ses` and is the narrow first mutating slice:
+  - create the SES domain identity when missing
+  - request DKIM setup
+  - print or optionally apply the required DNS records through the existing DNS management layer if the hosted zone is already managed through the current operator model
+- `mail domain repair` defaults to `ses` and stays convergent:
+  - re-check the SES identity
+  - re-surface or re-apply missing/mismatched DNS records
+  - avoid mutating unrelated SES/account settings
+
+JSON output proposal:
+- All mail commands should keep the shared top-level `schema_version`.
+- `mail status --json` candidate shape:
+  - `action`
+  - `provider`
+  - `region`
+  - `account_access`
+  - `production_access`
+  - `sending_enabled`
+  - `max_24_hour_send`
+  - `max_send_rate`
+  - `sent_last_24_hours`
+  - `provider_detail`
+  - `issues`
+  - `next_steps`
+- `mail domain status <domain> --json` candidate shape:
+  - `action`
+  - `provider`
+  - `domain`
+  - `region`
+  - `identity_exists`
+  - `verification_status`
+  - `dkim_status`
+  - `mail_from_status`
+  - `dns_records`
+  - `provider_detail`
+  - `issues`
+  - `repairable`
+  - `next_steps`
+- `dns_records` should stay explicit rather than exposing raw AWS payloads. Candidate per-record fields:
+  - `purpose`
+  - `type`
+  - `name`
+  - `expected_value`
+  - `current_values`
+  - `status`
+  - `managed_by_homesrvctl`
+
+Design constraints:
+- the CLI/TUI surface may be generic `mail`, but the backend implementation should stay provider-specific
+- the first provider should be implemented directly rather than behind a speculative generic SMTP interface
+- the CLI should accept `--provider` explicitly for forward compatibility, but the default provider should remain `ses` until a second provider is actually shipped
+- Domain/DNS comparison logic should reuse the existing DNS inspection patterns where practical.
+- The first slice should support a single explicit region input rather than inventing a multi-region abstraction.
+- Do not add top-level config fields until there is a clear need for persistent SES defaults.
+- Do not add app-template SES wiring as part of the same slice; keep app runtime concerns separate from domain/admin inspection.
+- Keep TUI consumption secondary to the CLI contract:
+  - define `ses` JSON shapes first
+  - then add the tool item and detail rendering
+  - then consider stack-level SES detail if the operator value is clear
+
+Suggested rollout:
+- Phase 1:
+  - add `mail status` with `--provider` defaulting to `ses`
+  - add `mail domain status` with `--provider` defaulting to `ses`
+  - add a read-only `SES` TUI tool backed by `mail status`
+  - keep the slice inspect-only
+- Phase 2:
+  - add `mail domain enable` with `--provider` defaulting to `ses`
+  - consider a bare-domain stack detail section backed by `mail domain status`
+  - optionally allow DNS application when the zone is already operator-managed
+- Phase 3:
+  - add `mail domain repair` with `--provider` defaulting to `ses`
+  - consider TUI `enable` / `repair` actions only after the CLI mutation behavior is stable
+  - consider a narrow custom MAIL FROM surface only if real operator use cases require it
+
+Success criteria:
+- operators can tell whether mail readiness is blocked by account state, identity state, or DNS state without leaving `homesrvctl`
+- provider output stays operator-readable and avoids raw cloud payload dumping
+- the mutation surface stays narrow, convergent, and domain-focused
+- the TUI can expose provider readiness using the existing JSON-backed tool pattern without introducing a second, TUI-only contract
+
 ## Cross-Cutting Working Rules
 
 These are not standalone deliverables, but they should constrain all future milestones.
