@@ -101,7 +101,7 @@ Why this is high-value:
   - operator README guidance
 
 Suggested phases:
-- Phase 1: add inspect-only source detection.
+- Phase 1: add inspect-only source detection. Shipped after `0.4.0`.
   - Candidate command: `homesrvctl app detect <source_path> [--json]`
   - Detect advisory families such as `static`, `node`, `python`, `jekyll`, `dockerfile`, or `unknown`.
   - Report evidence, confidence, issues, and next steps.

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from pathlib import Path
 
 import typer
 
+from homesrvctl.adoption import detect_source
 from homesrvctl.config import load_config, render_stack_settings, stack_config_path
 from homesrvctl.models import RenderContext
 from homesrvctl.template_catalog import app_template_spec
@@ -52,6 +54,45 @@ def _parse_port_overrides(template_name: str, template_ports: dict[str, int], co
             raise typer.BadParameter(f"port `{name}` must be between 1 and 65535")
         resolved[name] = port
     return resolved
+
+
+@app_cli.command("detect")
+def app_detect(
+    source_path: Path = typer.Argument(..., help="Existing application or site source directory to inspect."),
+    json_output: bool = typer.Option(False, "--json", help="Print source detection as JSON."),
+) -> None:
+    """Inspect an existing source directory and report the likely wrapper family."""
+    expanded_source = source_path.expanduser()
+    detection = detect_source(expanded_source)
+    payload = {
+        "action": "app_detect",
+        "source_path": str(expanded_source),
+        "ok": not detection.issues,
+        **detection.to_dict(),
+    }
+    if json_output:
+        typer.echo(json.dumps(with_json_schema(payload), indent=2))
+        raise typer.Exit(code=0 if payload["ok"] else 1)
+
+    typer.echo(f"source path: {expanded_source}")
+    typer.echo(f"detected family: {detection.family}")
+    typer.echo(f"confidence: {detection.confidence}")
+    if detection.evidence:
+        typer.echo("")
+        typer.echo("evidence:")
+        for item in detection.evidence:
+            typer.echo(f"- {item}")
+    if detection.issues:
+        typer.echo("")
+        typer.echo("issues:")
+        for item in detection.issues:
+            typer.echo(f"- {item}")
+    if detection.next_steps:
+        typer.echo("")
+        typer.echo("next steps:")
+        for item in detection.next_steps:
+            typer.echo(f"- {item}")
+    raise typer.Exit(code=0 if payload["ok"] else 1)
 
 
 @app_cli.command("init")

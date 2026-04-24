@@ -33,6 +33,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Config loading, default paths, and stack-local config helpers.
 - [`homesrvctl/ports.py`](homesrvctl/ports.py)
   Rendered-stack port inspection helpers used for port reporting.
+- [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
+  Existing app/site source detection helpers used by adoption and wrapper command surfaces.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
   Fresh-host bootstrap assessment, final readiness aggregation, and tunnel/runtime/wiring provisioning helpers.
 - [`homesrvctl/utils.py`](homesrvctl/utils.py)
@@ -72,7 +74,7 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/commands/site_cmd.py`](homesrvctl/commands/site_cmd.py)
   `site init` scaffold generation.
 - [`homesrvctl/commands/app_cmd.py`](homesrvctl/commands/app_cmd.py)
-  `app init` scaffold generation for app templates.
+  `app detect` source inspection and `app init` scaffold generation for app templates.
 - [`homesrvctl/commands/deploy_cmd.py`](homesrvctl/commands/deploy_cmd.py)
   Stack lifecycle commands such as `up`, `down`, `restart`, `list`, and `doctor`.
 - [`homesrvctl/commands/domain_cmd.py`](homesrvctl/commands/domain_cmd.py)

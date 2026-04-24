@@ -226,6 +226,61 @@ def test_site_init_with_docker_network_override_only_writes_network_override(mon
     assert overrides == {"docker_network": "edge"}
 
 
+def test_app_detect_reports_static_source_json(tmp_path: Path) -> None:
+    source = tmp_path / "existing-static"
+    source.mkdir()
+    (source / "index.html").write_text("<h1>Existing</h1>\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "detect", str(source), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["action"] == "app_detect"
+    assert payload["ok"] is True
+    assert payload["source_path"] == str(source)
+    assert payload["family"] == "static"
+    assert payload["confidence"] == "high"
+    assert payload["evidence"] == ["static-index:index.html"]
+    assert payload["issues"] == []
+    assert "app wrap HOST --source PATH --family static" in payload["next_steps"][0]
+
+
+def test_app_detect_prefers_jekyll_markers(tmp_path: Path) -> None:
+    source = tmp_path / "existing-jekyll"
+    source.mkdir()
+    (source / "_config.yml").write_text("title: Existing\n", encoding="utf-8")
+    (source / "Gemfile").write_text("gem 'jekyll'\n", encoding="utf-8")
+    (source / "package.json").write_text('{"scripts":{"start":"vite"}}\n', encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "detect", str(source), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["family"] == "jekyll"
+    assert payload["confidence"] == "high"
+    assert "jekyll-config" in payload["evidence"]
+    assert "jekyll-gemfile" in payload["evidence"]
+
+
+def test_app_detect_reports_unknown_source_as_issue(tmp_path: Path) -> None:
+    source = tmp_path / "unknown"
+    source.mkdir()
+    (source / "README.txt").write_text("notes\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["app", "detect", str(source), "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["family"] == "unknown"
+    assert payload["confidence"] == "none"
+    assert payload["issues"] == ["no supported source markers were found"]
+
+
 def test_site_init_with_traefik_override_only_writes_traefik_override(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     sites_root = tmp_path / "sites"

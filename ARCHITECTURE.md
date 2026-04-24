@@ -98,12 +98,14 @@ Keep a clear separation between:
 
 - [`homesrvctl/templates.py`](homesrvctl/templates.py)
 - [`homesrvctl/template_catalog.py`](homesrvctl/template_catalog.py)
+- [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
 - [`homesrvctl/templates/static`](homesrvctl/templates/static)
 - [`homesrvctl/templates/app`](homesrvctl/templates/app)
 
 Responsibilities:
 - render scaffold templates
 - define the shipped scaffold catalog for commands, TUI flows, and release verification
+- inspect existing app/site source directories before wrapper/adoption flows mutate anything
 - keep template families organized
 - support site and app initialization without making `homesrvctl` a general-purpose framework generator
 
@@ -111,6 +113,7 @@ The per-template directory layout under `templates/app/` is intentional and shou
 The scaffold catalog should stay as the source of truth for shipped app-template names, operator-facing descriptions, and rendered file manifests.
 `site init` remains a separate minimal scaffold family from `app init --template static`; that split is intentional until a later design decision says otherwise.
 Scaffold scope should stay within the philosophy recorded in [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md): small deployable baselines, not framework stacks.
+Existing-app adoption should start read-only and report evidence, confidence, issues, and concrete next steps before any wrapper files are generated.
 
 ### Shared utilities
 

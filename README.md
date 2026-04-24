@@ -122,6 +122,7 @@ homesrvctl doctor example.com
 Scaffold an app stack:
 
 ```bash
+homesrvctl app detect ./existing-app
 homesrvctl app init app.example.com --template node
 homesrvctl up app.example.com
 homesrvctl doctor app.example.com
@@ -223,6 +224,7 @@ homesrvctl domain remove example.com --dry-run
 Scaffold common stack types:
 
 ```bash
+homesrvctl app detect ./existing-app
 homesrvctl site init example.com
 homesrvctl app init app.example.com --template static
 homesrvctl app init portal.example.com --template static-api
@@ -274,6 +276,7 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl app detect <source_path> [--json]`
 - `homesrvctl app init <hostname> [--template static|static-api|placeholder|node|python|jekyll|rust-react-postgres] [--port NAME=PORT]... [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
 - `homesrvctl ports list [--stack HOSTNAME] [--json]`
 - `homesrvctl up <hostname> [--dry-run] [--json]`
@@ -299,4 +302,5 @@ All JSON commands include a top-level `schema_version`.
 - `domain status`, `doctor`, `validate`, and `cloudflared config-test` distinguish blocking ingress problems from advisory wildcard-ordering risks.
 - `cloudflared reload` is available only when the detected runtime exposes a safe reload command; `restart` remains the predictable cross-runtime baseline.
 - `site init` is the narrow static scaffold; `app init --template static` is the richer nginx-backed static app baseline.
+- `app detect` is read-only. It reports likely source families and next steps before any wrapper/adoption mutation is attempted.
 - The Textual TUI is backed by existing JSON command surfaces. It requires an interactive terminal and the same local runtime access as the CLI commands it launches.

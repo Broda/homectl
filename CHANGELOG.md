@@ -8,6 +8,9 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ## Unreleased
 
+### Added
+- Added read-only `homesrvctl app detect <source_path>` source-family detection for existing app/site adoption planning, with JSON output and operator-facing next steps.
+
 ## 0.4.0 - 2026-04-24
 
 ### Added
