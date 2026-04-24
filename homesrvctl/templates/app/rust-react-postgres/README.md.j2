@@ -34,6 +34,7 @@ It keeps the existing homesrvctl operating model:
 - The Rust service exposes `GET /healthz` for internal healthchecks.
 - The Rust service runs SQL migrations from `api/migrations/` on startup.
 - Postgres is reachable only on the private `internal` network.
+- The generated Rust API container listens on port `{{ ports.api }}`, and the generated Postgres container listens on port `{{ ports.postgres }}`.
 
 ## ARM notes
 

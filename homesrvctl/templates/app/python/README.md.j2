@@ -37,5 +37,5 @@ The generated app reads:
 - `PORT`
 - `APP_HOSTNAME`
 
-Traefik forwards `{{ hostname }}` to the app on port `8000`.
-The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-8000}/healthz`.
+Traefik forwards `{{ hostname }}` to the app on port `{{ ports.app }}`.
+The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-{{ ports.app }}}/healthz`.

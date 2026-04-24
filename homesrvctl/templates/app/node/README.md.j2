@@ -39,5 +39,5 @@ The generated app reads:
 - `APP_HOSTNAME`
 - `NODE_ENV`
 
-Traefik forwards `{{ hostname }}` to the app on port `3000`.
-The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-3000}/healthz`.
+Traefik forwards `{{ hostname }}` to the app on port `{{ ports.app }}`.
+The generated compose service also includes a container healthcheck against `http://127.0.0.1:${PORT:-{{ ports.app }}}/healthz`.

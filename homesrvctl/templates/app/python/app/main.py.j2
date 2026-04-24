@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 HOSTNAME = "{{ hostname }}"
 APP_HOSTNAME = os.environ.get("APP_HOSTNAME", HOSTNAME)
-PORT = int(os.environ.get("PORT", "8000"))
+PORT = int(os.environ.get("PORT", "{{ ports.app }}"))
 
 
 class Handler(BaseHTTPRequestHandler):

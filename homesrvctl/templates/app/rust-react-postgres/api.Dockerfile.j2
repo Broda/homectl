@@ -19,6 +19,6 @@ WORKDIR /app
 COPY --from=build /app/target/release/{{ safe_name }}-api /usr/local/bin/app
 COPY --from=build /app/migrations ./migrations
 
-EXPOSE 8080
+EXPOSE {{ ports.api }}
 
 CMD ["app"]

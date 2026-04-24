@@ -52,8 +52,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    server = HTTPServer(("0.0.0.0", 8000), Handler)
-    print("Static+API scaffold listening on port 8000")
+    server = HTTPServer(("0.0.0.0", {{ ports.api }}), Handler)
+    print("Static+API scaffold listening on port {{ ports.api }}")
     server.serve_forever()
 
 

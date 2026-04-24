@@ -25,7 +25,7 @@ services:
       dockerfile: api/Dockerfile
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/healthz >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:{{ ports.api }}/healthz >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -36,7 +36,7 @@ services:
       - traefik.http.routers.{{ safe_name }}-api.rule=({{ traefik_host_rule }}) && PathPrefix(`/api`)
       - traefik.http.routers.{{ safe_name }}-api.entrypoints=web
       - traefik.http.routers.{{ safe_name }}-api.priority=100
-      - traefik.http.services.{{ safe_name }}-api.loadbalancer.server.port=8000
+      - traefik.http.services.{{ safe_name }}-api.loadbalancer.server.port={{ ports.api }}
     networks:
       - {{ docker_network }}
 

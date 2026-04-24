@@ -9,6 +9,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 ## Unreleased
 
 ### Added
+- Added `homesrvctl ports list` to report the ports discovered from rendered stack files, including compose environment defaults, Traefik service ports, healthchecks, Dockerfile `EXPOSE`, and fixed Postgres command wiring.
+- Added template-aware `app init --port NAME=PORT` overrides for configurable scaffold ports so generated compose files, runtime defaults, healthchecks, Dockerfiles, and README guidance no longer have to stay pinned to the same repeated internal port values.
 - Added a `rust-react-postgres` app template that scaffolds a Raspberry Pi-friendly three-service stack with a React/Vite frontend served by nginx, an internal Rust API with `/healthz`, and stack-private Postgres behind the existing Cloudflare Tunnel plus Traefik model.
 - Running `homesrvctl` with no arguments now launches the Textual dashboard by default, matching `homesrvctl tui`.
 - Added `homesrvctl bootstrap assess` as the first fresh-host bootstrap slice. It is assessment-only and reports whether the current host looks `fresh`, `partial`, `ready`, or `unsupported` relative to the first Debian-family Raspberry Pi bootstrap target.
@@ -33,6 +35,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - TUI detail-pane polish: stack and domain detail views now use more operator-facing wording such as `compose file: exists`, `has local config: yes/no`, and `repairable: N/A/Yes/No`, and the domain pane now renders DNS and ingress rows in bordered table layouts for faster scanning.
 
 ### Fixed
+- The TUI apex-domain `Create` flow now preserves the underlying `domain add` failure detail in its status message instead of stopping at a generic `domain add failed`.
 - Bare-domain scaffolds now render Traefik host rules for both the apex hostname and `www.<domain>`, so wildcard tunnel traffic for `www` no longer falls through to Traefik's default 404 on freshly scaffolded apex stacks.
 - `domain status` and the TUI stack pane now warn when an explicit `www.<domain>` DNS record overrides the wildcard tunnel route, which catches common legacy-hosting leftovers that apex-plus-wildcard checks alone would miss.
 - TUI apex-domain mutations now request `--restart-cloudflared` by default so guided `domain add`, `domain repair`, `domain remove`, and apex `Create` flows apply ingress changes to the running service instead of only rewriting the config file on disk.

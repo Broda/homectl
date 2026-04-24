@@ -30,14 +30,14 @@ services:
     restart: unless-stopped
     environment:
       APP_HOSTNAME: ${APP_HOSTNAME:-{{ hostname }}}
-      APP_PORT: ${APP_PORT:-8080}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}
+      APP_PORT: ${APP_PORT:-{{ ports.api }}}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:{{ ports.postgres }}/${POSTGRES_DB:-app}
       RUST_LOG: ${RUST_LOG:-info}
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${APP_PORT:-8080}/healthz >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${APP_PORT:-{{ ports.api }}}/healthz >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -53,11 +53,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p {{ ports.postgres }} -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    command: ["postgres", "-p", "{{ ports.postgres }}"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:

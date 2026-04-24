@@ -1,6 +1,6 @@
 const http = require("http");
 
-const port = Number.parseInt(process.env.PORT || "3000", 10);
+const port = Number.parseInt(process.env.PORT || "{{ ports.app }}", 10);
 const appHostname = process.env.APP_HOSTNAME || "{{ hostname }}";
 const nodeEnv = process.env.NODE_ENV || "production";
 

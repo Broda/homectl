@@ -5,11 +5,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      PORT: ${PORT:-3000}
+      PORT: ${PORT:-{{ ports.app }}}
       APP_HOSTNAME: ${APP_HOSTNAME:-{{ hostname }}}
       NODE_ENV: ${NODE_ENV:-production}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT:-3000}/healthz >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT:-{{ ports.app }}}/healthz >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -19,7 +19,7 @@ services:
       - traefik.docker.network={{ docker_network }}
       - traefik.http.routers.{{ safe_name }}.rule={{ traefik_host_rule }}
       - traefik.http.routers.{{ safe_name }}.entrypoints=web
-      - traefik.http.services.{{ safe_name }}.loadbalancer.server.port=3000
+      - traefik.http.services.{{ safe_name }}.loadbalancer.server.port={{ ports.app }}
     networks:
       - {{ docker_network }}
 

@@ -33,9 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let port = env::var("APP_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8080);
+        .unwrap_or({{ ports.api }});
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://app:change-me@postgres:5432/app".to_string());
+        .unwrap_or_else(|_| "postgresql://app:change-me@postgres:{{ ports.postgres }}/app".to_string());
 
     let pool = PgPoolOptions::new()
         .max_connections(5)

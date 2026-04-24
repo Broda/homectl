@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 
 import typer
 
@@ -21,6 +22,38 @@ from homesrvctl.utils import (
 app_cli = typer.Typer(help="Scaffold application service directories.")
 
 
+def _parse_port_overrides(template_name: str, template_ports: dict[str, int], configurable_ports: Iterable[str], raw: list[str]) -> dict[str, int]:
+    if not raw:
+        return dict(template_ports)
+
+    configurable = set(configurable_ports)
+    resolved = dict(template_ports)
+    for entry in raw:
+        if "=" not in entry:
+            raise typer.BadParameter(
+                f"invalid --port value `{entry}`. Expected NAME=PORT, for example `--port app=3100`."
+            )
+        key, raw_value = entry.split("=", 1)
+        name = key.strip().lower()
+        if name not in template_ports:
+            available = ", ".join(sorted(template_ports))
+            raise typer.BadParameter(
+                f"unknown port name `{name}` for template `{template_name}`. Expected one of: {available}"
+            )
+        if name not in configurable:
+            raise typer.BadParameter(
+                f"port `{name}` for template `{template_name}` is fixed and cannot be overridden"
+            )
+        try:
+            port = int(raw_value.strip())
+        except ValueError as exc:
+            raise typer.BadParameter(f"invalid port value `{raw_value}` for `{name}`") from exc
+        if port < 1 or port > 65535:
+            raise typer.BadParameter(f"port `{name}` must be between 1 and 65535")
+        resolved[name] = port
+    return resolved
+
+
 @app_cli.command("init")
 def app_init(
     hostname: str = typer.Argument(..., help="Hostname to scaffold."),
@@ -35,6 +68,11 @@ def app_init(
     profile: str | None = typer.Option(None, "--profile", help="Use a named routing profile from the main config."),
     docker_network: str | None = typer.Option(None, "--docker-network", help="Override the docker network for this stack."),
     traefik_url: str | None = typer.Option(None, "--traefik-url", help="Override the ingress target for this stack."),
+    ports: list[str] = typer.Option(
+        None,
+        "--port",
+        help="Override a scaffold port with NAME=PORT. Repeatable for templates that expose configurable ports.",
+    ),
 ) -> None:
     """Scaffold an application directory with Compose and environment templates."""
     config = load_config()
@@ -61,6 +99,12 @@ def app_init(
     outputs = template_spec.render_targets(target_dir)
     files = [str(path) for path, _ in outputs]
     rendered_templates = [{"output": str(path), "template": template_name} for path, template_name in outputs]
+    selected_ports = _parse_port_overrides(
+        template_spec.name,
+        template_spec.port_defaults,
+        template_spec.configurable_ports,
+        ports,
+    )
     stack_settings_content = render_stack_settings(config, effective_docker_network, effective_traefik_url, profile)
     if stack_settings_content.strip():
         files.append(str(stack_config_path(target_dir)))
@@ -83,6 +127,7 @@ def app_init(
             "docker_network": context.docker_network,
             "traefik_host_rule": context.traefik_host_rule,
             "service_name": context.service_name,
+            "ports": selected_ports,
         }
         for output_path, template_name in outputs:
             content = render_template(template_name, render_context)
@@ -111,6 +156,7 @@ def app_init(
                         "template": template_spec.name,
                         "target_dir": str(target_dir),
                         "profile": profile,
+                        "ports": selected_ports,
                         "dry_run": dry_run,
                         "ok": False,
                         "files": files,
@@ -132,6 +178,7 @@ def app_init(
                     "template": template_spec.name,
                     "target_dir": str(target_dir),
                     "profile": profile,
+                    "ports": selected_ports,
                     "dry_run": dry_run,
                     "ok": True,
                     "files": files,

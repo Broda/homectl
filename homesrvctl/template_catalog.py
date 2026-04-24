@@ -18,6 +18,8 @@ class AppTemplateSpec:
     name: str
     description: str
     outputs: tuple[TemplateOutputSpec, ...]
+    port_defaults: dict[str, int]
+    configurable_ports: tuple[str, ...]
     has_readme: bool
     has_healthcheck: bool
     has_dockerignore: bool
@@ -46,6 +48,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("docker-compose.yml", "app/placeholder/docker-compose.yml.j2"),
             TemplateOutputSpec(".env.example", "app/placeholder/env.example.j2"),
         ),
+        port_defaults={"app": 80},
+        configurable_ports=(),
         has_readme=False,
         has_healthcheck=False,
         has_dockerignore=False,
@@ -62,6 +66,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("html/assets/js/main.js", "app/static/main.js.j2"),
             TemplateOutputSpec("html/assets/images/.gitkeep", "app/static/images.gitkeep.j2"),
         ),
+        port_defaults={"site": 80},
+        configurable_ports=(),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=False,
@@ -82,6 +88,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("api/requirements.txt", "app/static-api/api.requirements.txt.j2"),
             TemplateOutputSpec("api/app/main.py", "app/static-api/api.main.py.j2"),
         ),
+        port_defaults={"site": 80, "api": 8000},
+        configurable_ports=("api",),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=True,
@@ -98,6 +106,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("package.json", "app/node/package.json.j2"),
             TemplateOutputSpec("src/server.js", "app/node/src/server.js.j2"),
         ),
+        port_defaults={"app": 3000},
+        configurable_ports=("app",),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=True,
@@ -114,6 +124,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("requirements.txt", "app/python/requirements.txt.j2"),
             TemplateOutputSpec("app/main.py", "app/python/app/main.py.j2"),
         ),
+        port_defaults={"app": 8000},
+        configurable_ports=("app",),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=True,
@@ -130,6 +142,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("site/_config.yml", "app/jekyll/site._config.yml.j2"),
             TemplateOutputSpec("site/index.md", "app/jekyll/site.index.md.j2"),
         ),
+        port_defaults={"site": 80},
+        configurable_ports=(),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=True,
@@ -155,6 +169,8 @@ APP_TEMPLATE_SPECS: tuple[AppTemplateSpec, ...] = (
             TemplateOutputSpec("api/src/main.rs", "app/rust-react-postgres/api.src.main.rs.j2"),
             TemplateOutputSpec("api/migrations/0001_initial.sql", "app/rust-react-postgres/api.migrations.0001_initial.sql.j2"),
         ),
+        port_defaults={"frontend": 80, "api": 8080, "postgres": 5432},
+        configurable_ports=("api",),
         has_readme=True,
         has_healthcheck=True,
         has_dockerignore=True,

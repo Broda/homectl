@@ -32,3 +32,4 @@ This scaffold combines a static nginx site with a small Python API behind the sa
 - `GET /` serves the static page
 - `GET /api/status` returns scaffold API JSON
 - `GET /healthz` is used internally by the API healthcheck
+- The generated API container listens on port `{{ ports.api }}`

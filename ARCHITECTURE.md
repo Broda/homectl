@@ -33,12 +33,14 @@ Should not do:
 
 - [`homesrvctl/models.py`](homesrvctl/models.py)
 - [`homesrvctl/config.py`](homesrvctl/config.py)
+- [`homesrvctl/ports.py`](homesrvctl/ports.py)
 
 Responsibilities:
 - define global config structure
 - define stack-local config structure
 - resolve config paths and defaults
 - load effective stack-local overrides
+- inspect rendered stack files for service-port usage when operator reporting needs that view
 
 This is the source of truth for:
 - global config shape
@@ -199,14 +201,9 @@ Future refactors should preserve clarity, but should not introduce extra layers 
 
 ## Planned Evolution
 
-The current repo still assumes the host platform already exists. A planned future bootstrap milestone will likely introduce a dedicated orchestration area for:
+The repo now has explicit bootstrap slices for the first Debian-family host target: assessment, Cloudflare tunnel provisioning, host runtime convergence, shared-group `cloudflared` wiring, and final readiness validation. This is still an operator-run sequence, not a single unattended first-run wizard.
 
-- fresh-host assessment
-- Debian-family package/runtime provisioning
-- baseline Traefik and `cloudflared` service wiring
-- Cloudflare tunnel creation through the API
-
-That future bootstrap layer should remain an orchestrator. It should call into the existing Cloudflare and `cloudflared` helpers where possible rather than scattering host-provisioning logic across unrelated command modules.
+Future bootstrap work should continue building on the existing bootstrap layer as an orchestrator. It should call into the existing Cloudflare and `cloudflared` helpers where possible rather than scattering host-provisioning logic across unrelated command modules.
 
 If the planned mail-provider milestone lands, the same rule should apply:
 

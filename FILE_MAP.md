@@ -31,6 +31,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Core dataclasses for config and stack-local settings.
 - [`homesrvctl/config.py`](homesrvctl/config.py)
   Config loading, default paths, and stack-local config helpers.
+- [`homesrvctl/ports.py`](homesrvctl/ports.py)
+  Rendered-stack port inspection helpers used for port reporting.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
   Fresh-host bootstrap assessment, final readiness aggregation, and tunnel/runtime/wiring provisioning helpers.
 - [`homesrvctl/utils.py`](homesrvctl/utils.py)
@@ -73,6 +75,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Stack lifecycle commands such as `up`, `down`, `restart`, `list`, and `doctor`.
 - [`homesrvctl/commands/domain_cmd.py`](homesrvctl/commands/domain_cmd.py)
   Domain lifecycle commands such as `add`, `status`, `repair`, and `remove`.
+- [`homesrvctl/commands/ports_cmd.py`](homesrvctl/commands/ports_cmd.py)
+  `ports list` inspection for ports discovered from rendered stack files.
 - [`homesrvctl/commands/tunnel_cmd.py`](homesrvctl/commands/tunnel_cmd.py)
   Tunnel inspection command for configured tunnel resolution and Cloudflare API-backed tunnel status.
 - [`homesrvctl/commands/cloudflared_cmd.py`](homesrvctl/commands/cloudflared_cmd.py)

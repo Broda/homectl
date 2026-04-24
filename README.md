@@ -38,11 +38,11 @@ The tool assumes:
 - a shared external Docker network such as `web` already exists
 - the Cloudflare Tunnel is locally managed and already functional
 
-That is the current shipped model. On a fresh Raspberry Pi, installing `homesrvctl` today gives you assessment, domain lifecycle, scaffolding, and operational controls for an already-built platform. It does not yet provision Docker, Traefik, `cloudflared`, or the initial tunnel for you.
+That remains the core operating model. For an already-built platform, `homesrvctl` provides domain lifecycle, scaffolding, validation, and operational controls. For the first Debian-family Raspberry Pi target, the shipped bootstrap commands can now converge the baseline runtime, shared tunnel, `cloudflared` wiring, and readiness checks as explicit operator-run slices.
 
-## Long-Term Bootstrap Direction
+## Bootstrap Direction
 
-The long-term direction is to make a fresh Pi first run capable of bringing up the whole platform instead of assuming it already exists.
+The current bootstrap surface is intentionally explicit rather than a one-command installer. Operators run the slices they need and can inspect or dry-run the host-changing steps before applying them.
 
 Planned product direction:
 
@@ -52,20 +52,22 @@ Planned product direction:
 - Cloudflare API token is the primary bootstrap auth path
 - browser-login-based setup may come later, but is not the first target
 
-Desired long-term first-run outcome:
+Desired first-run outcome:
 
 - install `homesrvctl`
 - run a bootstrap workflow
 - end with Docker, Compose, Traefik, `cloudflared`, shared directories, service/group wiring, a Cloudflare tunnel, and a ready `homesrvctl` config
 - then use `domain add`, `site init`, `app init`, and `up` without separate manual Cloudflare dashboard setup
 
-Current shipped step in that direction:
+Current shipped slices:
 
 - `homesrvctl bootstrap assess` now reports whether the host looks fresh, partial, ready, or unsupported relative to the first bootstrap target
 - `homesrvctl bootstrap tunnel` can now create or reuse the shared Cloudflare tunnel and write local bootstrap tunnel material when the target path is writable and local credentials are available for safe reuse
 - `homesrvctl bootstrap runtime` can now install the Debian-family host runtime baseline for the first target: Docker Engine, Docker Compose, `cloudflared`, the shared `homesrvctl` group and directories, the external Docker network, and the baseline Traefik runtime
 - `homesrvctl bootstrap wiring` can now converge the shared `cloudflared` config path, migrate local tunnel credentials into `/srv/homesrvctl/cloudflared`, install the needed systemd unit or override, and enable the service under the shared-group model
 - `homesrvctl bootstrap validate` now reports whether the current host matches the completed shipped bootstrap baseline and is ready for first stack creation plus domain onboarding
+
+What is not shipped is a single fully automated first-run wizard. The supported path is the explicit command sequence shown below.
 
 ## Installation
 
@@ -246,6 +248,7 @@ Scaffold a Node app:
 
 ```bash
 homesrvctl app init app.example.com --template node
+homesrvctl app init app.example.com --template node --port app=3100
 ```
 
 Scaffold a static website:
@@ -258,6 +261,7 @@ Scaffold a static website plus API:
 
 ```bash
 homesrvctl app init portal.example.com --template static-api
+homesrvctl app init portal.example.com --template static-api --port api=8100
 ```
 
 Scaffold a Python app:
@@ -276,6 +280,8 @@ Scaffold a Rust + React + Postgres app:
 
 ```bash
 homesrvctl app init app.example.com --template rust-react-postgres
+homesrvctl app init app.example.com --template rust-react-postgres --port api=8181
+homesrvctl ports list --stack app.example.com
 ```
 
 Scaffold a stack with local overrides:
@@ -356,7 +362,8 @@ homesrvctl up example.com --dry-run
 - `homesrvctl domain repair <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl domain remove <domain> [--dry-run] [--json] [--restart-cloudflared]`
 - `homesrvctl site init <hostname> [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
-- `homesrvctl app init <hostname> [--template static|static-api|placeholder|node|python|jekyll|rust-react-postgres] [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl app init <hostname> [--template static|static-api|placeholder|node|python|jekyll|rust-react-postgres] [--port NAME=PORT]... [--force] [--dry-run] [--json] [--profile NAME] [--docker-network NETWORK] [--traefik-url URL]`
+- `homesrvctl ports list [--stack HOSTNAME] [--json]`
 - `homesrvctl up <hostname> [--dry-run] [--json]`
 - `homesrvctl down <hostname> [--dry-run] [--json]`
 - `homesrvctl restart <hostname> [--dry-run] [--json]`
@@ -405,6 +412,8 @@ homesrvctl up example.com --dry-run
 - `list`, `domain status`, `validate`, and `doctor` support `--json` for machine-readable output.
 - `up`, `down`, and `restart` support `--json` for machine-readable command results.
 - `site init` and `app init` support `--json` for machine-readable scaffold results, including the selected template and rendered template-to-output mapping.
+- `app init` also supports repeatable `--port NAME=PORT` overrides for templates that expose configurable service ports, and its JSON output now includes the selected port map.
+- `ports list` reports the ports discovered from each rendered stack’s compose, healthcheck, environment, and Dockerfile wiring so you can see which services are using which internal ports.
 - `cloudflared status` reports the detected runtime mode, whether it is active, the restart command when one is available, and a setup-alignment report for the configured `cloudflared_config` path and tunnel credentials JSON.
 - `cloudflared setup` assesses whether `homesrvctl` and the active runtime are pointed at the same config path, whether ingress mutations are safe, whether account-scoped tunnel inspection is available from the current user, and prints exact shared-group migration commands when a systemd override or credential/config migration is needed.
 - The first-class setup/repair path is systemd-focused. Docker and bare-process runtimes still get status visibility, but setup repair remains advisory there.
@@ -481,6 +490,8 @@ homesrvctl up example.com --dry-run
 - The `jekyll` app template now generates a stack-local `site/` source tree plus a Dockerized Jekyll-to-nginx build baseline intended for manual adoption of an existing Jekyll site.
 - The `rust-react-postgres` app template now generates a three-service Raspberry Pi-friendly stack with a React/Vite frontend served by nginx, an internal Rust API that exposes `/healthz`, and a stack-private Postgres database.
 - In that `rust-react-postgres` scaffold, Traefik only routes to the frontend container and nginx proxies `/api` to the internal Rust backend so one-origin cookie auth stays straightforward.
+- `app init` now supports template-aware port overrides such as `--port app=3100` or `--port api=8181`, so generated healthchecks, Dockerfiles, README guidance, and service wiring stay aligned when you want a non-default internal port.
+- `homesrvctl ports list` now reports the internal ports each scaffolded stack uses, including ports inferred from compose environment, Traefik service labels, healthchecks, Dockerfile `EXPOSE`, and fixed Postgres command wiring where present.
 - To adopt an existing Jekyll repo, scaffold `--template jekyll`, copy the repo contents into `site/`, keep the generated `docker-compose.yml` and `Dockerfile`, then run `docker compose up --build`.
 - The shipped app-template catalog now drives CLI validation, TUI template selection, rendered-template manifests, and release packaging checks from one module so those surfaces do not drift independently.
 - The `node` and `python` app templates now include a basic container healthcheck that probes the generated root endpoint on the app’s internal port.

@@ -8,6 +8,6 @@ RUN npm install --omit=dev
 
 COPY src ./src
 
-EXPOSE 3000
+EXPOSE {{ ports.app }}
 
 CMD ["npm", "start"]
