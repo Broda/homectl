@@ -2276,6 +2276,23 @@ def test_textual_app_cleanup_confirmation_runs_action(monkeypatch) -> None:
     assert app.last_stack_actions["test.example.com"]["action"] == "cleanup"
 
 
+def test_textual_app_cleanup_menu_pushes_destructive_confirmation(monkeypatch) -> None:
+    pushed: list[tuple[prompts.ConfirmActionScreen, object]] = []
+    app = textual_app.HomesrvctlTextualApp()
+
+    monkeypatch.setattr(app, "push_screen", lambda screen, callback: pushed.append((screen, callback)))
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._complete_stack_action_menu("test.example.com", "cleanup")
+
+    assert len(pushed) == 1
+    screen, callback = pushed[0]
+    assert isinstance(screen, prompts.ConfirmActionScreen)
+    assert screen.title == "Confirm Stack Cleanup"
+    assert screen.body == "Stop and delete the local stack directory for test.example.com?"
+    assert callable(callback)
+
+
 def test_textual_app_app_init_prompt_runs_selected_template(monkeypatch) -> None:
     snapshots = [
         {
@@ -2785,6 +2802,36 @@ def test_control_items_groups_subdomains_under_apex_domains() -> None:
         "  - tasks.example.com",
     ]
     assert stack_items[3]["label"] == "orphan.other.net"
+
+
+def test_control_items_groups_deep_subdomains_under_existing_apex_domain() -> None:
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = {
+        "generated_at": "2026-04-08 12:00:00",
+        "config": {"ok": True, "global": {"profiles": {}}},
+        "list": {"ok": True, "sites": [
+            {"hostname": "example.com", "compose": True},
+            {"hostname": "preview.app.example.com", "compose": True},
+            {"hostname": "app.example.com", "compose": True},
+        ]},
+        "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "ok"},
+        "validate": {"ok": True, "checks": []},
+        "bootstrap": {"ok": True, "bootstrap_state": "ready", "host_supported": True, "detail": "ready"},
+    }
+
+    stack_items = app._control_items()[5:]
+
+    assert [item["hostname"] for item in stack_items] == [
+        "example.com",
+        "app.example.com",
+        "preview.app.example.com",
+    ]
+    assert [item["label"] for item in stack_items] == [
+        "example.com",
+        "  - app.example.com",
+        "  - preview.app.example.com",
+    ]
+    assert [item["parent_apex"] for item in stack_items] == [None, "example.com", "example.com"]
 
 
 def test_control_list_text_indents_grouped_subdomain_stacks() -> None:
