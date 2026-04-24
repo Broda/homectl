@@ -336,52 +336,12 @@ def render_stack_action_detail(action: str, payload: dict[str, object]) -> list[
 
     checks = payload.get("checks")
     if isinstance(checks, list):
-        failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
-        advisory_checks = [
-            check for check in checks if isinstance(check, dict) and str(check.get("severity")) == "advisory"
-        ]
-        lines.extend(
-            [
-                "",
-                f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory",
-                "",
-            ]
-        )
-        for check in checks[:8]:
-            if not isinstance(check, dict):
-                continue
-            severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
-            if severity == "advisory":
-                marker = "[yellow]WARN[/yellow]"
-            elif check.get("ok"):
-                marker = "[green]PASS[/green]"
-            else:
-                marker = "[red]FAIL[/red]"
-            name = plain_markup(check.get("name", "<unknown>"))
-            detail = plain_markup(check.get("detail", ""))
-            lines.append(f"{marker} {name}: {detail}")
-        if len(checks) > 8:
-            lines.append(f"... {len(checks) - 8} more")
+        lines.extend(["", *render_check_table(checks, limit=8, normalize_detail=False)])
         return lines
 
     commands = payload.get("commands")
     if isinstance(commands, list) and commands:
-        lines.extend(["", f"commands: {len(commands)}", ""])
-        for command_result in commands[:4]:
-            if not isinstance(command_result, dict):
-                continue
-            command = command_result.get("command", [])
-            rendered_command = " ".join(str(part) for part in command) if isinstance(command, list) else str(command)
-            returncode = command_result.get("returncode", "?")
-            lines.append(f"rc={returncode} {rendered_command}")
-            stdout = str(command_result.get("stdout", "")).strip()
-            stderr = str(command_result.get("stderr", "")).strip()
-            if stdout:
-                lines.append(f"stdout: {plain_markup(stdout.splitlines()[0])}")
-            if stderr:
-                lines.append(f"stderr: {plain_markup(stderr.splitlines()[0])}")
-        if len(commands) > 4:
-            lines.append(f"... {len(commands) - 4} more")
+        lines.extend(["", *render_command_table(commands)])
         return lines
 
     files = payload.get("files")
@@ -411,31 +371,69 @@ def render_check_list_detail(
 ) -> list[str]:
     if not checks:
         return [empty_message]
+    return render_check_table(checks, limit=limit, normalize_detail=True)
 
+
+def render_check_table(
+    checks: list[object],
+    *,
+    limit: int = 10,
+    normalize_detail: bool = True,
+) -> list[str]:
     failing_checks = [check for check in checks if isinstance(check, dict) and not check.get("ok")]
     advisory_checks = [check for check in checks if isinstance(check, dict) and str(check.get("severity")) == "advisory"]
-    rows: list[tuple[str, str]] = []
+    rows: list[list[str]] = []
     for check in checks[:limit]:
         if not isinstance(check, dict):
             continue
-        severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
-        if severity == "advisory":
-            marker = "[yellow]WARN[/yellow]"
-        elif check.get("ok"):
-            marker = "[green]PASS[/green]"
-        else:
-            marker = "[red]FAIL[/red]"
-        name = str(check.get("name", "<unknown>"))
-        detail = normalize_check_detail(name, check.get("detail", ""))
-        rows.append((name, f"{marker} {detail}"))
+        name = plain_markup(check.get("name", "<unknown>"))
+        detail = normalize_check_detail(name, check.get("detail", "")) if normalize_detail else str(check.get("detail", ""))
+        rows.append([check_marker(check), name, plain_markup(detail)])
 
     lines = [f"checks: {len(checks)} total, {len(failing_checks)} failing, {len(advisory_checks)} advisory", ""]
     if rows:
-        lines.extend(format_key_value_lines(rows))
+        lines.extend(render_bordered_table(["status", "check", "detail"], rows))
     if len(checks) > limit:
         lines.append(f"... {len(checks) - limit} more")
     return lines
 
+
+def check_marker(check: dict[str, object]) -> str:
+    severity = str(check.get("severity") or ("pass" if check.get("ok") else "blocking"))
+    if severity == "advisory":
+        return "[yellow]WARN[/yellow]"
+    if check.get("ok"):
+        return "[green]PASS[/green]"
+    return "[red]FAIL[/red]"
+
+
+def render_command_table(commands: list[object], *, limit: int = 4) -> list[str]:
+    rows: list[list[str]] = []
+    for command_result in commands[:limit]:
+        if not isinstance(command_result, dict):
+            continue
+        command = command_result.get("command", [])
+        rendered_command = " ".join(str(part) for part in command) if isinstance(command, list) else str(command)
+        stdout = first_output_line(command_result.get("stdout", ""))
+        stderr = first_output_line(command_result.get("stderr", ""))
+        rows.append(
+            [
+                str(command_result.get("returncode", "?")),
+                plain_markup(rendered_command),
+                plain_markup(stdout or stderr or ""),
+            ]
+        )
+
+    lines = [f"commands: {len(commands)}", ""]
+    if rows:
+        lines.extend(render_bordered_table(["rc", "command", "first output"], rows))
+    if len(commands) > limit:
+        lines.append(f"... {len(commands) - limit} more")
+    return lines
+
+
+def first_output_line(output: object) -> str:
+    return str(output or "").strip().splitlines()[0] if str(output or "").strip() else ""
 
 def normalize_check_detail(name: str, detail: object) -> str:
     rendered = str(detail or "").strip()
@@ -818,54 +816,57 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
 
     dns = payload.get("dns")
     if isinstance(dns, list):
-        dns_lines: list[str] = []
+        dns_rows: list[list[str]] = []
         for item in dns:
             if not isinstance(item, dict):
                 continue
             detail, ancillary = split_dns_detail(item.get("detail", ""))
-            row_items = [
-                ("hostname", str(item.get("record_name", "<unknown>"))),
-                ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
-                ("type", str(item.get("record_type") or "<unknown>")),
-                ("target", str(item.get("content") or "<unknown>")),
-            ]
-            dns_lines.extend(
+            detail_parts = split_dns_detail_records(detail) if detail else []
+            ancillary_parts = split_ancillary_records(ancillary) if ancillary else []
+            dns_rows.append(
                 [
-                    *format_key_value_lines(row_items),
-                    *(format_key_value_with_continuations("detail", split_dns_detail_records(detail)) if detail else []),
-                    *(format_key_value_with_continuations("ancillary records", split_ancillary_records(ancillary)) if ancillary else []),
-                    "",
+                    str(item.get("record_name", "<unknown>")),
+                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
+                    str(item.get("record_type") or "<unknown>"),
+                    str(item.get("content") or "<unknown>"),
+                    "; ".join(detail_parts),
+                    "; ".join(ancillary_parts),
                 ]
             )
-        if dns_lines:
-            if dns_lines[-1] == "":
-                dns_lines.pop()
-            lines.extend(["", "[bold #ffcf5a]DNS Records[/bold #ffcf5a]", "", *dns_lines])
+        if dns_rows:
+            lines.extend(
+                [
+                    "",
+                    "[bold #ffcf5a]DNS Records[/bold #ffcf5a]",
+                    "",
+                    *render_bordered_table(["hostname", "match", "type", "target", "detail", "ancillary records"], dns_rows),
+                ]
+            )
 
     ingress = payload.get("ingress")
     if isinstance(ingress, list):
-        ingress_lines: list[str] = []
+        ingress_rows: list[list[str]] = []
         for item in ingress:
             if not isinstance(item, dict):
                 continue
-            ingress_lines.extend(
+            ingress_rows.append(
                 [
-                    *format_key_value_lines(
-                        [
-                            ("hostname", str(item.get("hostname", "<unknown>"))),
-                            ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
-                            ("configured", str(item.get("service") or "<none>")),
-                            ("effective", str(item.get("effective_service") or "<none>")),
-                            ("detail", str(item.get("detail", ""))),
-                        ]
-                    ),
-                    "",
+                    str(item.get("hostname", "<unknown>")),
+                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
+                    str(item.get("service") or "<none>"),
+                    str(item.get("effective_service") or "<none>"),
+                    str(item.get("detail", "")),
                 ]
             )
-        if ingress_lines:
-            if ingress_lines[-1] == "":
-                ingress_lines.pop()
-            lines.extend(["", "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]", "", *ingress_lines])
+        if ingress_rows:
+            lines.extend(
+                [
+                    "",
+                    "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]",
+                    "",
+                    *render_bordered_table(["hostname", "match", "configured", "effective", "detail"], ingress_rows),
+                ]
+            )
 
     suggested_command = payload.get("suggested_command")
     if suggested_command:

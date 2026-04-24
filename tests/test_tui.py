@@ -497,8 +497,13 @@ def test_render_stack_action_detail_formats_doctor_checks() -> None:
     assert "action" in rendered
     assert "doctor" in rendered
     assert "checks: 2 total, 1 failing, 0 advisory" in rendered
-    assert "[green]PASS[/green] docker-compose.yml: /srv/homesrvctl/sites/example.com/docker-compose.yml" in rendered
-    assert "[red]FAIL[/red] host-header request: request failed: connection refused" in rendered
+    assert "| status" in rendered
+    assert "| [green]PASS[/green]" in rendered
+    assert "| docker-compose.yml" in rendered
+    assert "| /srv/homesrvctl/sites/example.com/docker-compose.yml" in rendered
+    assert "| [red]FAIL[/red]" in rendered
+    assert "| host-header request" in rendered
+    assert "| request failed: connection refused" in rendered
 
 
 def test_render_external_http_detail_formats_advisory_404() -> None:
@@ -573,9 +578,14 @@ def test_render_check_list_detail_formats_pass_and_fail_checks() -> None:
     rendered = "\n".join(lines)
 
     assert "checks: 2 total, 1 failing, 0 advisory" in rendered
-    assert "cloudflared binary : [green]PASS[/green] found in PATH" in rendered
+    assert "| status" in rendered
+    assert "| check" in rendered
+    assert "| detail" in rendered
+    assert "| [green]PASS[/green]" in rendered
+    assert "| cloudflared binary" in rendered
     assert "found in PATH" in rendered
-    assert "Traefik URL : [red]FAIL[/red] unreachable" in rendered
+    assert "| [red]FAIL[/red]" in rendered
+    assert "| Traefik URL" in rendered
     assert "unreachable" in rendered
 
 
@@ -625,8 +635,12 @@ def test_render_stack_action_detail_formats_command_results() -> None:
     assert "up" in rendered
     assert "dry run" in rendered
     assert "no" in rendered
-    assert "rc=0 docker compose up -d" in rendered
-    assert "stdout: container started" in rendered
+    assert "| rc" in rendered
+    assert "| command" in rendered
+    assert "| first output" in rendered
+    assert "| 0" in rendered
+    assert "| docker compose up -d" in rendered
+    assert "| container started" in rendered
 
 
 def test_render_stack_action_detail_shows_domain_apply_status() -> None:
@@ -878,7 +892,9 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "no" in rendered
     assert "DNS Records" in rendered
     assert "Ingress Routes" in rendered
-    assert "| hostname" not in rendered
+    assert "| hostname" in rendered
+    assert "| match" in rendered
+    assert "| detail" in rendered
     assert "example.com" in rendered
     assert "*.example.com" in rendered
     assert "suggested command" in rendered
@@ -915,9 +931,11 @@ def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "detail : CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
+    assert "| detail" in rendered
+    assert "CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
     assert "dns warnings : 1" in rendered
-    assert "ancillary records : MX -> route1.mx.cloudflare.net" in rendered
+    assert "| ancillary records" in rendered
+    assert "MX -> route1.mx.cloudflare.net" in rendered
     assert "TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"" in rendered
 
 
@@ -947,7 +965,8 @@ def test_render_domain_status_detail_wraps_multi_record_main_detail() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "detail : CNAME -> wrong-target.example.com (proxied)" in rendered
+    assert "| detail" in rendered
+    assert "CNAME -> wrong-target.example.com (proxied)" in rendered
     assert "A -> 192.0.2.10" in rendered
 
 
@@ -1638,7 +1657,9 @@ def test_textual_app_stack_detail_includes_last_action_result() -> None:
     assert "Last action" in detail
     assert "action" in detail
     assert "doctor" in detail
-    assert "[red]FAIL[/red] host-header request: request failed: connection refused" in detail
+    assert "| [red]FAIL[/red]" in detail
+    assert "| host-header request" in detail
+    assert "| request failed: connection refused" in detail
 
 
 def test_textual_app_stack_detail_includes_domain_status() -> None:
@@ -2041,9 +2062,12 @@ def test_textual_app_validate_detail_shows_all_checks() -> None:
 
     assert "Validate Detail" in detail
     assert "checks: 2 total, 1 failing, 0 advisory" in detail
-    assert "cloudflared binary : [green]PASS[/green] found in PATH" in detail
+    assert "| status" in detail
+    assert "| [green]PASS[/green]" in detail
+    assert "| cloudflared binary" in detail
     assert "found in PATH" in detail
-    assert "Traefik URL : [red]FAIL[/red] unreachable" in detail
+    assert "| [red]FAIL[/red]" in detail
+    assert "| Traefik URL" in detail
     assert "unreachable" in detail
 
 

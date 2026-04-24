@@ -25,24 +25,20 @@ Success criteria:
 
 ### 2. TUI Operator-Facing Polish
 
-Status: in progress
+Status: complete
 
 Goal: make the Textual dashboard read like an operator tool rather than raw command output.
 
 Current baseline:
 - The TUI is functionally complete for common local onboarding.
 - It can create stacks, onboard apex domains, inspect routing/domain state, run stack actions, and expose global tools.
-- Recent polish replaced several raw boolean values, normalized `yes/no`, `N/A`, and `exists/does not exist` wording across visible detail panes, and rendered domain DNS/ingress detail as structured tables.
-
-Near-term work:
-- Continue normalizing TUI label casing and detail copy where new panes or commands expose raw command output.
-- Decide where bordered table-style layouts should become the standard for repeated status rows.
-- Keep explicit technical values where operators need them.
-- Add focused regression coverage for the most visible detail text.
+- Recent polish replaced several raw boolean values and normalized `yes/no`, `N/A`, and `exists/does not exist` wording across visible detail panes.
+- Repeated checks, command results, DNS records, and ingress routes use bordered table-style layouts where scanning across repeated rows matters.
+- Single-value sections keep compact key/value rows, and long free-form repair guidance remains list-oriented so commands stay readable.
 
 Success criteria:
-- The dashboard remains compact but uses operator-facing labels consistently.
-- Copy changes do not alter CLI command semantics or JSON contracts.
+- The dashboard remains compact but uses operator-facing labels consistently. Met.
+- Copy changes do not alter CLI command semantics or JSON contracts. Met.
 
 ### 3. Scaffold Surface Consolidation
 
