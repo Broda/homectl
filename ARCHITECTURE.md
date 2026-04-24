@@ -86,7 +86,8 @@ Responsibilities:
 - detect `cloudflared` runtime mode
 - inspect whether the configured `cloudflared` path is aligned with the active runtime
 - inspect whether the current user can read the configured tunnel credentials JSON
-- generate systemd-oriented setup guidance for the supported shared-group `root:homesrvctl` layout when the runtime, config path, or credentials access diverge
+- generate systemd-oriented setup guidance for the supported shared-group `root:homesrvctl` layout when the runtime, config path, service-control policy, or credentials access diverge
+- support a one-time privileged bootstrap boundary where normal stack/domain/TUI operations later run as a trusted non-root operator in the `homesrvctl` and `docker` groups
 - select restart/log commands appropriate for the detected runtime
 
 Keep a clear separation between:

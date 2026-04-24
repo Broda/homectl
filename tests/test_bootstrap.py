@@ -569,8 +569,10 @@ def test_provision_bootstrap_runtime_converges_runtime_baseline(monkeypatch, tmp
         ),
     )
     monkeypatch.setattr(bootstrap, "_resolve_operator_user", lambda explicit_user=None: "broda")
-    monkeypatch.setattr(bootstrap, "_debian_codename", lambda os_info: "bookworm")
+    monkeypatch.setattr(bootstrap, "_apt_codename", lambda os_info: "bookworm")
+    monkeypatch.setattr(bootstrap, "_docker_repo_family", lambda os_info: "debian")
     monkeypatch.setattr(bootstrap, "_dpkg_architecture", lambda dry_run=False: "arm64")
+    monkeypatch.setattr(bootstrap, "_remove_stale_docker_repo_file", lambda dry_run=False: False)
     monkeypatch.setattr(
         bootstrap,
         "_runtime_package_commands",
@@ -582,7 +584,11 @@ def test_provision_bootstrap_runtime_converges_runtime_baseline(monkeypatch, tmp
         "_run_runtime_command",
         lambda command, dry_run=False: seen_commands.append(tuple(command)),
     )
-    monkeypatch.setattr(bootstrap, "_write_runtime_repo_files", lambda codename, architecture, dry_run=False: None)
+    monkeypatch.setattr(
+        bootstrap,
+        "_write_runtime_repo_files",
+        lambda codename, architecture, docker_repo_family, dry_run=False: None,
+    )
     monkeypatch.setattr(
         bootstrap,
         "_ensure_runtime_groups",
@@ -634,6 +640,50 @@ def test_provision_bootstrap_runtime_rejects_non_root_without_dry_run(monkeypatc
         bootstrap.provision_bootstrap_runtime(tmp_path / "config.yml")
 
 
+def test_write_runtime_repo_files_uses_ubuntu_docker_repo_for_noble(monkeypatch) -> None:
+    written: dict[Path, bytes] = {}
+
+    monkeypatch.setattr(bootstrap, "_fetch_url_bytes", lambda url, dry_run=False: f"key:{url}".encode("utf-8"))
+    monkeypatch.setattr(
+        bootstrap,
+        "_ensure_file_content",
+        lambda path, content, dry_run=False: written.__setitem__(path, content) or True,
+    )
+
+    bootstrap._write_runtime_repo_files(
+        codename="noble",
+        architecture="arm64",
+        docker_repo_family="ubuntu",
+        dry_run=False,
+    )
+
+    assert written[bootstrap.DOCKER_APT_KEYRING_PATH] == b"key:https://download.docker.com/linux/ubuntu/gpg"
+    assert (
+        written[bootstrap.DOCKER_APT_SOURCE_PATH].decode("utf-8")
+        == "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable\n"
+    )
+
+
+def test_docker_repo_family_selects_ubuntu_for_ubuntu_like_hosts() -> None:
+    assert bootstrap._docker_repo_family({"id": "ubuntu", "id_like": ["debian"]}) == "ubuntu"
+    assert bootstrap._docker_repo_family({"id": "linuxmint", "id_like": ["ubuntu", "debian"]}) == "ubuntu"
+    assert bootstrap._docker_repo_family({"id": "raspbian", "id_like": ["debian"]}) == "debian"
+
+
+def test_remove_stale_docker_repo_file_before_first_apt_update(monkeypatch, tmp_path: Path) -> None:
+    stale_source = tmp_path / "docker.list"
+    stale_source.write_text(
+        "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian noble stable\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bootstrap, "DOCKER_APT_SOURCE_PATH", stale_source)
+
+    removed = bootstrap._remove_stale_docker_repo_file(dry_run=False)
+
+    assert removed is True
+    assert not stale_source.exists()
+
+
 def test_provision_bootstrap_wiring_converges_shared_config_and_service(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
     source_cloudflared = tmp_path / "legacy" / "config.yml"
@@ -672,6 +722,7 @@ def test_provision_bootstrap_wiring_converges_shared_config_and_service(monkeypa
     monkeypatch.setattr(bootstrap, "SHARED_CONFIG_PATH", tmp_path / "shared" / "config.yml")
     monkeypatch.setattr(bootstrap, "SYSTEMD_OVERRIDE_PATH", str(tmp_path / "override.conf"))
     monkeypatch.setattr(bootstrap, "SYSTEMD_UNIT_PATH", str(tmp_path / "cloudflared.service"))
+    monkeypatch.setattr(bootstrap, "SUDOERS_PATH", str(tmp_path / "sudoers.d" / "homesrvctl-cloudflared"))
     monkeypatch.setattr(
         bootstrap,
         "inspect_cloudflared_systemd_unit",
@@ -693,6 +744,58 @@ def test_provision_bootstrap_wiring_converges_shared_config_and_service(monkeypa
     assert Path(provisioned.cloudflared_config_path).exists()
     assert Path(provisioned.credentials_path).exists()
     assert any(command[:3] == ("systemctl", "enable", "--now") for command in seen_commands)
+
+
+def test_provision_bootstrap_wiring_accepts_equivalent_existing_shared_config(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "home" / ".config" / "homesrvctl" / "config.yml"
+    shared_config = tmp_path / "shared" / "config.yml"
+    shared_credentials = tmp_path / "shared" / "tunnel.json"
+    shared_config.parent.mkdir(parents=True)
+    shared_credentials.write_text('{"AccountTag":"account-123","TunnelID":"11111111-2222-4333-8444-555555555555"}\n', encoding="utf-8")
+    shared_config.write_text(
+        "\n".join(
+            [
+                "tunnel: 11111111-2222-4333-8444-555555555555",
+                f"credentials-file: {shared_credentials}",
+                "ingress:",
+                "- service: http_status:404",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "tunnel_name: 11111111-2222-4333-8444-555555555555",
+                f"sites_root: {tmp_path / 'sites'}",
+                "docker_network: web",
+                "traefik_url: http://localhost:8081",
+                f"cloudflared_config: {shared_config}",
+                "cloudflare_api_token: token",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(bootstrap.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(bootstrap, "SHARED_CONFIG_PATH", shared_config)
+    monkeypatch.setattr(bootstrap, "SYSTEMD_UNIT_PATH", str(tmp_path / "cloudflared.service"))
+    monkeypatch.setattr(bootstrap, "SUDOERS_PATH", str(tmp_path / "sudoers.d" / "homesrvctl-cloudflared"))
+    monkeypatch.setattr(
+        bootstrap,
+        "inspect_cloudflared_systemd_unit",
+        lambda quiet=False: type("Unit", (), {"present": False})(),
+    )
+    monkeypatch.setattr(bootstrap, "_ensure_shared_cloudflared_permissions", lambda config_path, credentials_path, dry_run=False: None)
+    monkeypatch.setattr(bootstrap, "_run_runtime_command", lambda command, dry_run=False: None)
+
+    provisioned = bootstrap.provision_bootstrap_wiring(config_path)
+
+    assert provisioned.ok is True
+    assert provisioned.cloudflared_config_written is False
 
 
 def test_provision_bootstrap_wiring_rejects_missing_credentials(monkeypatch, tmp_path: Path) -> None:
@@ -737,5 +840,6 @@ def test_ensure_shared_cloudflared_permissions_makes_config_group_writable(monke
 
     bootstrap._ensure_shared_cloudflared_permissions(config_path, credentials_path, dry_run=False)
 
+    assert stat.S_IMODE(shared_dir.stat().st_mode) == 0o2770
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o660
     assert stat.S_IMODE(credentials_path.stat().st_mode) == 0o640

@@ -601,6 +601,15 @@ class HomesrvctlTextualApp(App[None]):
         if selected_action == "domain-remove":
             self._push_domain_confirmation("domain-remove", "Confirm Domain Remove", hostname=hostname)
             return
+        if selected_action == "cleanup":
+            self.push_screen(
+                ConfirmActionScreen(
+                    title="Confirm Stack Cleanup",
+                    body=f"Stop and delete the local stack directory for {hostname}?",
+                ),
+                lambda confirmed: self._complete_cleanup_confirmation(hostname, confirmed),
+            )
+            return
         if selected_action == "site-init":
             self._run_stack_action_for_hostname(hostname, "init-site")
             return
@@ -728,7 +737,7 @@ class HomesrvctlTextualApp(App[None]):
             TextEntryScreen(
                 "Traefik URL",
                 "Optional: enter a stack-local ingress target override, or leave blank.",
-                placeholder="http://localhost:8081",
+                placeholder="http://localhost:80",
             ),
             self._complete_create_traefik_url,
         )
@@ -874,6 +883,13 @@ class HomesrvctlTextualApp(App[None]):
             self._render()
             return
         self._run_stack_action_for_hostname(hostname, action)
+
+    def _complete_cleanup_confirmation(self, hostname: str, confirmed: bool) -> None:
+        if not confirmed:
+            self.status_message = f"cleanup cancelled for {hostname}"
+            self._render()
+            return
+        self._run_stack_action_for_hostname(hostname, "cleanup")
 
     def _run_stack_action_for_hostname(self, hostname: str, action: str, template: str | None = None) -> None:
         action_kwargs: dict[str, object] = {}

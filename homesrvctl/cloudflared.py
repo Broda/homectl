@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import urllib.parse
 
 import typer
 import yaml
@@ -219,7 +220,10 @@ def write_bootstrap_cloudflared_config(
     try:
         config_path.write_text(rendered, encoding="utf-8")
     except OSError as exc:
-        raise CloudflaredConfigError(f"unable to write cloudflared config {config_path}: {exc}") from exc
+        raise CloudflaredConfigError(
+            f"unable to write cloudflared config {config_path}: {exc}. "
+            "Run `sudo homesrvctl bootstrap runtime` first to create the shared operator-writable directory."
+        ) from exc
     return True
 
 
@@ -241,6 +245,18 @@ def inspect_cloudflared_config_issues(config_path: Path) -> list[CloudflaredConf
         if str(entry.get("hostname", "")).strip()
     ]
     for index, hostname, service in host_entries:
+        if _looks_like_bootstrap_dashboard_target(service):
+            issues.append(
+                CloudflaredConfigIssue(
+                    code="traefik-dashboard-ingress-target",
+                    severity="advisory",
+                    detail=(
+                        f"ingress hostname {hostname} points to {service}, which looks like the "
+                        "bootstrap Traefik dashboard/API port"
+                    ),
+                    hint="use http://localhost:80 for tunnel ingress to the Traefik web entrypoint",
+                )
+            )
         for later_index, later_hostname, _later_service in host_entries[index + 1 :]:
             if hostname == later_hostname:
                 issues.append(
@@ -289,6 +305,11 @@ def inspect_cloudflared_config_issues(config_path: Path) -> list[CloudflaredConf
                     )
                 )
     return issues
+
+
+def _looks_like_bootstrap_dashboard_target(service: str) -> bool:
+    parsed = urllib.parse.urlparse(service)
+    return parsed.hostname in {"localhost", "127.0.0.1", "::1"} and parsed.port == 8081
 
 
 def find_hostname_route(config_path: Path, hostname: str) -> str | None:

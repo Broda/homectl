@@ -1785,7 +1785,8 @@ def test_cloudflared_restart_dry_run(monkeypatch) -> None:
     result = runner.invoke(app, ["cloudflared", "restart", "--dry-run"])
 
     assert result.exit_code == 0, result.output
-    assert "[dry-run] systemctl restart cloudflared" in result.output
+    assert "[dry-run]" in result.output
+    assert "systemctl restart cloudflared" in result.output
     assert "Dry-run complete for cloudflared restart via systemd" in result.output
 
 
@@ -2103,7 +2104,8 @@ def test_cloudflared_reload_dry_run(monkeypatch) -> None:
     result = runner.invoke(app, ["cloudflared", "reload", "--dry-run"])
 
     assert result.exit_code == 0, result.output
-    assert "[dry-run] systemctl reload cloudflared" in result.output
+    assert "[dry-run]" in result.output
+    assert "systemctl reload cloudflared" in result.output
     assert "Dry-run complete for cloudflared reload via systemd" in result.output
 
 
@@ -2475,8 +2477,8 @@ def test_domain_add_dry_run_uses_api_tunnel_lookup_when_local_uuid_missing(monke
                 "tunnel": "11111111-2222-4333-8444-555555555555",
                 "credentials-file": "/etc/cloudflared/example.json",
                 "ingress": [
-                    {"hostname": "example.com", "service": "http://localhost:8081"},
-                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                        {"hostname": "example.com", "service": "http://localhost:9001"},
+                        {"hostname": "*.example.com", "service": "http://localhost:9001"},
                     {"service": "http_status:404"},
                 ],
             },
@@ -3331,8 +3333,8 @@ def test_domain_remove_dry_run_prints_commands(monkeypatch, tmp_path: Path) -> N
                 "tunnel": "11111111-2222-4333-8444-555555555555",
                 "credentials-file": "/etc/cloudflared/example.json",
                 "ingress": [
-                    {"hostname": "example.com", "service": "http://localhost:8081"},
-                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"hostname": "example.com", "service": "http://localhost:9001"},
+                    {"hostname": "*.example.com", "service": "http://localhost:9001"},
                     {"service": "http_status:404"},
                 ],
             },
@@ -4781,8 +4783,8 @@ def test_domain_status_reports_shadowed_ingress_as_manual_fix(monkeypatch, tmp_p
                 "credentials-file": "/etc/cloudflared/example.json",
                 "ingress": [
                     {"hostname": "*.com", "service": "http://localhost:9000"},
-                    {"hostname": "example.com", "service": "http://localhost:8081"},
-                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"hostname": "example.com", "service": "http://localhost:9001"},
+                    {"hostname": "*.example.com", "service": "http://localhost:9001"},
                     {"service": "http_status:404"},
                 ],
             },
@@ -4848,8 +4850,8 @@ def test_domain_status_json_reports_shadowed_ingress_as_manual_fix(monkeypatch, 
                 "credentials-file": "/etc/cloudflared/example.json",
                 "ingress": [
                     {"hostname": "*.com", "service": "http://localhost:9000"},
-                    {"hostname": "example.com", "service": "http://localhost:8081"},
-                    {"hostname": "*.example.com", "service": "http://localhost:8081"},
+                    {"hostname": "example.com", "service": "http://localhost:9001"},
+                    {"hostname": "*.example.com", "service": "http://localhost:9001"},
                     {"service": "http_status:404"},
                 ],
             },
@@ -5302,6 +5304,70 @@ def test_deploy_json_reports_missing_compose(monkeypatch, tmp_path: Path) -> Non
     assert payload["ok"] is False
     assert payload["stack_dir"] is None
     assert "missing docker-compose.yml" in payload["error"]
+
+
+def test_cleanup_requires_force_for_destructive_delete(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    site_result = runner.invoke(app, ["site", "init", "example.com"])
+    assert site_result.exit_code == 0, site_result.output
+
+    result = runner.invoke(app, ["cleanup", "example.com", "--json"])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "cleanup"
+    assert payload["ok"] is False
+    assert payload["removed"] is False
+    assert "rerun with --force" in payload["error"]
+    assert (sites_root / "example.com").exists()
+
+
+def test_cleanup_dry_run_reports_compose_down_and_remove(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    site_result = runner.invoke(app, ["site", "init", "example.com"])
+    assert site_result.exit_code == 0, site_result.output
+
+    result = runner.invoke(app, ["cleanup", "example.com", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "cleanup"
+    assert payload["dry_run"] is True
+    assert payload["removed"] is False
+    assert payload["commands"][0]["command"] == ["docker", "compose", "down"]
+    assert payload["commands"][1]["command"] == ["rm", "-rf", str(sites_root / "example.com")]
+    assert (sites_root / "example.com").exists()
+
+
+def test_cleanup_force_removes_stack_directory(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    runner = CliRunner()
+    site_result = runner.invoke(app, ["site", "init", "example.com"])
+    assert site_result.exit_code == 0, site_result.output
+    (sites_root / "example.com" / "docker-compose.yml").unlink()
+
+    result = runner.invoke(app, ["cleanup", "example.com", "--force", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "cleanup"
+    assert payload["ok"] is True
+    assert payload["removed"] is True
+    assert not (sites_root / "example.com").exists()
 
 
 def test_validate_json_output(monkeypatch, tmp_path: Path) -> None:

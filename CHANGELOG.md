@@ -9,6 +9,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 ## Unreleased
 
 ### Added
+- Added `homesrvctl cleanup HOST` to stop a stack with Docker Compose and delete its local stack directory after `--force`, with dry-run, JSON, and TUI confirmation support.
+- Added a non-root full-pipeline operator model after one-time bootstrap: shared cloudflared directories are now operator-group writable, `bootstrap wiring` installs a scoped cloudflared restart/reload sudoers policy, and setup reports now surface group/session and service-control readiness.
 - Added `homesrvctl ports list` to report the ports discovered from rendered stack files, including compose environment defaults, Traefik service ports, healthchecks, Dockerfile `EXPOSE`, and fixed Postgres command wiring.
 - Added template-aware `app init --port NAME=PORT` overrides for configurable scaffold ports so generated compose files, runtime defaults, healthchecks, Dockerfiles, and README guidance no longer have to stay pinned to the same repeated internal port values.
 - Added a `rust-react-postgres` app template that scaffolds a Raspberry Pi-friendly three-service stack with a React/Vite frontend served by nginx, an internal Rust API with `/healthz`, and stack-private Postgres behind the existing Cloudflare Tunnel plus Traefik model.
@@ -35,6 +37,9 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - TUI detail-pane polish: stack and domain detail views now use more operator-facing wording such as `compose file: exists`, `has local config: yes/no`, and `repairable: N/A/Yes/No`, and the domain pane now renders DNS and ingress rows in bordered table layouts for faster scanning.
 
 ### Fixed
+- Changed the default tunnel ingress target to `http://localhost:80` so new bootstrap configs route Cloudflare Tunnel traffic to Traefik's public web entrypoint instead of the Traefik dashboard/API port on `8081`.
+- Added diagnostics for cloudflared ingress routes that point at the bootstrap Traefik dashboard/API port, so `domain status`, `doctor`, validation output, and the TUI can surface the misrouting.
+- Fixed `bootstrap runtime` on Ubuntu-family hosts such as Ubuntu 24.04 `noble` so Docker apt sources use Docker's Ubuntu repository instead of incorrectly writing a Debian repository entry.
 - The TUI apex-domain `Create` flow now preserves the underlying `domain add` failure detail in its status message instead of stopping at a generic `domain add failed`.
 - Bare-domain scaffolds now render Traefik host rules for both the apex hostname and `www.<domain>`, so wildcard tunnel traffic for `www` no longer falls through to Traefik's default 404 on freshly scaffolded apex stacks.
 - `domain status` and the TUI stack pane now warn when an explicit `www.<domain>` DNS record overrides the wildcard tunnel route, which catches common legacy-hosting leftovers that apex-plus-wildcard checks alone would miss.

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import typer
 
 from homesrvctl.config import load_config, load_config_details
-from homesrvctl.shell import require_success, run_command
+from homesrvctl.shell import CommandResult, require_success, run_command
 from homesrvctl.utils import info, success, validate_hostname, warn, with_json_schema
 
 
@@ -48,6 +49,76 @@ def down(
     _emit_deploy_result(result, f"docker compose down for {hostname}", hostname, stack_dir, dry_run, json_output, "down")
     if not json_output:
         success(f"{'Would stop' if dry_run else 'Stopped'} stack for {hostname}")
+
+
+def cleanup(
+    hostname: str = typer.Argument(..., help="Hostname stack to stop and delete."),
+    force: bool = typer.Option(False, "--force", help="Actually delete the stack directory."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the cleanup plan without making changes."),
+    json_output: bool = typer.Option(False, "--json", help="Print the result as JSON."),
+) -> None:
+    """Stop a hostname stack and remove its stack directory."""
+    valid_hostname = validate_hostname(hostname)
+    config = load_config()
+    stack_dir = config.hostname_dir(valid_hostname)
+    commands: list[dict[str, object]] = []
+
+    if not stack_dir.exists():
+        _emit_cleanup_failure(valid_hostname, stack_dir, dry_run, json_output, f"hostname directory does not exist: {stack_dir}")
+        return
+    if not force and not dry_run:
+        _emit_cleanup_failure(
+            valid_hostname,
+            stack_dir,
+            dry_run,
+            json_output,
+            "cleanup is destructive; rerun with --force or inspect with --dry-run",
+        )
+        return
+
+    compose_file = stack_dir / "docker-compose.yml"
+    if compose_file.exists():
+        down_result = run_command(["docker", "compose", "down"], cwd=stack_dir, dry_run=dry_run, quiet=json_output)
+        commands.append(_command_result_to_dict(down_result))
+        if not down_result.ok:
+            _emit_cleanup_failure(
+                valid_hostname,
+                stack_dir,
+                dry_run,
+                json_output,
+                down_result.stderr or down_result.stdout or "docker compose down failed",
+                commands=commands,
+            )
+            return
+    elif not json_output:
+        warn(f"No docker-compose.yml found at {compose_file}; only the stack directory will be removed")
+
+    remove_command = ["rm", "-rf", str(stack_dir)]
+    if not json_output:
+        info(f"$ {' '.join(remove_command)}")
+    if dry_run:
+        commands.append(_command_result_to_dict(CommandResult(remove_command, 0, "", "")))
+    else:
+        try:
+            shutil.rmtree(stack_dir)
+        except OSError as exc:
+            commands.append(_command_result_to_dict(CommandResult(remove_command, 1, "", str(exc))))
+            _emit_cleanup_failure(valid_hostname, stack_dir, dry_run, json_output, str(exc), commands=commands)
+            return
+        commands.append(_command_result_to_dict(CommandResult(remove_command, 0, "", "")))
+
+    if json_output:
+        payload = _cleanup_payload(
+            hostname=valid_hostname,
+            stack_dir=stack_dir,
+            dry_run=dry_run,
+            ok=True,
+            commands=commands,
+            removed=not dry_run,
+        )
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    success(f"{'Would clean up' if dry_run else 'Cleaned up'} stack for {valid_hostname}")
 
 
 def restart(
@@ -235,6 +306,51 @@ def _deploy_payload(
     if error:
         payload["error"] = error
     return payload
+
+
+def _cleanup_payload(
+    hostname: str,
+    stack_dir: Path,
+    dry_run: bool,
+    ok: bool,
+    commands: list[dict[str, object]],
+    removed: bool = False,
+    error: str | None = None,
+) -> dict[str, object]:
+    payload = _deploy_payload(
+        hostname=hostname,
+        stack_dir=stack_dir,
+        action="cleanup",
+        dry_run=dry_run,
+        ok=ok,
+        commands=commands,
+        error=error,
+    )
+    payload["removed"] = removed
+    return payload
+
+
+def _emit_cleanup_failure(
+    hostname: str,
+    stack_dir: Path,
+    dry_run: bool,
+    json_output: bool,
+    error: str,
+    commands: list[dict[str, object]] | None = None,
+) -> None:
+    if json_output:
+        payload = _cleanup_payload(
+            hostname=hostname,
+            stack_dir=stack_dir,
+            dry_run=dry_run,
+            ok=False,
+            commands=commands or [],
+            error=error,
+        )
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        warn(error)
+    raise typer.Exit(code=1)
 
 
 def _command_result_to_dict(result) -> dict[str, object]:

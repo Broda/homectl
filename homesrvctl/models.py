@@ -15,7 +15,7 @@ class HomesrvctlConfig:
     tunnel_name: str = "homesrvctl-tunnel"
     sites_root: Path = Path("/srv/homesrvctl/sites")
     docker_network: str = "web"
-    traefik_url: str = "http://localhost:8081"
+    traefik_url: str = "http://localhost:80"
     cloudflared_config: Path = Path("/srv/homesrvctl/cloudflared/config.yml")
     cloudflare_api_token: str = ""
     profiles: dict[str, RoutingProfile] = field(default_factory=dict)

@@ -6,7 +6,7 @@ from homesrvctl.commands.app_cmd import app_cli
 from homesrvctl.commands.bootstrap_cmd import bootstrap_cli
 from homesrvctl.commands.cloudflared_cmd import cloudflared_cli
 from homesrvctl.commands.config_cmd import config_cli
-from homesrvctl.commands.deploy_cmd import doctor, down, list_sites_with_format, restart, up
+from homesrvctl.commands.deploy_cmd import cleanup, doctor, down, list_sites_with_format, restart, up
 from homesrvctl.commands.domain_cmd import domain_cli
 from homesrvctl.commands.ports_cmd import ports_cli
 from homesrvctl.commands.site_cmd import site_cli
@@ -33,6 +33,7 @@ app.add_typer(app_cli, name="app")
 
 app.command("up")(up)
 app.command("down")(down)
+app.command("cleanup")(cleanup)
 app.command("restart")(restart)
 app.command("list")(list_sites_with_format)
 app.command("validate")(validate_with_format)

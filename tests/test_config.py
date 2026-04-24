@@ -27,6 +27,7 @@ def test_init_and_load_config(tmp_path: Path) -> None:
     config = load_config(config_path)
     assert config.tunnel_name == "homesrvctl-tunnel"
     assert str(config.sites_root) == "/srv/homesrvctl/sites"
+    assert config.traefik_url == "http://localhost:80"
     assert str(config.cloudflared_config) == "/srv/homesrvctl/cloudflared/config.yml"
     assert config.cloudflare_api_token == ""
 

@@ -219,7 +219,8 @@ def bootstrap_tunnel(
         if json_output:
             typer.echo(json.dumps(payload, indent=2))
             raise typer.Exit(code=1) from exc
-        raise
+        warn(str(exc))
+        raise typer.Exit(code=1) from exc
 
     payload = with_json_schema(
         {
@@ -301,7 +302,8 @@ def bootstrap_runtime(
         if json_output:
             typer.echo(json.dumps(payload, indent=2))
             raise typer.Exit(code=1) from exc
-        raise
+        warn(str(exc))
+        raise typer.Exit(code=1) from exc
 
     payload = with_json_schema(
         {
@@ -388,6 +390,10 @@ def bootstrap_wiring(
                 "path": provisioned.systemd_path,
                 "written": provisioned.systemd_written,
             },
+            "sudoers": {
+                "path": getattr(provisioned, "sudoers_path", None),
+                "written": getattr(provisioned, "sudoers_written", None),
+            },
             "service_enabled": provisioned.service_enabled,
             "next_steps": provisioned.next_steps,
         }
@@ -405,6 +411,8 @@ def bootstrap_wiring(
     info(f"cloudflared config path: {provisioned.cloudflared_config_path}")
     info(f"credentials path: {provisioned.credentials_path}")
     info(f"systemd {provisioned.systemd_mode}: {provisioned.systemd_path}")
+    if getattr(provisioned, "sudoers_path", None):
+        info(f"sudoers policy: {provisioned.sudoers_path}")
     if provisioned.next_steps:
         typer.echo("")
         info("next steps:")

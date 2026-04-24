@@ -272,6 +272,22 @@ def test_run_stack_action_dispatches_domain_remove(monkeypatch) -> None:
     assert calls == [["domain", "remove", "example.com"]]
 
 
+def test_run_stack_action_dispatches_cleanup_with_force(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(args)
+        return {"ok": True, "removed": True}
+
+    monkeypatch.setattr(data, "run_json_subcommand", fake_run_json_command)
+
+    payload = data.run_stack_action("test.example.com", "cleanup")
+
+    assert payload["ok"] is True
+    assert payload["removed"] is True
+    assert calls == [["cleanup", "test.example.com", "--force"]]
+
+
 def test_run_tool_action_dispatches_to_existing_commands(monkeypatch) -> None:
     calls: list[list[str]] = []
 
@@ -1169,6 +1185,7 @@ def test_stack_action_options_include_domain_actions_for_apex() -> None:
     labels = [label for _, label, _ in options]
 
     assert "app init" in labels
+    assert "cleanup" in labels
     assert "domain add" in labels
     assert "domain remove" in labels
 
@@ -1179,6 +1196,7 @@ def test_stack_action_options_skip_domain_actions_for_subdomains() -> None:
     labels = [label for _, label, _ in options]
 
     assert "app init" in labels
+    assert "cleanup" in labels
     assert "domain add" not in labels
     assert "domain remove" not in labels
 
@@ -2195,6 +2213,45 @@ def test_textual_app_domain_remove_refreshes_status(monkeypatch) -> None:
     assert calls == [("example.com", "domain-remove", {"restart_cloudflared": True})]
     assert app.status_message == "domain remove succeeded for example.com"
     assert app.last_stack_actions["example.com"]["action"] == "domain-remove"
+
+
+def test_textual_app_cleanup_confirmation_runs_action(monkeypatch) -> None:
+    snapshots = [
+        {
+            "generated_at": "2026-04-08 12:00:00",
+            "config": {"ok": True, "global": {"profiles": {}}},
+            "list": {"ok": True, "sites": [{"hostname": "test.example.com", "compose": True}]},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+        {
+            "generated_at": "2026-04-08 12:01:00",
+            "config": {"ok": True, "global": {"profiles": {}}},
+            "list": {"ok": True, "sites": []},
+            "cloudflared": {"ok": True, "mode": "systemd", "active": True, "detail": "systemd service is active"},
+            "validate": {"ok": True, "checks": []},
+        },
+    ]
+    calls: list[tuple[str, str, dict[str, object]]] = []
+    app = textual_app.HomesrvctlTextualApp()
+    app.snapshot = snapshots[0]
+    app.selected_control_index = 5
+
+    monkeypatch.setattr(textual_app, "build_dashboard_snapshot", lambda: snapshots.pop(0))
+    monkeypatch.setattr(
+        textual_app,
+        "run_stack_action",
+        lambda hostname, action, **kwargs: calls.append((hostname, action, kwargs))
+        or {"ok": True, "removed": True},
+    )
+    monkeypatch.setattr(textual_app.HomesrvctlTextualApp, "_render", lambda self: None)
+
+    app._refresh_snapshot("dashboard ready")
+    app._complete_cleanup_confirmation("test.example.com", True)
+
+    assert calls == [("test.example.com", "cleanup", {})]
+    assert app.status_message == "cleanup succeeded for test.example.com"
+    assert app.last_stack_actions["test.example.com"]["action"] == "cleanup"
 
 
 def test_textual_app_app_init_prompt_runs_selected_template(monkeypatch) -> None:

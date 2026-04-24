@@ -11,6 +11,7 @@ from homesrvctl.cloudflared_service import (
     inspect_cloudflared_setup,
     reload_cloudflared_service,
     restart_cloudflared_service,
+    service_control_command,
 )
 from homesrvctl.config import load_config
 from homesrvctl.utils import info, success, warn, with_json_schema
@@ -128,6 +129,18 @@ def cloudflared_setup(
         )
         info(f"ingress mutations available: {'yes' if setup.ingress_mutation_available else 'no'}")
         info(f"account inspection available: {'yes' if getattr(setup, 'account_inspection_available', False) else 'no'}")
+        info(f"current user: {getattr(setup, 'current_user', '<unknown>')}")
+        info(
+            f"in homesrvctl group: {'yes' if getattr(setup, 'current_user_in_shared_group', False) else 'no'}"
+        )
+        info(f"in docker group: {'yes' if getattr(setup, 'current_user_in_docker_group', False) else 'no'}")
+        info(
+            "service control available: "
+            f"{'yes' if getattr(setup, 'service_control_available', False) else 'no'}"
+        )
+        service_command = getattr(setup, "service_control_command", None)
+        if service_command:
+            info(f"service control command: {' '.join(service_command)}")
         info(f"setup state: {getattr(setup, 'setup_state', 'repair needed' if not setup.ok else 'ready')}")
         if getattr(setup, "notes", None):
             for note in setup.notes:
@@ -156,11 +169,13 @@ def cloudflared_restart(
     """Restart cloudflared when it is managed by a supported runtime."""
     runtime = detect_cloudflared_runtime(quiet=json_output)
     if dry_run:
-        if runtime.restart_command:
+        restart_command = service_control_command(runtime.restart_command)
+        if restart_command:
+            display_runtime = _runtime_with_commands(runtime, restart_command=restart_command)
             if json_output:
-                typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=True, dry_run=True)), indent=2))
+                typer.echo(json.dumps(with_json_schema(_runtime_payload(display_runtime, ok=True, dry_run=True)), indent=2))
             else:
-                info(f"[dry-run] {' '.join(runtime.restart_command)}")
+                info(f"[dry-run] {' '.join(restart_command)}")
                 success(f"Dry-run complete for cloudflared restart via {runtime.mode}")
             return
         if json_output:
@@ -202,11 +217,13 @@ def cloudflared_reload(
     """Reload cloudflared when the detected runtime supports it."""
     runtime = detect_cloudflared_runtime(quiet=json_output)
     if dry_run:
-        if runtime.reload_command:
+        reload_command = service_control_command(runtime.reload_command)
+        if reload_command:
+            display_runtime = _runtime_with_commands(runtime, reload_command=reload_command)
             if json_output:
-                typer.echo(json.dumps(with_json_schema(_runtime_payload(runtime, ok=True, dry_run=True)), indent=2))
+                typer.echo(json.dumps(with_json_schema(_runtime_payload(display_runtime, ok=True, dry_run=True)), indent=2))
             else:
-                info(f"[dry-run] {' '.join(runtime.reload_command)}")
+                info(f"[dry-run] {' '.join(reload_command)}")
                 success(f"Dry-run complete for cloudflared reload via {runtime.mode}")
             return
         if json_output:
@@ -363,6 +380,12 @@ def _setup_payload(setup) -> dict[str, object]:  # noqa: ANN001
         "service_user": getattr(setup, "service_user", None),
         "service_group": getattr(setup, "service_group", None),
         "shared_group": getattr(setup, "shared_group", "homesrvctl"),
+        "current_user": getattr(setup, "current_user", None),
+        "current_user_in_shared_group": getattr(setup, "current_user_in_shared_group", None),
+        "current_user_in_docker_group": getattr(setup, "current_user_in_docker_group", None),
+        "service_control_available": getattr(setup, "service_control_available", None),
+        "service_control_command": getattr(setup, "service_control_command", None),
+        "sudoers_path": getattr(setup, "sudoers_path", None),
         "detail": setup.detail,
         "issues": setup.issues,
         "notes": setup.notes or [],
@@ -397,3 +420,9 @@ def _logs_command(runtime, follow: bool) -> list[str] | None:  # noqa: ANN001
     if runtime.mode == "docker":
         return runtime.logs_command[:-1] + ["--follow", runtime.logs_command[-1]]
     return runtime.logs_command
+
+
+def _runtime_with_commands(runtime, *, restart_command=None, reload_command=None):  # noqa: ANN001, ANN202
+    runtime.restart_command = restart_command if restart_command is not None else runtime.restart_command
+    runtime.reload_command = reload_command if reload_command is not None else runtime.reload_command
+    return runtime

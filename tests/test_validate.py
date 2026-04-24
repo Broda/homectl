@@ -293,14 +293,14 @@ def test_build_hostname_doctor_report_includes_ingress_issues(monkeypatch, tmp_p
     (stack_dir / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     cloudflared_config = tmp_path / "cloudflared.yml"
     cloudflared_config.write_text(
-        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:9001\n  - service: http_status:404\n",
         encoding="utf-8",
     )
     config = HomesrvctlConfig(
         tunnel_name="homesrvctl-tunnel",
         sites_root=tmp_path / "sites",
         docker_network="web",
-        traefik_url="http://localhost:8081",
+        traefik_url="http://localhost:9001",
         cloudflared_config=cloudflared_config,
     )
 
@@ -538,7 +538,7 @@ def test_build_validate_report_uses_quiet_probes_when_requested(monkeypatch, tmp
 def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path: Path) -> None:
     cloudflared_config = tmp_path / "cloudflared.yml"
     cloudflared_config.write_text(
-        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:9001\n  - service: http_status:404\n",
         encoding="utf-8",
     )
 
@@ -547,10 +547,25 @@ def test_collect_cloudflared_config_warnings_reports_shadowing_wildcard(tmp_path
     assert warnings == []
 
 
+def test_collect_cloudflared_config_warnings_reports_bootstrap_dashboard_target(tmp_path: Path) -> None:
+    cloudflared_config = tmp_path / "cloudflared.yml"
+    cloudflared_config.write_text(
+        "tunnel: 1234-uuid\ningress:\n  - hostname: example.com\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+
+    warnings = collect_cloudflared_config_warnings(cloudflared_config)
+
+    assert warnings == [
+        "ingress hostname example.com points to http://localhost:8081, which looks like the bootstrap Traefik dashboard/API port. "
+        "Hint: use http://localhost:80 for tunnel ingress to the Traefik web entrypoint"
+    ]
+
+
 def test_collect_cloudflared_config_warnings_reports_wildcard_precedence_risk(tmp_path: Path) -> None:
     cloudflared_config = tmp_path / "cloudflared.yml"
     cloudflared_config.write_text(
-        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: '*.example.com'\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: '*.example.com'\n    service: http://localhost:9001\n  - service: http_status:404\n",
         encoding="utf-8",
     )
 
@@ -568,7 +583,7 @@ def test_collect_cloudflared_config_issues_reports_blocking_shadowed_hostname(tm
 
     cloudflared_config = tmp_path / "cloudflared.yml"
     cloudflared_config.write_text(
-        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:8081\n  - service: http_status:404\n",
+        "tunnel: 1234-uuid\ningress:\n  - hostname: '*.com'\n    service: http://localhost:9000\n  - hostname: example.com\n    service: http://localhost:9001\n  - service: http_status:404\n",
         encoding="utf-8",
     )
 

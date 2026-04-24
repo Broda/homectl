@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import pwd
 import shlex
+import shutil
 import stat
 
 import typer
@@ -20,6 +21,7 @@ SHARED_CONFIG_DIR = Path("/srv/homesrvctl/cloudflared")
 SHARED_CONFIG_PATH = SHARED_CONFIG_DIR / "config.yml"
 SYSTEMD_OVERRIDE_PATH = "/etc/systemd/system/cloudflared.service.d/override.conf"
 SYSTEMD_UNIT_PATH = "/etc/systemd/system/cloudflared.service"
+SUDOERS_PATH = "/etc/sudoers.d/homesrvctl-cloudflared"
 
 
 @dataclass(slots=True)
@@ -67,6 +69,12 @@ class CloudflaredSetupReport:
     service_user: str | None
     service_group: str | None
     shared_group: str
+    current_user: str
+    current_user_in_shared_group: bool
+    current_user_in_docker_group: bool
+    service_control_available: bool
+    service_control_command: list[str] | None
+    sudoers_path: str
     detail: str
     issues: list[str]
     next_commands: list[str]
@@ -153,11 +161,18 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
     target_config_path = SHARED_CONFIG_PATH if unit.present else config_path
     target_credentials_path: Path | None = None
     override_content = render_cloudflared_systemd_override(target_config_path) if unit.present else None
+    current_user_groups = _current_user_groups()
+    current_user_in_shared_group = SHARED_GROUP_NAME in current_user_groups
+    current_user_in_docker_group = "docker" in current_user_groups
+    service_control_command = _service_control_command(["systemctl", "restart", "cloudflared"])
+    service_control_available = _service_control_available()
 
     if not configured_exists:
         issues.append(f"configured cloudflared config is missing: {config_path}")
     if not configured_writable:
         issues.append(f"configured cloudflared config is not writable by the current user: {config_path}")
+    if os.geteuid() != 0 and not current_user_in_shared_group:
+        issues.append(f"current user is not in the {SHARED_GROUP_NAME} group")
     if unit.present and runtime_path and not paths_aligned:
         issues.append(
             f"systemd cloudflared service uses {runtime_path}, but homesrvctl is configured for {config_path}"
@@ -202,6 +217,12 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
         notes.append(
             f"{resolved_runtime.mode} runtime detected; automatic setup repair is only modeled for systemd in this slice"
         )
+    if unit.present and os.geteuid() != 0 and not service_control_available:
+        issues.append(
+            "cloudflared service restart/reload is not available to the current user; run `sudo homesrvctl bootstrap wiring`"
+        )
+    if os.geteuid() != 0 and not current_user_in_docker_group:
+        notes.append("current user is not in the docker group; stack lifecycle commands may fail")
     if resolved_runtime.mode == "absent" and not unit.present:
         notes.append("cloudflared runtime not detected; setup guidance is based on the configured path only")
 
@@ -264,6 +285,12 @@ def inspect_cloudflared_setup(config_path: Path, *, runtime: CloudflaredRuntime 
         service_user=unit.user,
         service_group=unit.group,
         shared_group=SHARED_GROUP_NAME,
+        current_user=current_user,
+        current_user_in_shared_group=current_user_in_shared_group,
+        current_user_in_docker_group=current_user_in_docker_group,
+        service_control_available=service_control_available,
+        service_control_command=service_control_command,
+        sudoers_path=SUDOERS_PATH,
         detail=detail,
         issues=issues,
         next_commands=next_commands,
@@ -308,7 +335,13 @@ def restart_cloudflared_service() -> CloudflaredRuntime:
     if runtime.restart_command is None:
         raise CloudflaredServiceError(f"{runtime.detail}; restart cloudflared manually")
 
-    result = run_command(runtime.restart_command)
+    command = _service_control_command(runtime.restart_command)
+    if command is None:
+        raise CloudflaredServiceError(
+            f"{runtime.detail}; restart cloudflared manually or run `sudo homesrvctl bootstrap wiring`"
+        )
+
+    result = run_command(command)
     if not result.ok:
         detail = result.stderr or result.stdout or "command failed"
         raise CloudflaredServiceError(f"{runtime.mode} restart failed: {detail}")
@@ -322,7 +355,13 @@ def reload_cloudflared_service() -> CloudflaredRuntime:
     if runtime.reload_command is None:
         raise CloudflaredServiceError(f"{runtime.detail}; reload is not supported for this runtime")
 
-    result = run_command(runtime.reload_command)
+    command = _service_control_command(runtime.reload_command)
+    if command is None:
+        raise CloudflaredServiceError(
+            f"{runtime.detail}; reload cloudflared manually or run `sudo homesrvctl bootstrap wiring`"
+        )
+
+    result = run_command(command)
     if not result.ok:
         detail = result.stderr or result.stdout or "command failed"
         raise CloudflaredServiceError(f"{runtime.mode} reload failed: {detail}")
@@ -365,6 +404,45 @@ def _path_is_writable(path: Path) -> bool:
     except OSError:
         return False
     return target.exists() and os.access(target, os.W_OK)
+
+
+def _current_user_groups() -> set[str]:
+    user = getpass.getuser()
+    groups: set[str] = set()
+    try:
+        primary_gid = pwd.getpwnam(user).pw_gid
+        groups.add(grp.getgrgid(primary_gid).gr_name)
+    except KeyError:
+        pass
+    for group in grp.getgrall():
+        if user in group.gr_mem:
+            groups.add(group.gr_name)
+    return groups
+
+
+def _service_control_command(command: list[str] | None) -> list[str] | None:
+    if command is None:
+        return None
+    if os.geteuid() == 0:
+        return command
+    if command[:2] != ["systemctl", "restart"] and command[:2] != ["systemctl", "reload"]:
+        return command
+    if len(command) != 3 or command[2] != "cloudflared":
+        return command
+    sudo = shutil.which("sudo")
+    if sudo is None:
+        return None
+    return [sudo, "-n", *command]
+
+
+def service_control_command(command: list[str] | None) -> list[str] | None:
+    return _service_control_command(command)
+
+
+def _service_control_available() -> bool:
+    if os.geteuid() == 0:
+        return True
+    return shutil.which("sudo") is not None and _path_exists(Path(SUDOERS_PATH))
 
 
 def _systemd_override_content(config_path: Path) -> str:
@@ -419,7 +497,7 @@ def _systemd_setup_commands(
     commands = [
         f"sudo groupadd -f {SHARED_GROUP_NAME}",
         f"sudo usermod -aG {SHARED_GROUP_NAME} {current_user}",
-        f"sudo install -d -o root -g {SHARED_GROUP_NAME} -m 750 {shlex.quote(str(SHARED_CONFIG_DIR))}",
+        f"sudo install -d -o root -g {SHARED_GROUP_NAME} -m 2770 {shlex.quote(str(SHARED_CONFIG_DIR))}",
     ]
     source_config_path = configured_path if _path_exists(configured_path) else runtime_path
     if source_config_path is not None and not _path_exists(source_config_path):
@@ -450,11 +528,26 @@ def _systemd_setup_commands(
             [
                 "sudo install -d -m 755 /etc/systemd/system/cloudflared.service.d",
                 f"sudo tee {override_path} >/dev/null <<'EOF'\n{override_content}\nEOF",
+                f"sudo tee {SUDOERS_PATH} >/dev/null <<'EOF'\n{render_cloudflared_sudoers()}\nEOF",
+                f"sudo chmod 440 {SUDOERS_PATH}",
+                f"sudo visudo -cf {SUDOERS_PATH}",
                 "sudo systemctl daemon-reload",
                 "sudo systemctl restart cloudflared",
             ]
         )
     return commands
+
+
+def render_cloudflared_sudoers(systemctl_path: str | None = None) -> str:
+    resolved_systemctl = systemctl_path or shutil.which("systemctl") or "/usr/bin/systemctl"
+    return "\n".join(
+        [
+            "# Managed by homesrvctl.",
+            f"%{SHARED_GROUP_NAME} ALL=(root) NOPASSWD: "
+            f"{resolved_systemctl} restart cloudflared, {resolved_systemctl} reload cloudflared",
+            "",
+        ]
+    )
 
 
 def _render_target_config_content(config_path: Path | None, target_credentials_path: Path | None) -> str | None:

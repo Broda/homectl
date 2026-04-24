@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import typer
@@ -137,6 +138,7 @@ def build_hostname_doctor_report(
 
     checks.append(_check_cloudflared_hostname(config, valid_hostname))
     checks.extend(_check_cloudflared_ingress_warnings(config))
+    checks.append(_check_ingress_target_entrypoint(stack_settings.traefik_url))
     checks.append(_check_host_header(stack_settings.traefik_url, valid_hostname))
     return checks
 
@@ -187,6 +189,18 @@ def _check_host_header(traefik_url: str, hostname: str) -> CheckResult:
         return CheckResult("host-header request", True, f"{hostname} returned HTTP {exc.code}")
     except urllib.error.URLError as exc:
         return CheckResult("host-header request", False, f"request failed: {exc}")
+
+
+def _check_ingress_target_entrypoint(traefik_url: str) -> CheckResult:
+    parsed = urllib.parse.urlparse(traefik_url)
+    if parsed.hostname in {"localhost", "127.0.0.1", "::1"} and parsed.port == 8081:
+        return CheckResult(
+            "ingress target entrypoint",
+            False,
+            f"{traefik_url} looks like the bootstrap Traefik dashboard/API port; use http://localhost:80 for tunnel ingress",
+            "advisory",
+        )
+    return CheckResult("ingress target entrypoint", True, f"{traefik_url} looks like an application entrypoint")
 
 
 def _check_cloudflared_hostname(config: HomesrvctlConfig, hostname: str) -> CheckResult:

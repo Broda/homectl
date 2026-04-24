@@ -174,6 +174,8 @@ def run_stack_action(
         return run_json_subcommand(["restart", hostname])
     if action == "down":
         return run_json_subcommand(["down", hostname])
+    if action == "cleanup":
+        return run_json_subcommand(["cleanup", hostname, "--force"])
     raise ValueError(f"unsupported stack action: {action}")
 
 
@@ -852,6 +854,16 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
                     "ingress mutations available",
                     "yes" if payload.get("ingress_mutation_available") else "no",
                 ),
+                ("current user", str(payload.get("current_user") or "<unknown>")),
+                (
+                    "in homesrvctl group",
+                    "yes" if payload.get("current_user_in_shared_group") else "no",
+                ),
+                ("in docker group", "yes" if payload.get("current_user_in_docker_group") else "no"),
+                (
+                    "service control available",
+                    "yes" if payload.get("service_control_available") else "no",
+                ),
             ]
         ),
     ]
@@ -869,6 +881,10 @@ def render_cloudflared_setup_detail(payload: dict[str, object]) -> list[str]:
         metadata_items.append(("service group", str(payload.get("service_group"))))
     if payload.get("shared_group"):
         metadata_items.append(("shared group", str(payload.get("shared_group"))))
+    if payload.get("sudoers_path"):
+        metadata_items.append(("sudoers path", str(payload.get("sudoers_path"))))
+    if payload.get("service_control_command"):
+        metadata_items.append(("service control", " ".join(str(part) for part in payload.get("service_control_command", []))))
     if metadata_items:
         lines.extend(["", *format_key_value_lines(metadata_items)])
 

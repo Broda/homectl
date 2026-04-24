@@ -86,6 +86,7 @@ def stack_action_options(is_apex_domain: bool) -> list[tuple[str, str, str]]:
         ("up", "up", "Start the stack with docker compose."),
         ("restart", "restart", "Restart the stack."),
         ("down", "down", "Stop the stack."),
+        ("cleanup", "cleanup", "Stop and delete the stack directory."),
     ]
     if is_apex_domain:
         options.extend(

@@ -6,10 +6,12 @@ import json
 import os
 from pathlib import Path
 import pwd
+import shutil
 import urllib.error
 import urllib.request
 
 import typer
+import yaml
 
 from homesrvctl import __version__
 from homesrvctl.cloudflare import (
@@ -27,6 +29,7 @@ from homesrvctl.cloudflared import (
 from homesrvctl.cloudflared_service import detect_cloudflared_runtime
 from homesrvctl.cloudflared_service import (
     SHARED_CONFIG_PATH,
+    SUDOERS_PATH,
     SYSTEMD_OVERRIDE_PATH,
     SYSTEMD_UNIT_PATH,
     CloudflaredSetupReport,
@@ -34,6 +37,7 @@ from homesrvctl.cloudflared_service import (
     inspect_cloudflared_setup,
     render_cloudflared_systemd_override,
     render_cloudflared_systemd_unit,
+    render_cloudflared_sudoers,
     render_cloudflared_target_config_content,
 )
 from homesrvctl.config import default_config_data, default_config_path, init_config, load_config_details, update_config
@@ -41,7 +45,7 @@ from homesrvctl.models import CheckResult, HomesrvctlConfig
 from homesrvctl.shell import command_exists, run_command
 
 
-DOCKER_APT_KEY_URL = "https://download.docker.com/linux/debian/gpg"
+DOCKER_APT_KEY_URL_BASE = "https://download.docker.com/linux"
 DOCKER_APT_SOURCE_PATH = Path("/etc/apt/sources.list.d/docker.list")
 DOCKER_APT_KEYRING_PATH = Path("/etc/apt/keyrings/docker.asc")
 CLOUDFLARED_APT_KEY_URL = "https://pkg.cloudflare.com/cloudflare-main.gpg"
@@ -125,6 +129,8 @@ class BootstrapWiringProvisioning:
     systemd_mode: str
     systemd_path: str
     systemd_written: bool
+    sudoers_path: str
+    sudoers_written: bool
     service_enabled: bool
     next_steps: list[str]
 
@@ -193,6 +199,7 @@ def provision_bootstrap_tunnel(
             credentials_path=credentials_path,
             force=force,
         )
+        _normalize_bootstrap_tunnel_permissions(config.cloudflared_config, credentials_path)
         tunnel_id_value = tunnel_id
         tunnel_name_value = existing_tunnel.name
         config_src = "local"
@@ -219,6 +226,7 @@ def provision_bootstrap_tunnel(
             credentials_path=credentials_path,
             force=force,
         )
+        _normalize_bootstrap_tunnel_permissions(config.cloudflared_config, credentials_path)
         detail = f"created Cloudflare tunnel {tunnel_name_value} ({tunnel_id_value})"
 
     config_updated = config.tunnel_name != tunnel_id_value
@@ -267,13 +275,20 @@ def provision_bootstrap_runtime(
 
     config_info, config = _config_assessment(target_path)
     resolved_operator_user = _resolve_operator_user(operator_user)
-    codename = _debian_codename(os_info)
+    codename = _apt_codename(os_info)
+    docker_repo_family = _docker_repo_family(os_info)
     architecture = _dpkg_architecture(dry_run=dry_run)
     package_commands = _runtime_package_commands(codename=codename, architecture=architecture)
 
+    _remove_stale_docker_repo_file(dry_run=dry_run)
     for command in package_commands[:2]:
         _run_runtime_command(command, dry_run=dry_run)
-    _write_runtime_repo_files(codename=codename, architecture=architecture, dry_run=dry_run)
+    _write_runtime_repo_files(
+        codename=codename,
+        architecture=architecture,
+        docker_repo_family=docker_repo_family,
+        dry_run=dry_run,
+    )
     for command in package_commands[2:]:
         _run_runtime_command(command, dry_run=dry_run)
 
@@ -343,7 +358,7 @@ def provision_bootstrap_wiring(
     if rendered_config is None:
         rendered_config = _render_minimal_bootstrap_cloudflared_config(config, credentials_target_path)
 
-    cloudflared_config_written = _write_text_if_changed(
+    cloudflared_config_written = _write_cloudflared_config_if_changed(
         SHARED_CONFIG_PATH,
         rendered_config,
         force=force,
@@ -371,7 +386,15 @@ def provision_bootstrap_wiring(
         systemd_path = SYSTEMD_UNIT_PATH
         systemd_content = render_cloudflared_systemd_unit(SHARED_CONFIG_PATH)
     systemd_written = _write_text_if_changed(Path(systemd_path), systemd_content, force=force, dry_run=dry_run)
+    sudoers_written = _write_text_if_changed(
+        Path(SUDOERS_PATH),
+        render_cloudflared_sudoers(_systemctl_path()),
+        force=force,
+        dry_run=dry_run,
+    )
     if not dry_run:
+        os.chmod(SUDOERS_PATH, 0o440)
+        _run_runtime_command(["visudo", "-cf", SUDOERS_PATH], dry_run=False)
         _run_runtime_command(["systemctl", "daemon-reload"], dry_run=False)
         _run_runtime_command(["systemctl", "enable", "--now", "cloudflared"], dry_run=False)
 
@@ -397,6 +420,8 @@ def provision_bootstrap_wiring(
         systemd_mode=systemd_mode,
         systemd_path=systemd_path,
         systemd_written=systemd_written,
+        sudoers_path=SUDOERS_PATH,
+        sudoers_written=sudoers_written,
         service_enabled=True,
         next_steps=next_steps,
     )
@@ -684,7 +709,9 @@ def _os_assessment() -> dict[str, object]:
     detail = "Debian-family host detected" if supported else f"unsupported OS family: {os_id or 'unknown'}"
     return {
         "id": os_id or "unknown",
+        "id_like": sorted(id_like),
         "version_id": parsed.get("VERSION_ID", "").strip(),
+        "version_codename": parsed.get("VERSION_CODENAME", "").strip(),
         "pretty_name": parsed.get("PRETTY_NAME", "unknown").strip(),
         "supported": supported,
         "detail": detail,
@@ -989,6 +1016,12 @@ def _bootstrap_setup_payload(setup: CloudflaredSetupReport) -> dict[str, object]
         "service_user": setup.service_user,
         "service_group": setup.service_group,
         "shared_group": setup.shared_group,
+        "current_user": getattr(setup, "current_user", None),
+        "current_user_in_shared_group": getattr(setup, "current_user_in_shared_group", None),
+        "current_user_in_docker_group": getattr(setup, "current_user_in_docker_group", None),
+        "service_control_available": getattr(setup, "service_control_available", None),
+        "service_control_command": getattr(setup, "service_control_command", None),
+        "sudoers_path": getattr(setup, "sudoers_path", None),
         "detail": setup.detail,
         "issues": setup.issues,
         "notes": setup.notes or [],
@@ -1029,8 +1062,8 @@ def _bootstrap_validation_next_steps(
     return list(dict.fromkeys(steps))
 
 
-def _debian_codename(os_info: dict[str, object]) -> str:
-    codename = os.environ.get("VERSION_CODENAME", "").strip()
+def _apt_codename(os_info: dict[str, object]) -> str:
+    codename = str(os_info.get("version_codename", "")).strip()
     if codename:
         return codename
     os_release = Path("/etc/os-release")
@@ -1038,7 +1071,19 @@ def _debian_codename(os_info: dict[str, object]) -> str:
         for line in os_release.read_text(encoding="utf-8").splitlines():
             if line.startswith("VERSION_CODENAME="):
                 return line.split("=", 1)[1].strip().strip('"')
-    raise typer.BadParameter("could not determine Debian codename for package repository setup")
+    raise typer.BadParameter("could not determine apt codename for package repository setup")
+
+
+def _docker_repo_family(os_info: dict[str, object]) -> str:
+    os_id = str(os_info.get("id", "")).strip().lower()
+    raw_id_like = os_info.get("id_like", [])
+    if isinstance(raw_id_like, list):
+        id_like = {str(item).strip().lower() for item in raw_id_like if str(item).strip()}
+    else:
+        id_like = {item.strip().lower() for item in str(raw_id_like).split() if item.strip()}
+    if os_id == "ubuntu" or "ubuntu" in id_like:
+        return "ubuntu"
+    return "debian"
 
 
 def _render_minimal_bootstrap_cloudflared_config(config: HomesrvctlConfig, credentials_path: Path) -> str:
@@ -1095,10 +1140,11 @@ def _run_runtime_command(command: list[str], *, dry_run: bool) -> None:
     )
 
 
-def _write_runtime_repo_files(*, codename: str, architecture: str, dry_run: bool) -> None:
+def _write_runtime_repo_files(*, codename: str, architecture: str, docker_repo_family: str, dry_run: bool) -> None:
+    docker_apt_key_url = f"{DOCKER_APT_KEY_URL_BASE}/{docker_repo_family}/gpg"
     _ensure_file_content(
         DOCKER_APT_KEYRING_PATH,
-        _fetch_url_bytes(DOCKER_APT_KEY_URL, dry_run=dry_run),
+        _fetch_url_bytes(docker_apt_key_url, dry_run=dry_run),
         dry_run=dry_run,
     )
     _ensure_file_content(
@@ -1106,7 +1152,7 @@ def _write_runtime_repo_files(*, codename: str, architecture: str, dry_run: bool
         (
             "deb [arch="
             f"{architecture} signed-by={DOCKER_APT_KEYRING_PATH}"
-            "] https://download.docker.com/linux/debian "
+            f"] https://download.docker.com/linux/{docker_repo_family} "
             f"{codename} stable\n"
         ).encode("utf-8"),
         dry_run=dry_run,
@@ -1125,6 +1171,15 @@ def _write_runtime_repo_files(*, codename: str, architecture: str, dry_run: bool
         ).encode("utf-8"),
         dry_run=dry_run,
     )
+
+
+def _remove_stale_docker_repo_file(*, dry_run: bool) -> bool:
+    if not DOCKER_APT_SOURCE_PATH.exists():
+        return False
+    if dry_run:
+        return True
+    DOCKER_APT_SOURCE_PATH.unlink()
+    return True
 
 
 def _fetch_url_bytes(url: str, *, dry_run: bool) -> bytes:
@@ -1161,6 +1216,17 @@ def _write_text_if_changed(path: Path, content: str, *, force: bool, dry_run: bo
     return True
 
 
+def _write_cloudflared_config_if_changed(path: Path, content: str, *, force: bool, dry_run: bool) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    if existing is not None:
+        try:
+            if yaml.safe_load(existing) == yaml.safe_load(content):
+                return False
+        except yaml.YAMLError:
+            pass
+    return _write_text_if_changed(path, content, force=force, dry_run=dry_run)
+
+
 def _copy_if_changed(source: Path | None, target: Path, *, force: bool, dry_run: bool) -> bool:
     if source is None:
         return False
@@ -1174,7 +1240,7 @@ def _ensure_shared_cloudflared_permissions(config_path: Path, credentials_path: 
     except KeyError as exc:
         raise typer.BadParameter("homesrvctl group is missing; run `sudo homesrvctl bootstrap runtime` first") from exc
     specs = [
-        (config_path.parent, 0o750, False, True),
+        (config_path.parent, 0o2770, False, True),
         (config_path, 0o660, True, False),
         (credentials_path, 0o640, True, False),
     ]
@@ -1215,7 +1281,7 @@ def _ensure_runtime_directories(config: HomesrvctlConfig, *, dry_run: bool) -> l
     specs = [
         (HOMESRVCTL_ROOT, 0o755),
         (config.sites_root, 0o2775),
-        (config.cloudflared_config.parent, 0o2750),
+        (config.cloudflared_config.parent, 0o2770),
         (TRAEFIK_DIR, 0o2775),
     ]
     actions: list[dict[str, object]] = []
@@ -1318,8 +1384,26 @@ def _write_tunnel_credentials(credentials_path: Path, payload: dict[str, object]
     try:
         credentials_path.write_text(rendered, encoding="utf-8")
     except OSError as exc:
-        raise typer.BadParameter(f"unable to write tunnel credentials {credentials_path}: {exc}") from exc
+        raise typer.BadParameter(
+            f"unable to write tunnel credentials {credentials_path}: {exc}. "
+            "Run `sudo homesrvctl bootstrap runtime` first to create the shared operator-writable directory."
+        ) from exc
     return True
+
+
+def _normalize_bootstrap_tunnel_permissions(config_path: Path, credentials_path: Path) -> None:
+    for path, mode in ((config_path, 0o660), (credentials_path, 0o640)):
+        try:
+            os.chmod(path, mode)
+        except OSError as exc:
+            raise typer.BadParameter(
+                f"unable to set permissions on {path}: {exc}. "
+                "Run `sudo homesrvctl bootstrap runtime` first to create the shared operator-writable directory."
+            ) from exc
+
+
+def _systemctl_path() -> str:
+    return shutil.which("systemctl") or "/usr/bin/systemctl"
 
 
 def _existing_tunnel_credentials_path(config: HomesrvctlConfig, tunnel_id: str) -> Path | None:
