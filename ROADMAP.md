@@ -33,7 +33,7 @@ Current baseline:
 - The TUI is functionally complete for common local onboarding.
 - It can create stacks, onboard apex domains, inspect routing/domain state, run stack actions, and expose global tools.
 - Recent polish replaced several raw boolean values and normalized `yes/no`, `N/A`, and `exists/does not exist` wording across visible detail panes.
-- Repeated checks, command results, DNS records, and ingress routes use bordered table-style layouts where scanning across repeated rows matters.
+- Repeated checks, command results, DNS records, and ingress routes use rounded Unicode table-style layouts where scanning across repeated rows matters.
 - Single-value sections keep compact key/value rows, and long free-form repair guidance remains list-oriented so commands stay readable.
 
 Success criteria:

@@ -894,15 +894,17 @@ def render_bordered_table(headers: list[str], rows: list[list[str]]) -> list[str
 
     def _render_row(cells: list[str]) -> str:
         padded = [str(cell).ljust(widths[index]) for index, cell in enumerate(cells[: len(headers)])]
-        return f"| {' | '.join(padded)} |"
+        return f"│ {' │ '.join(padded)} │"
 
-    border = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+    top_border = "╭─" + "─┬─".join("─" * width for width in widths) + "─╮"
+    header_border = "├─" + "─┼─".join("─" * width for width in widths) + "─┤"
+    bottom_border = "╰─" + "─┴─".join("─" * width for width in widths) + "─╯"
     return [
-        border,
+        top_border,
         _render_row(headers),
-        border,
+        header_border,
         *[_render_row(row) for row in rows],
-        border,
+        bottom_border,
     ]
 
 
