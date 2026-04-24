@@ -63,6 +63,7 @@ At minimum:
 - run compile plus tests for code changes
 - run the build step when packaging, release, or metadata changes are involved
 - run `scripts/check_wiki_sync.sh` when user-facing behavior, scaffolds, commands, or docs changed and a sibling wiki checkout is present
+- after pushing commits or tags that trigger GitHub Actions, watch the triggered workflow run with `gh run watch --exit-status` or equivalent and report whether CI completed successfully; if CI fails, inspect the failing logs before handing the task back
 
 ## Architectural Boundaries
 
