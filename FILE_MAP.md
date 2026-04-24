@@ -65,6 +65,8 @@ This document is a quick orientation guide to the repository. It is intentionall
 
 - [`homesrvctl/commands/config_cmd.py`](homesrvctl/commands/config_cmd.py)
   `config init` and related config-surface commands.
+- [`homesrvctl/commands/install_cmd.py`](homesrvctl/commands/install_cmd.py)
+  `version` and `install status` diagnostics for package version, executable path, and pipx command-path conflicts.
 - [`homesrvctl/commands/bootstrap_cmd.py`](homesrvctl/commands/bootstrap_cmd.py)
   Fresh-host bootstrap assessment, readiness reporting, and tunnel/runtime/wiring provisioning command surface.
 - [`homesrvctl/commands/site_cmd.py`](homesrvctl/commands/site_cmd.py)

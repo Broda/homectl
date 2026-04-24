@@ -8,6 +8,7 @@ from homesrvctl.commands.cloudflared_cmd import cloudflared_cli
 from homesrvctl.commands.config_cmd import config_cli
 from homesrvctl.commands.deploy_cmd import cleanup, doctor, down, list_sites_with_format, restart, up
 from homesrvctl.commands.domain_cmd import domain_cli
+from homesrvctl.commands.install_cmd import install_cli, version
 from homesrvctl.commands.ports_cmd import ports_cli
 from homesrvctl.commands.site_cmd import site_cli
 from homesrvctl.commands.tunnel_cmd import tunnel_cli
@@ -28,6 +29,7 @@ app.add_typer(cloudflared_cli, name="cloudflared")
 app.add_typer(domain_cli, name="domain")
 app.add_typer(tunnel_cli, name="tunnel")
 app.add_typer(ports_cli, name="ports")
+app.add_typer(install_cli, name="install")
 app.add_typer(site_cli, name="site")
 app.add_typer(app_cli, name="app")
 
@@ -39,6 +41,7 @@ app.command("list")(list_sites_with_format)
 app.command("validate")(validate_with_format)
 app.command("doctor")(doctor)
 app.command("tui")(tui)
+app.command("version")(version)
 
 
 @app.callback()

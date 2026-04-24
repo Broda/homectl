@@ -9,6 +9,7 @@ import yaml
 from typer.testing import CliRunner
 
 from homesrvctl.cloudflared_service import CloudflaredRuntime
+from homesrvctl.commands import install_cmd
 from homesrvctl.main import app
 
 
@@ -6033,3 +6034,50 @@ def test_list_json_reports_missing_sites_root(monkeypatch, tmp_path: Path) -> No
     assert payload["ok"] is False
     assert payload["sites"] == []
     assert "Sites root does not exist" in payload["error"]
+
+
+def test_version_json_output(monkeypatch) -> None:
+    monkeypatch.setattr(install_cmd.shutil, "which", lambda command: "/home/test/.local/bin/homesrvctl")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["version", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["ok"] is True
+    assert payload["version"] == install_cmd.__version__
+    assert payload["path_command"] == "/home/test/.local/bin/homesrvctl"
+
+
+def test_install_status_json_reports_stale_user_bin_conflict(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    user_bin_dir = home / ".local/bin"
+    pipx_bin_dir = home / ".local/share/pipx/venvs/homesrvctl/bin"
+    user_bin_dir.mkdir(parents=True)
+    pipx_bin_dir.mkdir(parents=True)
+    stale_command = user_bin_dir / "homesrvctl"
+    pipx_command = pipx_bin_dir / "homesrvctl"
+    stale_command.write_text("#!/bin/sh\n", encoding="utf-8")
+    pipx_command.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(install_cmd.shutil, "which", lambda command: str(stale_command))
+    monkeypatch.setattr(install_cmd.sys, "executable", str(tmp_path / "repo/.venv/bin/python"))
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["install", "status", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _assert_schema_version(payload)
+    assert payload["ok"] is False
+    assert payload["install_state"] == "attention"
+    assert payload["pipx_installed"] is True
+    assert payload["user_bin_exists"] is True
+    assert payload["user_bin_points_to_pipx"] is False
+    assert any("does not point to the pipx homesrvctl executable" in issue for issue in payload["issues"])
+    assert payload["next_commands"][:3] == [
+        f"mv {stale_command} {stale_command}.old",
+        "pipx ensurepath",
+        "pipx reinstall homesrvctl",
+    ]

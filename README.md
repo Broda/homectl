@@ -38,7 +38,20 @@ For an already-built platform, `homesrvctl` manages domains, scaffolds, validati
 From PyPI:
 
 ```bash
-pip install homesrvctl
+pipx install homesrvctl
+```
+
+Upgrade an existing PyPI install:
+
+```bash
+pipx upgrade homesrvctl
+```
+
+If `pipx` reports that `~/.local/bin/homesrvctl` already exists and is not the expected pipx symlink, inspect the active command path:
+
+```bash
+homesrvctl version --json
+homesrvctl install status
 ```
 
 From a tagged GitHub release:
