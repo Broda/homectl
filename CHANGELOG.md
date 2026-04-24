@@ -16,6 +16,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ### Fixed
 - Fixed TUI table column alignment when cells contain Rich color markup such as `PASS`, `FAIL`, or `WARN` status markers.
+- Changed TUI DNS records and ingress routes back to stacked key/value record blocks so long hostnames, tunnel targets, and ancillary records do not wrap through table borders in the stack detail pane.
 
 ## 0.3.0 - 2026-04-24
 

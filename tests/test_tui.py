@@ -927,9 +927,10 @@ def test_render_domain_status_detail_formats_apex_status() -> None:
     assert "no" in rendered
     assert "DNS Records" in rendered
     assert "Ingress Routes" in rendered
-    assert "│ hostname" in rendered
-    assert "│ match" in rendered
-    assert "│ detail" in rendered
+    assert "hostname : example.com" in rendered
+    assert "hostname : *.example.com" in rendered
+    assert "match : [green]ok[/green]" in rendered
+    assert "detail : CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
     assert "example.com" in rendered
     assert "*.example.com" in rendered
     assert "suggested command" in rendered
@@ -966,10 +967,9 @@ def test_render_domain_status_detail_splits_ancillary_dns_records() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "│ detail" in rendered
-    assert "CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
+    assert "detail : CNAME -> 1234.cfargotunnel.com (proxied)" in rendered
     assert "dns warnings : 1" in rendered
-    assert "│ ancillary records" in rendered
+    assert "ancillary records : MX -> route1.mx.cloudflare.net" in rendered
     assert "MX -> route1.mx.cloudflare.net" in rendered
     assert "TXT -> \"v=spf1 include:_spf.mx.cloudflare.net ~all\"" in rendered
 
@@ -1000,8 +1000,7 @@ def test_render_domain_status_detail_wraps_multi_record_main_detail() -> None:
 
     rendered = "\n".join(lines)
 
-    assert "│ detail" in rendered
-    assert "CNAME -> wrong-target.example.com (proxied)" in rendered
+    assert "detail : CNAME -> wrong-target.example.com (proxied)" in rendered
     assert "A -> 192.0.2.10" in rendered
 
 

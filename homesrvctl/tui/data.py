@@ -823,55 +823,66 @@ def render_domain_status_detail(hostname: str, payload: dict[str, object]) -> li
 
     dns = payload.get("dns")
     if isinstance(dns, list):
-        dns_rows: list[list[str]] = []
+        dns_lines: list[str] = []
         for item in dns:
             if not isinstance(item, dict):
                 continue
             detail, ancillary = split_dns_detail(item.get("detail", ""))
-            detail_parts = split_dns_detail_records(detail) if detail else []
-            ancillary_parts = split_ancillary_records(ancillary) if ancillary else []
-            dns_rows.append(
+            row_items = [
+                ("hostname", str(item.get("record_name", "<unknown>"))),
+                ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
+                ("type", str(item.get("record_type") or "<unknown>")),
+                ("target", str(item.get("content") or "<unknown>")),
+            ]
+            dns_lines.extend(
                 [
-                    str(item.get("record_name", "<unknown>")),
-                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
-                    str(item.get("record_type") or "<unknown>"),
-                    str(item.get("content") or "<unknown>"),
-                    "; ".join(detail_parts),
-                    "; ".join(ancillary_parts),
+                    *format_key_value_lines(row_items),
+                    *(format_key_value_with_continuations("detail", split_dns_detail_records(detail)) if detail else []),
+                    *(format_key_value_with_continuations("ancillary records", split_ancillary_records(ancillary)) if ancillary else []),
+                    "",
                 ]
             )
-        if dns_rows:
+        if dns_lines:
+            if dns_lines[-1] == "":
+                dns_lines.pop()
             lines.extend(
                 [
                     "",
                     "[bold #ffcf5a]DNS Records[/bold #ffcf5a]",
                     "",
-                    *render_bordered_table(["hostname", "match", "type", "target", "detail", "ancillary records"], dns_rows),
+                    *dns_lines,
                 ]
             )
 
     ingress = payload.get("ingress")
     if isinstance(ingress, list):
-        ingress_rows: list[list[str]] = []
+        ingress_lines: list[str] = []
         for item in ingress:
             if not isinstance(item, dict):
                 continue
-            ingress_rows.append(
+            ingress_lines.extend(
                 [
-                    str(item.get("hostname", "<unknown>")),
-                    "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]",
-                    str(item.get("service") or "<none>"),
-                    str(item.get("effective_service") or "<none>"),
-                    str(item.get("detail", "")),
+                    *format_key_value_lines(
+                        [
+                            ("hostname", str(item.get("hostname", "<unknown>"))),
+                            ("match", "[green]ok[/green]" if item.get("matches_expected") else "[red]mismatch[/red]"),
+                            ("configured", str(item.get("service") or "<none>")),
+                            ("effective", str(item.get("effective_service") or "<none>")),
+                            ("detail", str(item.get("detail", ""))),
+                        ]
+                    ),
+                    "",
                 ]
             )
-        if ingress_rows:
+        if ingress_lines:
+            if ingress_lines[-1] == "":
+                ingress_lines.pop()
             lines.extend(
                 [
                     "",
                     "[bold #ffcf5a]Ingress Routes[/bold #ffcf5a]",
                     "",
-                    *render_bordered_table(["hostname", "match", "configured", "effective", "detail"], ingress_rows),
+                    *ingress_lines,
                 ]
             )
 
