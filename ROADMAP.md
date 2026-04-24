@@ -13,7 +13,7 @@ Status: ongoing
 Goal: keep the project easy to ship, install, and verify as the public surface grows.
 
 Near-term work:
-- Prepare the next release from the large current `Unreleased` changelog section.
+- Prepare follow-up releases from focused changelog sections as new operator-facing slices land.
 - Keep tagged release automation, local build verification, and [`RELEASING.md`](RELEASING.md) aligned.
 - Keep package metadata, README install guidance, and release artifacts accurate.
 - Decide whether GitHub-generated release notes remain enough or whether a small curated release-note template is worthwhile.

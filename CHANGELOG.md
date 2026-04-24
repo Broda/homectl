@@ -8,6 +8,10 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ## Unreleased
 
+No notable changes yet.
+
+## 0.3.0 - 2026-04-24
+
 ### Added
 - Added `homesrvctl cleanup HOST` to stop a stack with Docker Compose and delete its local stack directory after `--force`, with dry-run, JSON, and TUI confirmation support.
 - Added an external HTTPS check to `doctor` and the TUI stack detail so operators can distinguish tunnel reachability from app-level 404 responses.
