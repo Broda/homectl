@@ -40,6 +40,29 @@ def test_run_json_command_handles_invalid_json(monkeypatch) -> None:
     assert payload["error"] == "invalid JSON output"
 
 
+def test_run_json_command_reports_failed_command_output(monkeypatch) -> None:
+    output = """
+Usage: python -m homesrvctl.main app init [OPTIONS] HOSTNAME
+Try 'python -m homesrvctl.main app init --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ Invalid value: config file not found:                                        │
+│ /home/test/.config/homesrvctl/config.yml. Run `homesrvctl config init` first. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+"""
+
+    def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
+        return CommandResult(command, 2, output, "")
+
+    monkeypatch.setattr(data, "run_command", fake_run_command)
+
+    payload = data.run_json_subcommand(["app", "init", "mudcraftgame.com", "--template", "placeholder"])
+
+    assert payload["ok"] is False
+    assert payload["returncode"] == 2
+    assert "invalid JSON output" not in str(payload["error"])
+    assert "config file not found" in str(payload["error"])
+
+
 def test_run_json_command_reports_noisy_stdout(monkeypatch) -> None:
     def fake_run_command(command: list[str], cwd=None, dry_run: bool = False, quiet: bool = False):  # noqa: ANN001, ANN202
         return CommandResult(command, 0, "$ systemctl is-active cloudflared\n{\"ok\": true}", "")

@@ -13,6 +13,9 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Added `homesrvctl app wrap <hostname> --source PATH` to generate homesrvctl-owned hosting wrappers around existing static directories or Dockerfile-based app sources without modifying the source tree.
 - Added stack-local scaffold metadata for new `site init`, `app init`, and `app wrap` outputs, and surfaced that metadata as a stack `type` row in the TUI detail pane.
 
+### Fixed
+- Fixed TUI JSON command handling so failed stack-creation subcommands surface the underlying CLI error instead of reporting a generic `invalid JSON output` notice.
+
 ## 0.4.0 - 2026-04-24
 
 ### Added

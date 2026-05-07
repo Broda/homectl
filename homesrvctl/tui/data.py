@@ -96,12 +96,22 @@ def run_json_subcommand(args: list[str]) -> dict[str, object]:
             payload["command"] = command
             payload["returncode"] = result.returncode
             return payload
+    if not result.ok:
+        return {
+            "ok": False,
+            "error": _summarize_failed_json_command(result.stdout, result.stderr),
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "command": command,
+            "returncode": result.returncode,
+        }
     if result.stdout:
         return {
             "ok": False,
             "error": "invalid JSON output",
             "stdout": result.stdout,
             "command": command,
+            "returncode": result.returncode,
         }
     return {
         "ok": False,
@@ -109,6 +119,16 @@ def run_json_subcommand(args: list[str]) -> dict[str, object]:
         "command": command,
         "returncode": result.returncode,
     }
+
+
+def _summarize_failed_json_command(stdout: str, stderr: str) -> str:
+    output = stderr or stdout
+    if not output:
+        return "command failed"
+    cleaned = ANSI_ESCAPE_PATTERN.sub("", output)
+    cleaned = re.sub(r"[╭╮╰╯─│]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or "command failed"
 
 
 def stack_sites(snapshot: dict[str, object]) -> list[dict[str, object]]:
