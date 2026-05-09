@@ -37,8 +37,25 @@ def test_build_artifacts_include_shipped_template_assets(tmp_path: Path) -> None
 
     with zipfile.ZipFile(wheel_path) as wheel:
         wheel_names = set(wheel.namelist())
+        wheel.extractall(tmp_path / "wheel")
     missing_from_wheel = EXPECTED_TEMPLATE_FILES - wheel_names
     assert not missing_from_wheel, f"wheel is missing shipped template assets: {sorted(missing_from_wheel)}"
+    assert "homesrvctl/templates/__init__.py" in wheel_names
+    assert "homesrvctl/templates.py" not in wheel_names
+
+    import_check = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import homesrvctl.main; from homesrvctl.templates import render_template; print(render_template.__name__)",
+        ],
+        cwd=tmp_path,
+        env={"PYTHONPATH": str(tmp_path / "wheel")},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert import_check.stdout.strip() == "render_template"
 
     with tarfile.open(sdist_path, "r:gz") as sdist:
         sdist_names = set(sdist.getnames())

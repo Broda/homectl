@@ -9,7 +9,7 @@ from homesrvctl.models import RenderContext
 
 
 def template_root() -> Path:
-    return Path(__file__).resolve().parent / "templates"
+    return Path(__file__).resolve().parent
 
 
 def build_environment() -> Environment:

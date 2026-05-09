@@ -98,7 +98,7 @@ Keep a clear separation between:
 
 ### Scaffold and template layer
 
-- [`homesrvctl/templates.py`](homesrvctl/templates.py)
+- [`homesrvctl/templates`](homesrvctl/templates)
 - [`homesrvctl/template_catalog.py`](homesrvctl/template_catalog.py)
 - [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
 - [`homesrvctl/templates/static`](homesrvctl/templates/static)

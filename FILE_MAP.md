@@ -39,8 +39,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Fresh-host bootstrap assessment, final readiness aggregation, and tunnel/runtime/wiring provisioning helpers.
 - [`homesrvctl/utils.py`](homesrvctl/utils.py)
   Shared filesystem and rendering helpers.
-- [`homesrvctl/templates.py`](homesrvctl/templates.py)
-  Template rendering utilities.
+- [`homesrvctl/templates`](homesrvctl/templates)
+  Template rendering utilities and shipped scaffold template assets.
 - [`homesrvctl/template_catalog.py`](homesrvctl/template_catalog.py)
   Shipped scaffold catalog and rendered-template manifest definitions used by CLI scaffolds, wrapper templates, the TUI template picker, and packaging checks.
 - [`homesrvctl/shell.py`](homesrvctl/shell.py)
