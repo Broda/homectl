@@ -5,8 +5,12 @@ import sys
 import typer
 
 
+def is_interactive_terminal() -> bool:
+    return sys.stdout.isatty() and sys.stdin.isatty()
+
+
 def launch_tui(*, refresh_seconds: float = 0.0) -> None:
-    if not sys.stdout.isatty() or not sys.stdin.isatty():
+    if not is_interactive_terminal():
         raise typer.BadParameter("tui requires an interactive terminal")
 
     try:

@@ -8,6 +8,8 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ## Unreleased
 
+## 0.5.0 - 2026-05-12
+
 ### Added
 - Added read-only `homesrvctl app detect <source_path>` source-family detection for existing app/site adoption planning, with JSON output and operator-facing next steps.
 - Added `homesrvctl app wrap <hostname> --source PATH` to generate homesrvctl-owned hosting wrappers around existing static directories or Dockerfile-based app sources without modifying the source tree.
@@ -16,6 +18,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 ### Fixed
 - Fixed installed-package startup when Python resolved the shipped template asset directory instead of the template-rendering helper module.
 - Fixed TUI JSON command handling so failed stack-creation subcommands surface the underlying CLI error instead of reporting a generic `invalid JSON output` notice.
+- Fixed bare `homesrvctl` in non-interactive shells so it prints normal command help instead of failing while trying to launch the TUI.
 
 ## 0.4.0 - 2026-04-24
 

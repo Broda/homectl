@@ -12,7 +12,7 @@ from homesrvctl.commands.install_cmd import install_cli, version
 from homesrvctl.commands.ports_cmd import ports_cli
 from homesrvctl.commands.site_cmd import site_cli
 from homesrvctl.commands.tunnel_cmd import tunnel_cli
-from homesrvctl.commands.tui_cmd import launch_tui, tui
+from homesrvctl.commands.tui_cmd import is_interactive_terminal, launch_tui, tui
 from homesrvctl.commands.validate_cmd import validate_with_format
 
 app = typer.Typer(
@@ -47,6 +47,9 @@ app.command("version")(version)
 @app.callback()
 def main_callback(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
+        if not is_interactive_terminal():
+            typer.echo(ctx.get_help())
+            raise typer.Exit(0)
         launch_tui()
 
 

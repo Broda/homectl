@@ -142,6 +142,8 @@ Launch the terminal dashboard:
 homesrvctl
 ```
 
+In non-interactive shells, bare `homesrvctl` prints normal command help instead of launching the dashboard.
+
 The explicit dashboard command is also available:
 
 ```bash
