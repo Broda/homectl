@@ -4,6 +4,7 @@ import json
 import sys
 import types
 
+from click.utils import strip_ansi
 from textual.content import Content
 from typer.testing import CliRunner
 
@@ -1206,7 +1207,9 @@ def test_no_args_prints_help_without_interactive_terminal(monkeypatch) -> None:
     result = runner.invoke(app, [])
 
     assert result.exit_code == 0, result.output
-    assert "Usage: homesrvctl" in result.output
+    plain_output = strip_ansi(result.output)
+    assert "Commands" in plain_output
+    assert "version" in plain_output
     assert "tui requires an interactive terminal" not in result.output
 
 
