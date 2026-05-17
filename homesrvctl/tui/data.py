@@ -66,7 +66,7 @@ def render_optional_value(value: object) -> str:
 def build_dashboard_snapshot(run_json_command=None) -> dict[str, object]:  # noqa: ANN001
     if run_json_command is None:
         run_json_command = run_json_subcommand
-    list_payload = run_json_command(["list"])
+    list_payload = _load_stack_list_payload(run_json_command)
     config_payload = run_json_command(["config", "show"])
     tunnel_payload = run_json_command(["tunnel", "status"])
     cloudflared_payload = run_json_command(["cloudflared", "status"])
@@ -79,8 +79,29 @@ def build_dashboard_snapshot(run_json_command=None) -> dict[str, object]:  # noq
         "cloudflared": cloudflared_payload,
         "validate": validate_payload,
         "bootstrap": bootstrap_payload,
+        "list_source": list_payload.get("source") if isinstance(list_payload, dict) else None,
+        "list_last_refresh_at": list_payload.get("last_refresh_at") if isinstance(list_payload, dict) else None,
+        "list_cache_available": bool(list_payload.get("cache_available")) if isinstance(list_payload, dict) else False,
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+def _load_stack_list_payload(run_json_command) -> dict[str, object]:  # noqa: ANN001
+    cached_payload = run_json_command(["list", "--cached"])
+    if _stack_list_payload_is_useful(cached_payload):
+        return cached_payload
+    live_payload = run_json_command(["list"])
+    if isinstance(live_payload, dict):
+        fallback_error = cached_payload.get("error") if isinstance(cached_payload, dict) else None
+        live_payload.setdefault("cache_fallback_error", fallback_error)
+    return live_payload
+
+
+def _stack_list_payload_is_useful(payload: object) -> bool:
+    if not isinstance(payload, dict) or not payload.get("ok"):
+        return False
+    sites = payload.get("sites")
+    return isinstance(sites, list) and bool(sites)
 
 
 def run_json_subcommand(args: list[str]) -> dict[str, object]:

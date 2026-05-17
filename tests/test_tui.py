@@ -94,8 +94,10 @@ def test_build_dashboard_snapshot_uses_existing_json_surfaces() -> None:
 
     def fake_run_json_command(args: list[str]) -> dict[str, object]:
         calls.append(tuple(args))
+        if args == ["list", "--cached"]:
+            return {"ok": False, "source": "cache", "sites": [], "error": "No cached stack state found"}
         if args == ["list"]:
-            return {"ok": True, "sites": [{"hostname": "example.com", "compose": True}]}
+            return {"ok": True, "source": "live", "sites": [{"hostname": "example.com", "compose": True}]}
         if args == ["config", "show"]:
             return {
                 "ok": True,
@@ -141,13 +143,95 @@ def test_build_dashboard_snapshot_uses_existing_json_surfaces() -> None:
 
     snapshot = data.build_dashboard_snapshot(run_json_command=fake_run_json_command)
 
-    assert calls == [("list",), ("config", "show"), ("tunnel", "status"), ("cloudflared", "status"), ("validate",), ("bootstrap", "assess")]
+    assert calls == [
+        ("list", "--cached"),
+        ("list",),
+        ("config", "show"),
+        ("tunnel", "status"),
+        ("cloudflared", "status"),
+        ("validate",),
+        ("bootstrap", "assess"),
+    ]
     assert snapshot["list"]["sites"][0]["hostname"] == "example.com"
+    assert snapshot["list"]["cache_fallback_error"] == "No cached stack state found"
+    assert snapshot["list_source"] == "live"
+    assert snapshot["list_cache_available"] is False
     assert snapshot["config"]["global"]["docker_network"] == "web"
     assert snapshot["tunnel"]["resolved_tunnel_id"] == "11111111-2222-4333-8444-555555555555"
     assert snapshot["cloudflared"]["mode"] == "systemd"
     assert snapshot["validate"]["checks"][0]["name"] == "docker"
     assert snapshot["bootstrap"]["bootstrap_state"] == "partial"
+
+
+def test_build_dashboard_snapshot_prefers_cached_stack_list() -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(tuple(args))
+        if args == ["list", "--cached"]:
+            return {
+                "ok": True,
+                "source": "cache",
+                "cache_available": True,
+                "last_refresh_at": "2026-05-17T12:00:00Z",
+                "sites": [{"hostname": "example.com", "compose": True}],
+            }
+        if args == ["list"]:
+            raise AssertionError("live list should not be called when cached list is useful")
+        if args == ["config", "show"]:
+            return {"ok": True, "global": {}}
+        if args == ["tunnel", "status"]:
+            return {"ok": True}
+        if args == ["cloudflared", "status"]:
+            return {"ok": True}
+        if args == ["validate"]:
+            return {"ok": True, "checks": []}
+        if args == ["bootstrap", "assess"]:
+            return {"ok": True}
+        raise AssertionError(f"unexpected args: {args}")
+
+    snapshot = data.build_dashboard_snapshot(run_json_command=fake_run_json_command)
+
+    assert calls == [
+        ("list", "--cached"),
+        ("config", "show"),
+        ("tunnel", "status"),
+        ("cloudflared", "status"),
+        ("validate",),
+        ("bootstrap", "assess"),
+    ]
+    assert snapshot["list"]["source"] == "cache"
+    assert snapshot["list_source"] == "cache"
+    assert snapshot["list_last_refresh_at"] == "2026-05-17T12:00:00Z"
+    assert snapshot["list_cache_available"] is True
+
+
+def test_build_dashboard_snapshot_falls_back_when_cached_stack_list_is_empty() -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_json_command(args: list[str]) -> dict[str, object]:
+        calls.append(tuple(args))
+        if args == ["list", "--cached"]:
+            return {"ok": True, "source": "cache", "cache_available": False, "sites": []}
+        if args == ["list"]:
+            return {"ok": True, "source": "live", "sites": [{"hostname": "example.com", "compose": True}]}
+        if args == ["config", "show"]:
+            return {"ok": True, "global": {}}
+        if args == ["tunnel", "status"]:
+            return {"ok": True}
+        if args == ["cloudflared", "status"]:
+            return {"ok": True}
+        if args == ["validate"]:
+            return {"ok": True, "checks": []}
+        if args == ["bootstrap", "assess"]:
+            return {"ok": True}
+        raise AssertionError(f"unexpected args: {args}")
+
+    snapshot = data.build_dashboard_snapshot(run_json_command=fake_run_json_command)
+
+    assert calls[:2] == [("list", "--cached"), ("list",)]
+    assert snapshot["list"]["source"] == "live"
+    assert snapshot["list_source"] == "live"
 
 
 def test_run_stack_action_dispatches_to_existing_commands(monkeypatch) -> None:

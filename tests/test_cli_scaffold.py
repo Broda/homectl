@@ -6211,11 +6211,21 @@ def test_list_json_output(monkeypatch, tmp_path: Path) -> None:
     payload = json.loads(result.output)
     _assert_schema_version(payload)
     assert payload["ok"] is True
+    assert payload["source"] == "live"
+    assert payload["cache_available"] is False
+    assert payload["last_refresh_at"] is None
     assert payload["sites_root"] == str(sites_root)
     assert payload["sites"] == [
         {"hostname": "example.com", "compose": True},
         {"hostname": "notes.example.com", "compose": False},
     ]
+
+    live_result = runner.invoke(app, ["list", "--live", "--json"])
+    assert live_result.exit_code == 0, live_result.output
+    live_payload = json.loads(live_result.output)
+    assert live_payload["ok"] is True
+    assert live_payload["source"] == "live"
+    assert live_payload["sites"] == payload["sites"]
 
 
 def test_list_json_reports_missing_sites_root(monkeypatch, tmp_path: Path) -> None:

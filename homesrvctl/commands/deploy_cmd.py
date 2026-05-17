@@ -7,7 +7,10 @@ from pathlib import Path
 import typer
 
 from homesrvctl.config import load_config, load_config_details
+from homesrvctl.services.stacks import list_stacks as build_stack_list
 from homesrvctl.shell import CommandResult, require_success, run_command
+from homesrvctl.state.db import default_state_db_path
+from homesrvctl.state.store import StateStore
 from homesrvctl.utils import info, success, validate_hostname, warn, with_json_schema
 
 
@@ -168,44 +171,52 @@ def list_sites() -> None:
 
 
 def list_sites_with_format(
+    cached: bool = typer.Option(False, "--cached", help="Read stack list from the local state cache."),
+    live: bool = typer.Option(False, "--live", help="Force a live filesystem scan."),
+    refresh: bool = typer.Option(False, "--refresh", help="Refresh local stack state before listing cached data."),
+    db_path: Path | None = typer.Option(None, "--db-path", help="Use a custom state database path."),
+    config_path: Path | None = typer.Option(None, "--config-path", help="Read config from a custom path."),
     json_output: bool = typer.Option(False, "--json", help="Print the site list as JSON."),
 ) -> None:
     """List scaffolded hostnames under the configured sites root."""
-    config = load_config()
-    if not config.sites_root.exists():
-        if json_output:
-            payload = with_json_schema({
-                "sites_root": str(config.sites_root),
-                "ok": False,
-                "sites": [],
-                "error": f"Sites root does not exist: {config.sites_root}",
-            })
-            typer.echo(json.dumps(payload, indent=2))
-        else:
-            warn(f"Sites root does not exist: {config.sites_root}")
-        raise typer.Exit(code=1)
+    if cached and live:
+        _emit_list_option_error("--cached and --live are mutually exclusive", json_output)
+    if refresh and live:
+        _emit_list_option_error("--refresh and --live are mutually exclusive", json_output)
 
-    sites: list[dict[str, object]] = []
-    for child in sorted(path for path in config.sites_root.iterdir() if path.is_dir()):
-        compose_file = child / "docker-compose.yml"
-        sites.append({"hostname": child.name, "compose": compose_file.exists()})
+    config = load_config(config_path)
+    store = StateStore(db_path or default_state_db_path())
+    source = "cache" if cached else "live"
+    result = build_stack_list(config, store, source=source, refresh=refresh)
+    include_site_metadata = result.source == "cache"
+    payload = result.to_dict(include_site_metadata=include_site_metadata)
 
     if json_output:
-        payload = with_json_schema({
-            "sites_root": str(config.sites_root),
-            "ok": True,
-            "sites": sites,
-        })
-        typer.echo(json.dumps(payload, indent=2))
+        typer.echo(json.dumps(with_json_schema(payload), indent=2))
+        if not result.ok:
+            raise typer.Exit(code=1)
         return
 
-    if not sites:
+    if not result.ok:
+        warn(str(result.error or "Stack list failed"))
+        for issue in result.issues:
+            typer.echo(f"- {issue}")
+        raise typer.Exit(code=1)
+
+    if not result.sites:
         warn(f"No hostnames found under {config.sites_root}")
         return
 
-    for site in sites:
-        status = "compose=yes" if site["compose"] else "compose=no"
-        info(f"{site['hostname']}\t{status}")
+    for site in result.sites:
+        status = "compose=yes" if site.compose else "compose=no"
+        info(f"{site.hostname}\t{status}")
+
+
+def _emit_list_option_error(message: str, json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps(with_json_schema({"ok": False, "sites": [], "error": message}), indent=2))
+        raise typer.Exit(code=1)
+    raise typer.BadParameter(message)
 
 
 def doctor(

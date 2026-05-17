@@ -13,6 +13,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Began the control-plane service/state architecture while preserving existing CLI behavior.
 
 ### Added
+- Added cache-aware stack listing and TUI dashboard support backed by the local SQLite state store.
 - Added a SQLite-backed local state-store foundation with `db` and `refresh` commands for cached local stack observations.
 
 ## 0.5.0 - 2026-05-12

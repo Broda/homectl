@@ -227,9 +227,14 @@ homesrvctl db init
 homesrvctl refresh
 homesrvctl db status
 homesrvctl db rebuild
+homesrvctl list --cached
+homesrvctl list --refresh
+homesrvctl list --live
 ```
 
 The state database is a local SQLite cache and index for current and future dashboard/control-plane workflows. By default it lives at `~/.local/share/homesrvctl/homesrvctl.db`. It records observed local stack metadata and can be rebuilt from the filesystem; it is not the source of truth and does not store secrets.
+
+`homesrvctl list` still scans the configured sites root live by default. Use `list --cached` for fast cached reads, `list --refresh` to refresh local stack metadata before listing from the cache, and `list --live` to force the filesystem view. The TUI prefers cached stack-list data when available and falls back to the live list when the cache is missing or empty. A daemon, web UI, and provider observers remain future work.
 
 Manage a domain:
 
@@ -305,7 +310,9 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl up <hostname> [--dry-run] [--json]`
 - `homesrvctl down <hostname> [--dry-run] [--json]`
 - `homesrvctl restart <hostname> [--dry-run] [--json]`
-- `homesrvctl list [--json]`
+- `homesrvctl list [--cached] [--live] [--refresh] [--db-path PATH] [--config-path PATH] [--json]`
+- `homesrvctl db init|status|rebuild [--path PATH] [--json]`
+- `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl tui [--refresh-seconds FLOAT]`
 - `homesrvctl cloudflared status [--json]`
 - `homesrvctl cloudflared setup [--json]`
@@ -328,4 +335,4 @@ All JSON commands include a top-level `schema_version`.
 - `app detect` is read-only. It reports likely source families and next steps before any wrapper/adoption mutation is attempted.
 - `app wrap` writes homesrvctl-owned hosting files around existing static directories or Dockerfile-based apps without modifying the source directory.
 - New stacks created through `site init`, `app init`, or `app wrap` store scaffold metadata in `homesrvctl.yml`; the TUI stack detail pane shows that as the stack type.
-- The Textual TUI is backed by existing JSON command surfaces. It requires an interactive terminal and the same local runtime access as the CLI commands it launches.
+- The Textual TUI is backed by existing JSON command surfaces. It prefers cached stack-list data when available, falls back to live listing, and requires an interactive terminal plus the same local runtime access as the CLI commands it launches.

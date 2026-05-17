@@ -41,7 +41,7 @@ Responsibilities:
 - wrap existing helpers first, then absorb command-owned orchestration in small slices
 - keep mutation behavior explicit and testable
 
-The first services inspect local stack directories and refresh cached stack state. Future services should cover domain/tunnel inspection, provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
+The first services inspect local stack directories, refresh cached stack state, and provide stack-listing results from either the live filesystem or the SQLite cache. Future services should cover domain/tunnel inspection, provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
 
 ### State store
 
@@ -53,7 +53,7 @@ Responsibilities:
 - store history such as observations, operations, and events without becoming the only source of truth
 - avoid storing secrets
 
-The default local database path is `~/.local/share/homesrvctl/homesrvctl.db`, with `HOMESRVCTL_STATE_DB_PATH` and command options available for overrides. Config files and live systems remain authoritative for this slice.
+The default local database path is `~/.local/share/homesrvctl/homesrvctl.db`, with `HOMESRVCTL_STATE_DB_PATH` and command options available for overrides. Config files and live systems remain authoritative. Cached reads are acceptable for dashboards and explicit cached listing, but mutation commands must continue validating live state.
 
 ### Refresh and observer layer
 
@@ -67,7 +67,7 @@ Responsibilities:
 - avoid Docker, Cloudflare, `cloudflared`, or network calls unless a later observer explicitly owns that surface
 - preserve enough structure that a future daemon can run the same refresh services periodically
 
-The refresh layer currently records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings.
+The refresh layer currently records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings. It is intentionally local-only; Docker, `cloudflared`, Cloudflare, SES, OpenTofu, backups, and other provider observations belong to later observer slices.
 
 ### Config and model layer
 
@@ -219,6 +219,7 @@ This layer should stay separate from CLI wiring so future dashboard/view growth 
 Textual is now the active and only retained implementation for `homesrvctl tui`.
 The command wrapper should import the Textual app lazily so the rest of the CLI can still start cleanly if the local environment has not yet been refreshed to include the new dependency.
 The shipped TUI now covers the public CLI surface with a mix of guided mutation flows, focused tool menus, and read-only detail views instead of relying on a separate backend model.
+For stack lists, the TUI tries the cached JSON list first and falls back to the live JSON list when the database is missing, uninitialized, or empty.
 The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-prompt buttons, and the detail-pane action button strip are real Textual widgets that accept both keyboard and mouse input. Mouse and keyboard selection share a single `--selected` class on the same row widget, so the two input modes cannot drift into separate tracks; click targets are additive rather than replacements for the underlying keyboard bindings.
 
 ### Future daemon and API layer
@@ -229,7 +230,7 @@ No daemon, API server, or web UI is implemented yet. When introduced, these laye
 - keep provider-specific logic in provider modules rather than API handlers
 - leave the CLI available for bootstrap, SSH recovery, scripting, and agent workflows
 
-The daemon should begin as a read-only observer/reconciler before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened.
+The daemon should begin as a read-only observer/reconciler that keeps the cache fresh before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened. Future API/web clients should call services and state-store helpers rather than duplicating command logic, provider logic, or SQL.
 
 ### Public contract changes should be deliberate
 

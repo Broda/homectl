@@ -169,6 +169,36 @@ class StateStore:
             rows = connection.execute("SELECT * FROM stacks ORDER BY hostname").fetchall()
         return [dict(row) for row in rows]
 
+    def list_stack_snapshots(self) -> list[StackSnapshot]:
+        if not self.status().initialized:
+            return []
+        return [
+            StackSnapshot(
+                hostname=str(row["hostname"]),
+                stack_dir=Path(str(row["stack_dir"])),
+                compose_file=Path(str(row["compose_file"])) if row.get("compose_file") else None,
+                has_compose=bool(row["has_compose"]),
+                has_stack_config=bool(row["has_stack_config"]),
+                scaffold_kind=str(row["scaffold_kind"]) if row.get("scaffold_kind") else None,
+                scaffold_template=str(row["scaffold_template"]) if row.get("scaffold_template") else None,
+                profile=str(row["profile"]) if row.get("profile") else None,
+                docker_network=str(row["docker_network"]) if row.get("docker_network") else None,
+                traefik_url=str(row["traefik_url"]) if row.get("traefik_url") else None,
+                managed_by_homesrvctl=bool(row["managed_by_homesrvctl"]),
+                updated_at=str(row["updated_at"]) if row.get("updated_at") else None,
+            )
+            for row in self.list_stacks()
+        ]
+
+    def stack_count(self) -> int:
+        return self.status().stack_count
+
+    def has_cached_stack_data(self) -> bool:
+        return self.stack_count() > 0
+
+    def last_stack_refresh_at(self) -> str | None:
+        return self.status().last_refresh_at
+
     def clear_local_stack_state(self) -> None:
         with connect_state_db(self.path) as connection:
             connection.execute(

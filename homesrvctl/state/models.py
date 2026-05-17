@@ -22,6 +22,7 @@ class DatabaseStatus:
         payload = asdict(self)
         payload["db_path"] = str(self.db_path)
         payload["ok"] = self.ok
+        payload["cache_available"] = self.stack_count > 0
         payload["state_schema_version"] = payload.pop("schema_version")
         return payload
 
@@ -39,6 +40,7 @@ class StackSnapshot:
     docker_network: str | None
     traefik_url: str | None
     managed_by_homesrvctl: bool = True
+    updated_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)

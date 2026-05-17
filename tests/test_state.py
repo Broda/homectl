@@ -103,6 +103,7 @@ def test_db_status_reports_missing_and_initialized_json(tmp_path: Path) -> None:
     assert status_payload["exists"] is True
     assert status_payload["initialized"] is True
     assert status_payload["state_schema_version"] == SCHEMA_VERSION
+    assert status_payload["cache_available"] is False
     assert status_payload["stack_count"] == 0
 
 
@@ -158,6 +159,16 @@ def test_refresh_discovers_stack_directories_and_writes_rows(monkeypatch, tmp_pa
     draft_row = rows[1]
     assert draft_row["has_compose"] == 0
     assert draft_row["has_stack_config"] == 0
+
+    store = StateStore(db_path)
+    snapshots = store.list_stack_snapshots()
+    assert [snapshot.hostname for snapshot in snapshots] == ["app.example.com", "draft.example.com"]
+    assert snapshots[0].has_compose is True
+    assert snapshots[0].has_stack_config is True
+    assert snapshots[0].scaffold_kind == "app"
+    assert snapshots[0].updated_at is not None
+    assert store.has_cached_stack_data() is True
+    assert store.last_stack_refresh_at() is not None
 
 
 def test_refresh_is_idempotent_and_supports_json_output(monkeypatch, tmp_path: Path) -> None:
@@ -259,3 +270,95 @@ def test_db_rebuild_reports_config_errors_as_json(tmp_path: Path) -> None:
     assert payload["ok"] is False
     assert payload["db_path"] == str(db_path)
     assert "config file not found" in payload["error"]
+
+
+def test_list_cached_uses_database_without_sites_root(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+    _write_stack(
+        sites_root,
+        "app.example.com",
+        stack_config={"scaffold": {"kind": "app", "template": "node"}},
+    )
+    refresh_local_stack_state(db_path=db_path, config=load_config())
+    for child in (sites_root / "app.example.com").iterdir():
+        child.unlink()
+    (sites_root / "app.example.com").rmdir()
+    sites_root.rmdir()
+
+    result = CliRunner().invoke(app, ["list", "--cached", "--db-path", str(db_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "1"
+    assert payload["ok"] is True
+    assert payload["source"] == "cache"
+    assert payload["cache_available"] is True
+    assert payload["last_refresh_at"] is not None
+    assert payload["db_path"] == str(db_path)
+    assert payload["sites"][0]["hostname"] == "app.example.com"
+    assert payload["sites"][0]["compose"] is True
+    assert payload["sites"][0]["scaffold_kind"] == "app"
+    assert payload["sites"][0]["scaffold_template"] == "node"
+    assert payload["sites"][0]["updated_at"] is not None
+
+
+def test_list_cached_human_output_is_concise(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+    _write_stack(sites_root, "app.example.com")
+    refresh_local_stack_state(db_path=db_path, config=load_config())
+
+    result = CliRunner().invoke(app, ["list", "--cached", "--db-path", str(db_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "app.example.com" in result.output
+    assert "compose=yes" in result.output
+    assert "source=cache" not in result.output
+
+
+def test_list_cached_missing_database_reports_helpful_json(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "missing.db"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+
+    result = CliRunner().invoke(app, ["list", "--cached", "--db-path", str(db_path), "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "1"
+    assert payload["ok"] is False
+    assert payload["source"] == "cache"
+    assert payload["cache_available"] is False
+    assert "homesrvctl refresh" in payload["error"]
+    assert "homesrvctl db rebuild" in payload["error"]
+    assert "homesrvctl list --live" in payload["error"]
+
+
+def test_list_refresh_updates_cache_and_returns_cached_json(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    monkeypatch.setenv("HOME", str(home))
+    _write_stack(sites_root, "app.example.com", stack_config={"profile": "edge"})
+
+    result = CliRunner().invoke(app, ["list", "--refresh", "--db-path", str(db_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "1"
+    assert payload["ok"] is True
+    assert payload["source"] == "cache"
+    assert payload["cache_available"] is True
+    assert payload["sites"][0]["hostname"] == "app.example.com"
+    assert payload["sites"][0]["profile"] == "edge"
+    assert StateStore(db_path).has_cached_stack_data() is True
