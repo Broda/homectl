@@ -58,6 +58,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Read-only AWS SES provider observer for outbound mail, identity, DKIM, custom MAIL FROM, and DNS readiness snapshots.
 - [`homesrvctl/services/infra`](homesrvctl/services/infra)
   OpenTofu workspace rendering, saved-plan planning, and explicit saved-plan apply helpers for narrow SES/Cloudflare DNS mail infrastructure.
+- [`homesrvctl/services/operations.py`](homesrvctl/services/operations.py)
+  Operation history service models and readers for the SQLite `operations` table.
 - [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
   Existing app/site source detection helpers used by adoption and wrapper command surfaces.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
@@ -100,6 +102,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   Read-only observer commands such as `observe run`, `observe run --cloudflare`, `observe run --ses`, and `observe status`.
 - [`homesrvctl/commands/infra_cmd.py`](homesrvctl/commands/infra_cmd.py)
   OpenTofu commands such as `infra status`, `infra render mail`, `infra plan mail`, and explicit saved-plan `infra apply mail`.
+- [`homesrvctl/commands/operations_cmd.py`](homesrvctl/commands/operations_cmd.py)
+  Operation history commands such as `operations list` and `operations show`.
 - [`homesrvctl/commands/refresh_cmd.py`](homesrvctl/commands/refresh_cmd.py)
   Local refresh command that snapshots current stack directory state into the state database.
 - [`homesrvctl/commands/install_cmd.py`](homesrvctl/commands/install_cmd.py)

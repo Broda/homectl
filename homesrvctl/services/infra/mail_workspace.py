@@ -113,6 +113,8 @@ class InfraPlanResult:
     has_changes: bool | None
     plan_file: Path | None = None
     saved_plan: bool = False
+    operation_id: int | None = None
+    operation_recorded: bool = False
     render_result: InfraWorkspaceResult | None = None
     issues: list[str] = field(default_factory=list)
     error: str | None = None
@@ -128,6 +130,8 @@ class InfraPlanResult:
             "has_changes": self.has_changes,
             "plan_file": str(self.plan_file) if self.plan_file else None,
             "saved_plan": self.saved_plan,
+            "operation_id": self.operation_id,
+            "operation_recorded": self.operation_recorded,
             "sensitive_artifact_warning": SENSITIVE_PLAN_WARNING if self.saved_plan else None,
             "issues": self.issues,
         }
@@ -157,6 +161,8 @@ class InfraApplyResult:
     apply_result: TofuCommandResult | None
     applied: bool
     event_recorded: bool
+    operation_id: int | None = None
+    operation_recorded: bool = False
     issues: list[str] = field(default_factory=list)
     error: str | None = None
 
@@ -173,6 +179,8 @@ class InfraApplyResult:
             "stderr": self.apply_result.to_dict()["stderr"] if self.apply_result else "",
             "applied": self.applied,
             "event_recorded": self.event_recorded,
+            "operation_id": self.operation_id,
+            "operation_recorded": self.operation_recorded,
             "sensitive_artifact_warning": SENSITIVE_PLAN_WARNING,
             "issues": self.issues,
         }
@@ -287,14 +295,29 @@ def plan_mail_workspace(
     refresh_render: bool = False,
     force_render: bool = False,
     out: Path | None = None,
+    db_path: Path | None = None,
+    record_operation: bool = False,
     which: Which,
     runner: Runner,
 ) -> InfraPlanResult:
     workspace = (workspace_path or default_mail_workspace_path(config.domain)).expanduser()
     plan_file = resolve_plan_file(workspace, out) if out is not None else None
+    operation_id = _start_operation(
+        db_path=db_path,
+        operation_type="infra.plan.mail",
+        target_type="domain",
+        target=config.domain,
+        summary="Planning OpenTofu mail workspace",
+        data={
+            "domain": config.domain,
+            "workspace_path": str(workspace),
+            "plan_file": str(plan_file) if plan_file else None,
+            "saved_plan_requested": plan_file is not None,
+        },
+    ) if record_operation else None
     tofu_status = inspect_tofu(which=which, runner=runner)
     if not tofu_status.available:
-        return InfraPlanResult(
+        result = InfraPlanResult(
             ok=False,
             domain=config.domain,
             workspace_path=workspace,
@@ -303,9 +326,13 @@ def plan_mail_workspace(
             plan_result=None,
             has_changes=None,
             plan_file=plan_file,
+            operation_id=operation_id,
+            operation_recorded=operation_id is not None,
             issues=tofu_status.issues,
             error=tofu_status.issues[0] if tofu_status.issues else "OpenTofu unavailable",
         )
+        _finish_plan_operation(result, db_path=db_path)
+        return result
 
     render_result = None
     if refresh_render or not workspace.exists():
@@ -315,7 +342,7 @@ def plan_mail_workspace(
             force=force_render or refresh_render,
         )
         if not render_result.ok:
-            return InfraPlanResult(
+            result = InfraPlanResult(
                 ok=False,
                 domain=config.domain,
                 workspace_path=workspace,
@@ -324,15 +351,19 @@ def plan_mail_workspace(
                 plan_result=None,
                 has_changes=None,
                 plan_file=plan_file,
+                operation_id=operation_id,
+                operation_recorded=operation_id is not None,
                 render_result=render_result,
                 issues=render_result.issues,
                 error=render_result.error,
             )
+            _finish_plan_operation(result, db_path=db_path)
+            return result
 
     assert tofu_status.path is not None
     init_result = run_tofu_init(workspace, tofu_path=tofu_status.path, runner=runner)
     if not init_result.ok:
-        return InfraPlanResult(
+        result = InfraPlanResult(
             ok=False,
             domain=config.domain,
             workspace_path=workspace,
@@ -341,14 +372,18 @@ def plan_mail_workspace(
             plan_result=None,
             has_changes=None,
             plan_file=plan_file,
+            operation_id=operation_id,
+            operation_recorded=operation_id is not None,
             render_result=render_result,
             error=init_result.stderr or init_result.stdout or "OpenTofu init failed",
         )
+        _finish_plan_operation(result, db_path=db_path)
+        return result
 
     plan_result = run_tofu_plan(workspace, out=plan_file, tofu_path=tofu_status.path, runner=runner)
     has_changes = plan_result.returncode == 2
     plan_ok = plan_result.returncode in {0, 2}
-    return InfraPlanResult(
+    result = InfraPlanResult(
         ok=plan_ok,
         domain=config.domain,
         workspace_path=workspace,
@@ -358,10 +393,14 @@ def plan_mail_workspace(
         has_changes=has_changes if plan_ok else None,
         plan_file=plan_file,
         saved_plan=plan_file is not None and plan_ok,
+        operation_id=operation_id,
+        operation_recorded=operation_id is not None,
         render_result=render_result,
         issues=[SENSITIVE_PLAN_WARNING] if plan_file is not None and plan_ok else [],
         error=None if plan_ok else plan_result.stderr or plan_result.stdout or "OpenTofu plan failed",
     )
+    _finish_plan_operation(result, db_path=db_path)
+    return result
 
 
 def apply_mail_workspace(
@@ -371,14 +410,27 @@ def apply_mail_workspace(
     workspace_path: Path | None = None,
     db_path: Path | None = None,
     record_event: bool = True,
+    record_operation: bool = False,
     which: Which,
     runner: Runner,
 ) -> InfraApplyResult:
     workspace = (workspace_path or default_mail_workspace_path(config.domain)).expanduser()
     resolved_plan_file = resolve_plan_file(workspace, plan_file)
+    operation_id = _start_operation(
+        db_path=db_path,
+        operation_type="infra.apply.mail",
+        target_type="domain",
+        target=config.domain,
+        summary="Applying saved OpenTofu mail plan",
+        data={
+            "domain": config.domain,
+            "workspace_path": str(workspace),
+            "plan_file": str(resolved_plan_file),
+        },
+    ) if record_operation else None
     tofu_status = inspect_tofu(which=which, runner=runner)
     if not tofu_status.available:
-        return InfraApplyResult(
+        result = InfraApplyResult(
             ok=False,
             domain=config.domain,
             workspace_path=workspace,
@@ -387,11 +439,15 @@ def apply_mail_workspace(
             apply_result=None,
             applied=False,
             event_recorded=False,
+            operation_id=operation_id,
+            operation_recorded=operation_id is not None,
             issues=tofu_status.issues,
             error=tofu_status.issues[0] if tofu_status.issues else "OpenTofu unavailable",
         )
+        _finish_apply_operation(result, db_path=db_path)
+        return result
     if not resolved_plan_file.is_file():
-        return InfraApplyResult(
+        result = InfraApplyResult(
             ok=False,
             domain=config.domain,
             workspace_path=workspace,
@@ -400,8 +456,12 @@ def apply_mail_workspace(
             apply_result=None,
             applied=False,
             event_recorded=False,
+            operation_id=operation_id,
+            operation_recorded=operation_id is not None,
             error=f"saved plan file does not exist: {resolved_plan_file}",
         )
+        _finish_apply_operation(result, db_path=db_path)
+        return result
 
     assert tofu_status.path is not None
     apply_result = run_tofu_apply_saved_plan(
@@ -420,10 +480,13 @@ def apply_mail_workspace(
         apply_result=apply_result,
         applied=ok,
         event_recorded=False,
+        operation_id=operation_id,
+        operation_recorded=operation_id is not None,
         error=None if ok else apply_result.stderr or apply_result.stdout or "OpenTofu apply failed",
     )
     if record_event:
         result.event_recorded = _record_apply_event(result, db_path=db_path)
+    _finish_apply_operation(result, db_path=db_path)
     return result
 
 
@@ -455,6 +518,90 @@ def _record_apply_event(result: InfraApplyResult, *, db_path: Path | None = None
         },
     )
     return True
+
+
+def _start_operation(
+    *,
+    db_path: Path | None,
+    operation_type: str,
+    target_type: str,
+    target: str,
+    summary: str,
+    data: dict[str, object],
+) -> int:
+    started_at = utc_now_iso()
+    store = StateStore(db_path)
+    store.initialize(started_at)
+    return store.create_operation(
+        operation_type=operation_type,
+        target_type=target_type,
+        target=target,
+        status="running",
+        started_at=started_at,
+        summary=summary,
+        data=data,
+    )
+
+
+def _finish_plan_operation(result: InfraPlanResult, *, db_path: Path | None = None) -> None:
+    if result.operation_id is None:
+        return
+    finished_at = utc_now_iso()
+    data = {
+        "domain": result.domain,
+        "workspace_path": str(result.workspace_path),
+        "plan_file": str(result.plan_file) if result.plan_file else None,
+        "saved_plan": result.saved_plan,
+        "has_changes": result.has_changes,
+        "tofu_returncode": result.plan_result.returncode if result.plan_result else None,
+        "init_returncode": result.init_result.returncode if result.init_result else None,
+    }
+    store = StateStore(db_path)
+    if result.ok:
+        store.finish_operation(
+            result.operation_id,
+            finished_at=finished_at,
+            summary="Planned OpenTofu mail workspace",
+            data=data,
+        )
+        return
+    store.fail_operation(
+        result.operation_id,
+        finished_at=finished_at,
+        summary="OpenTofu mail plan failed",
+        error=result.error or "OpenTofu plan failed",
+        data=data,
+    )
+
+
+def _finish_apply_operation(result: InfraApplyResult, *, db_path: Path | None = None) -> None:
+    if result.operation_id is None:
+        return
+    finished_at = utc_now_iso()
+    data = {
+        "domain": result.domain,
+        "workspace_path": str(result.workspace_path),
+        "plan_file": str(result.plan_file),
+        "tofu_returncode": result.apply_result.returncode if result.apply_result else None,
+        "applied": result.applied,
+        "event_recorded": result.event_recorded,
+    }
+    store = StateStore(db_path)
+    if result.ok:
+        store.finish_operation(
+            result.operation_id,
+            finished_at=finished_at,
+            summary="Applied saved OpenTofu mail plan",
+            data=data,
+        )
+        return
+    store.fail_operation(
+        result.operation_id,
+        finished_at=finished_at,
+        summary="OpenTofu mail apply failed",
+        error=result.error or "OpenTofu apply failed",
+        data=data,
+    )
 
 
 def _workspace_files(config: MailWorkspaceConfig, workspace: Path) -> list[WorkspaceFile]:

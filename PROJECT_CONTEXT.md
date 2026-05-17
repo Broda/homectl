@@ -89,6 +89,7 @@ It should not expand into:
 - Provider observer snapshots may include public DNS requirements, but must not store AWS credentials, Cloudflare tokens, SMTP credentials, or other secrets.
 - OpenTofu support is narrow and operator-approved. Apply is foreground-only, saved-plan-only, and must not run from the daemon or a background queue.
 - Generated workspaces and SQLite events must not contain provider credentials or secrets. Saved OpenTofu plan files may contain sensitive values and should be treated as protected local artifacts.
+- Operation history is for transparency and future queueing. It must not store secrets, saved plan contents, or full provider/tool output, and it must not imply background mutations without a later explicit worker design.
 
 ## Public Contracts
 

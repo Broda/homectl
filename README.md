@@ -275,7 +275,16 @@ homesrvctl infra apply mail example.com --plan-file tfplan --yes
 
 `infra apply mail` applies only an existing saved plan file from `--plan-file`. It does not generate a plan, does not apply speculative plan text, and requires either an interactive typed confirmation or `--yes`. Applying a saved plan may mutate AWS SES and Cloudflare DNS resources through OpenTofu. Saved plan files may contain sensitive values; homesrvctl records only sanitized apply metadata in SQLite and does not store plan contents or full apply output.
 
-Install the external `tofu` binary separately before using plan or apply commands. `destroy`, import, state surgery, daemon/background apply, and operation-queue automation are not implemented.
+Install the external `tofu` binary separately before using plan or apply commands. `destroy`, import, state surgery, daemon/background apply, and queued operation execution are not implemented.
+
+Inspect operation history:
+
+```bash
+homesrvctl operations list
+homesrvctl operations show 12
+```
+
+Operations are durable SQLite records for important operator workflows such as OpenTofu plan/apply. They are for transparency and future queueing; this slice does not add a background worker, daemon-executed mutations, retries, or queued apply behavior. Operation records store sanitized metadata only, not saved plan contents, full OpenTofu output, provider credentials, or secrets.
 
 The daemon can run in the foreground for debugging:
 
@@ -303,7 +312,7 @@ sudo homesrvctl daemon uninstall
 
 `daemon install` writes `/etc/systemd/system/homesrvctl-daemon.service` by default and reloads systemd. Use `--now` to enable and start it immediately, or run `sudo systemctl enable --now homesrvctl-daemon.service` later. Add `--observe-runtime` to include the local runtime observers in the installed daemon, `--observe-cloudflare` to include the read-only Cloudflare provider observer, and `--observe-ses` to include the read-only SES provider observer. `daemon uninstall` removes the unit but leaves the SQLite state database, config, stack files, and logs intact.
 
-The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Cloudflare provider observation checks token, zone, DNS, and tunnel readiness; it does not create, repair, or delete DNS records. SES observation checks AWS/SES account, identity, DKIM, MAIL FROM, and DNS readiness; it does not create identities, mutate DNS, generate SMTP credentials, request production access, or send email. OpenTofu apply is foreground-only and saved-plan-only; destroy, import, state surgery, backups, Cloudflare Email Routing, inbound SES, API/web, operation queues, daemon apply, and direct provider mutations remain future work.
+The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Cloudflare provider observation checks token, zone, DNS, and tunnel readiness; it does not create, repair, or delete DNS records. SES observation checks AWS/SES account, identity, DKIM, MAIL FROM, and DNS readiness; it does not create identities, mutate DNS, generate SMTP credentials, request production access, or send email. OpenTofu apply is foreground-only and saved-plan-only; destroy, import, state surgery, backups, Cloudflare Email Routing, inbound SES, API/web, queued/background mutations, daemon apply, and direct provider mutations remain future work.
 
 Manage a domain:
 
@@ -384,9 +393,11 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl observe run [--stack-runtime|--no-stack-runtime] [--cloudflared|--no-cloudflared] [--traefik|--no-traefik] [--cloudflare|--no-cloudflare] [--ses|--no-ses] [--all] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl observe status [--db-path PATH] [--json]`
+- `homesrvctl operations list [--limit N] [--status STATUS] [--type TYPE] [--target TARGET] [--db-path PATH] [--json]`
+- `homesrvctl operations show OPERATION_ID [--db-path PATH] [--json]`
 - `homesrvctl infra status [--domain DOMAIN] [--workspace PATH] [--db-path PATH] [--json]`
 - `homesrvctl infra render mail <domain> [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--force] [--dry-run] [--json]`
-- `homesrvctl infra plan mail <domain> [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--out PLAN_FILE] [--refresh-render] [--force-render] [--json]`
+- `homesrvctl infra plan mail <domain> [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--out PLAN_FILE] [--db-path PATH] [--refresh-render] [--force-render] [--json]`
 - `homesrvctl infra apply mail <domain> --plan-file PLAN_FILE [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--db-path PATH] [--record-event|--no-record-event] [--yes] [--json]`
 - `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--observe-runtime] [--observe-cloudflare] [--observe-ses] [--json] [--quiet]`
 - `homesrvctl daemon install [--interval-seconds SECONDS] [--db-path PATH] [--config-path PATH] [--unit-name NAME] [--force] [--dry-run] [--now] [--observe-runtime] [--observe-cloudflare] [--observe-ses] [--json]`

@@ -314,6 +314,151 @@ class StateStore:
         events = self.list_recent_events(source=source, limit=1)
         return events[0] if events else None
 
+    def create_operation(
+        self,
+        *,
+        operation_type: str,
+        status: str,
+        started_at: str,
+        target_type: str | None = None,
+        target: str | None = None,
+        summary: str | None = None,
+        error: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> int:
+        data_json = json.dumps(data, sort_keys=True) if data is not None else None
+        with connect_state_db(self.path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO operations (
+                  operation_type,
+                  target_type,
+                  target,
+                  status,
+                  started_at,
+                  summary,
+                  error,
+                  data_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (operation_type, target_type, target, status, started_at, summary, error, data_json),
+            )
+            return int(cursor.lastrowid)
+
+    def update_operation(
+        self,
+        operation_id: int,
+        *,
+        status: str | None = None,
+        finished_at: str | None = None,
+        summary: str | None = None,
+        error: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> None:
+        assignments: list[str] = []
+        params: list[object] = []
+        if status is not None:
+            assignments.append("status = ?")
+            params.append(status)
+        if finished_at is not None:
+            assignments.append("finished_at = ?")
+            params.append(finished_at)
+        if summary is not None:
+            assignments.append("summary = ?")
+            params.append(summary)
+        if error is not None:
+            assignments.append("error = ?")
+            params.append(error)
+        if data is not None:
+            assignments.append("data_json = ?")
+            params.append(json.dumps(data, sort_keys=True))
+        if not assignments:
+            return
+        params.append(operation_id)
+        with connect_state_db(self.path) as connection:
+            connection.execute(
+                f"UPDATE operations SET {', '.join(assignments)} WHERE id = ?",
+                params,
+            )
+
+    def finish_operation(
+        self,
+        operation_id: int,
+        *,
+        finished_at: str,
+        summary: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> None:
+        self.update_operation(
+            operation_id,
+            status="completed",
+            finished_at=finished_at,
+            summary=summary,
+            error="",
+            data=data,
+        )
+
+    def fail_operation(
+        self,
+        operation_id: int,
+        *,
+        finished_at: str,
+        error: str,
+        summary: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> None:
+        self.update_operation(
+            operation_id,
+            status="failed",
+            finished_at=finished_at,
+            summary=summary,
+            error=error,
+            data=data,
+        )
+
+    def get_operation(self, operation_id: int) -> dict[str, object] | None:
+        if not self.status().initialized:
+            return None
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                "SELECT * FROM operations WHERE id = ?",
+                (operation_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_operations(
+        self,
+        *,
+        status: str | None = None,
+        operation_type: str | None = None,
+        target: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, object]]:
+        if not self.status().initialized:
+            return []
+        sql = "SELECT * FROM operations"
+        clauses: list[str] = []
+        params: list[object] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if operation_type:
+            clauses.append("operation_type = ?")
+            params.append(operation_type)
+        if target:
+            clauses.append("target = ?")
+            params.append(target)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY started_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
     def clear_local_stack_state(self) -> None:
         with connect_state_db(self.path) as connection:
             connection.execute(

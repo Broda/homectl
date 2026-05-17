@@ -35,7 +35,7 @@ Suggested phases:
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
 - Phase 4: add read-only daemon observers and systemd lifecycle support. Shipped for local stack refresh and local runtime observations.
 - Phase 5: add provider observers and explicit convergence helpers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness; read-only SES outbound readiness; OpenTofu SES/Cloudflare DNS workspace rendering; and foreground saved-plan apply.
-- Phase 6: add an operation queue and background jobs for safe mutations.
+- Phase 6: add operation tracking, then later an operation queue and background jobs for safe mutations. History/list/show support is shipped; background execution remains future.
 - Phase 7: add API/web clients over the same services and state store.
 
 Design constraints:
@@ -43,7 +43,7 @@ Design constraints:
 - Preserve the CLI as a first-class interface.
 - Treat SQLite as cached/indexed/observed state, not the only source of truth.
 - Do not store secrets in the local database.
-- Keep backups, operation queues, daemon apply, and broader provider surfaces as later work that benefits from this foundation rather than shipping them in the persistence slice.
+- Keep backups, daemon apply, queued mutation workers, and broader provider surfaces as later work that benefits from this foundation rather than shipping them in the persistence slice.
 
 Success criteria:
 - Deleting the database does not break existing CLI workflows.
@@ -178,7 +178,7 @@ Suggested sequencing:
   - operator-facing issues and next steps
 - Add mutation commands only after JSON output and read behavior stabilize.
 - Keep OpenTofu destroy/import/state surgery out of the CLI until an explicit operator-approved convergence design exists.
-- Keep daemon/background apply out of scope until operation queues and approvals are designed.
+- Keep daemon/background apply out of scope until operation execution, queueing, and approvals are designed.
 - Add TUI views only after CLI contracts exist.
 
 Design constraints:

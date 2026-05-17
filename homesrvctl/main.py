@@ -13,6 +13,7 @@ from homesrvctl.commands.domain_cmd import domain_cli
 from homesrvctl.commands.infra_cmd import infra_cli
 from homesrvctl.commands.install_cmd import install_cli, version
 from homesrvctl.commands.observe_cmd import observe_cli
+from homesrvctl.commands.operations_cmd import operations_cli
 from homesrvctl.commands.ports_cmd import ports_cli
 from homesrvctl.commands.refresh_cmd import refresh
 from homesrvctl.commands.site_cmd import site_cli
@@ -38,6 +39,7 @@ app.add_typer(tunnel_cli, name="tunnel")
 app.add_typer(ports_cli, name="ports")
 app.add_typer(install_cli, name="install")
 app.add_typer(observe_cli, name="observe")
+app.add_typer(operations_cli, name="operations")
 app.add_typer(infra_cli, name="infra")
 app.add_typer(site_cli, name="site")
 app.add_typer(app_cli, name="app")

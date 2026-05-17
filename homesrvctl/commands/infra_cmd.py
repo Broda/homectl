@@ -142,6 +142,7 @@ def infra_plan_mail(
     manage_dmarc: bool = typer.Option(True, "--manage-dmarc/--no-manage-dmarc", help="Plan a _dmarc TXT record."),
     workspace: Path | None = typer.Option(None, "--workspace", help="Use a custom workspace path."),
     out: Path | None = typer.Option(None, "--out", help="Save a non-speculative OpenTofu plan file."),
+    db_path: Path | None = typer.Option(None, "--db-path", help="Use a custom state database path for operation metadata."),
     refresh_render: bool = typer.Option(False, "--refresh-render", help="Render workspace files before planning."),
     force_render: bool = typer.Option(False, "--force-render", help="Overwrite generated files when rendering."),
     json_output: bool = typer.Option(False, "--json", help="Print plan result as JSON."),
@@ -165,6 +166,8 @@ def infra_plan_mail(
         refresh_render=refresh_render,
         force_render=force_render,
         out=out,
+        db_path=db_path or default_state_db_path(),
+        record_operation=True,
         which=shutil.which,
         runner=run_command,
     )
@@ -232,6 +235,7 @@ def infra_apply_mail(
         workspace_path=workspace,
         db_path=db_path or default_state_db_path(),
         record_event=record_event,
+        record_operation=True,
         which=shutil.which,
         runner=run_command,
     )

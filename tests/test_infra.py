@@ -221,6 +221,7 @@ def test_infra_plan_mail_cli_out_json_includes_saved_plan(monkeypatch, tmp_path:
     monkeypatch.setattr(infra_cmd.shutil, "which", lambda binary: "/usr/bin/tofu")
     monkeypatch.setattr(infra_cmd, "run_command", runner)
     workspace = tmp_path / "workspace"
+    db_path = tmp_path / "state.db"
 
     result = CliRunner().invoke(
         app,
@@ -235,6 +236,8 @@ def test_infra_plan_mail_cli_out_json_includes_saved_plan(monkeypatch, tmp_path:
             str(workspace),
             "--out",
             "tfplan",
+            "--db-path",
+            str(db_path),
             "--json",
         ],
     )
@@ -245,8 +248,14 @@ def test_infra_plan_mail_cli_out_json_includes_saved_plan(monkeypatch, tmp_path:
     assert payload["ok"] is True
     assert payload["has_changes"] is True
     assert payload["saved_plan"] is True
+    assert payload["operation_recorded"] is True
+    assert payload["operation_id"] is not None
     assert payload["plan_file"] == str(workspace / "tfplan")
     assert f"-out={workspace / 'tfplan'}" in commands[2]
+    operation = StateStore(db_path).get_operation(payload["operation_id"])
+    assert operation is not None
+    assert operation["operation_type"] == "infra.plan.mail"
+    assert operation["status"] == "completed"
 
 
 def test_plan_mail_workspace_error_with_fake_tofu(tmp_path: Path) -> None:
@@ -353,6 +362,7 @@ def test_apply_mail_uses_saved_plan_only_and_records_sanitized_event(tmp_path: P
         workspace_path=workspace,
         plan_file=Path("tfplan"),
         db_path=db_path,
+        record_operation=True,
         which=lambda binary: "/usr/bin/tofu",
         runner=runner,
     )
@@ -371,6 +381,15 @@ def test_apply_mail_uses_saved_plan_only_and_records_sanitized_event(tmp_path: P
     assert "fake sensitive plan contents" not in event_blob
     assert "AKIA" not in event_blob
     assert "cloudflare_api_token" not in event_blob.lower()
+    operation = StateStore(db_path).get_operation(result.operation_id or 0)
+    assert operation is not None
+    assert operation["operation_type"] == "infra.apply.mail"
+    assert operation["status"] == "completed"
+    operation_blob = json.dumps(operation, sort_keys=True)
+    assert "apply stdout" not in operation_blob
+    assert "fake sensitive plan contents" not in operation_blob
+    assert "AKIA" not in operation_blob
+    assert "cloudflare_api_token" not in operation_blob.lower()
 
 
 def test_apply_mail_failure_records_failure_event(tmp_path: Path) -> None:
@@ -390,6 +409,7 @@ def test_apply_mail_failure_records_failure_event(tmp_path: Path) -> None:
         workspace_path=workspace,
         plan_file=Path("tfplan"),
         db_path=db_path,
+        record_operation=True,
         which=lambda binary: "/usr/bin/tofu",
         runner=runner,
     )
@@ -401,6 +421,10 @@ def test_apply_mail_failure_records_failure_event(tmp_path: Path) -> None:
     event = StateStore(db_path).latest_event(source=INFRA_EVENT_SOURCE)
     assert event is not None
     assert event["severity"] == "warning"
+    operation = StateStore(db_path).get_operation(result.operation_id or 0)
+    assert operation is not None
+    assert operation["status"] == "failed"
+    assert operation["error"] == "apply failed"
 
 
 def test_apply_mail_tofu_missing_does_not_apply(tmp_path: Path) -> None:
@@ -502,9 +526,14 @@ def test_infra_apply_mail_cli_yes_json_applies_saved_plan(monkeypatch, tmp_path:
     assert payload["ok"] is True
     assert payload["applied"] is True
     assert payload["event_recorded"] is True
+    assert payload["operation_recorded"] is True
+    assert payload["operation_id"] is not None
     assert payload["plan_file"] == str(workspace / "tfplan")
     assert commands[1][1] == "apply"
     assert str(workspace / "tfplan") in commands[1]
+    operation = StateStore(db_path).get_operation(payload["operation_id"])
+    assert operation is not None
+    assert operation["status"] == "completed"
 
 
 def test_infra_render_mail_cli_json_dry_run(tmp_path: Path) -> None:

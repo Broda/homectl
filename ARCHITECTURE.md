@@ -41,7 +41,7 @@ Responsibilities:
 - wrap existing helpers first, then absorb command-owned orchestration in small slices
 - keep mutation behavior explicit and testable
 
-The first services inspect local stack directories, refresh cached stack state, run read-only local, Cloudflare, and SES provider observers, and provide stack-listing results from either the live filesystem or the SQLite cache. Future services should cover additional provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
+The first services inspect local stack directories, refresh cached stack state, run read-only local, Cloudflare, and SES provider observers, record operation history, and provide stack-listing results from either the live filesystem or the SQLite cache. Future services should cover additional provider observers and eventually mutation orchestration without duplicating CLI code.
 
 ### State store
 
@@ -54,6 +54,20 @@ Responsibilities:
 - avoid storing secrets
 
 The default local database path is `~/.local/share/homesrvctl/homesrvctl.db`, with `HOMESRVCTL_STATE_DB_PATH` and command options available for overrides. Config files and live systems remain authoritative. Cached reads are acceptable for dashboards and explicit cached listing, but mutation commands must continue validating live state.
+
+### Operation history layer
+
+- [`homesrvctl/services/operations.py`](homesrvctl/services/operations.py)
+- [`homesrvctl/commands/operations_cmd.py`](homesrvctl/commands/operations_cmd.py)
+
+Responsibilities:
+- expose durable operation records from the SQLite `operations` table
+- let operator surfaces list and inspect workflow history without running live checks
+- record important foreground workflows such as OpenTofu plan/apply with sanitized metadata
+- avoid storing secrets, saved plan contents, or full provider/tool output
+- prepare for future operation queues without executing background mutations
+
+Operations currently describe foreground workflows and their result state: `running`, `completed`, or `failed` for the paths wired today. They are not jobs yet. The daemon does not consume the operations table, retry operations, apply OpenTofu plans, or run provider mutations. Future worker design must add explicit approval, safety, retry, and cancellation semantics before operations become executable jobs.
 
 ### Refresh and observer layer
 
@@ -86,10 +100,11 @@ Responsibilities:
 - apply only operator-supplied saved plan files after confirmation
 - interpret plan exit codes without hiding stdout/stderr
 - record sanitized apply metadata in SQLite events
+- record sanitized plan/apply operation metadata in SQLite operations
 - keep subprocess execution in services rather than command formatting code
 - avoid writing provider credentials, SMTP credentials, or other secrets
 
-The current OpenTofu path renders SES outbound mail plus Cloudflare DNS workspaces with AWS and Cloudflare provider authentication left to normal environment/provider configuration. It may model SES identities, DKIM, custom MAIL FROM, and Cloudflare DNS records in generated `.tf` files. Apply is supported only as an explicit foreground command against an existing saved plan file. `homesrvctl` does not run `tofu destroy`, import resources, edit state, generate SMTP credentials, or run apply from the daemon or an operation queue. OpenTofu is optional and must not be required for normal stack, observer, daemon, or TUI workflows.
+The current OpenTofu path renders SES outbound mail plus Cloudflare DNS workspaces with AWS and Cloudflare provider authentication left to normal environment/provider configuration. It may model SES identities, DKIM, custom MAIL FROM, and Cloudflare DNS records in generated `.tf` files. Apply is supported only as an explicit foreground command against an existing saved plan file. `homesrvctl` does not run `tofu destroy`, import resources, edit state, generate SMTP credentials, or run apply from the daemon or a background operation worker. OpenTofu is optional and must not be required for normal stack, observer, daemon, or TUI workflows.
 
 ### Read-only daemon runtime
 
@@ -268,13 +283,13 @@ The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-
 
 ### Future API and expanded daemon layer
 
-No API server, web UI, operation queue, or broad external provider observer set is implemented yet. Cloudflare and SES provider observations exist as read-only provider observers. When introduced, additional layers should:
+No API server, web UI, operation worker, or broad external provider observer set is implemented yet. Cloudflare and SES provider observations exist as read-only provider observers, and operation history exists for foreground workflows. When introduced, additional layers should:
 - call the same service layer used by CLI commands
 - use the SQLite state store for cached observations, operation history, and fast reads
 - keep provider-specific logic in provider modules rather than API handlers
 - leave the CLI available for bootstrap, SSH recovery, scripting, and agent workflows
 
-The daemon begins as a read-only observer/reconciler that keeps the cache fresh before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened. Future API/web clients should call services and state-store helpers rather than duplicating command logic, provider logic, or SQL.
+The daemon begins as a read-only observer/reconciler that keeps the cache fresh before it owns mutation queues. Foreground mutation workflows can record `operations` and `events` so operator-facing surfaces can explain what happened. Future API/web clients should call services and state-store helpers rather than duplicating command logic, provider logic, or SQL.
 
 ### Public contract changes should be deliberate
 

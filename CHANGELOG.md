@@ -13,6 +13,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Began the control-plane service/state architecture while preserving existing CLI behavior.
 
 ### Added
+- Added operation history commands and sanitized operation recording for OpenTofu mail plan/apply workflows.
 - Added explicit saved-plan OpenTofu apply support for SES/Cloudflare DNS mail workspaces.
 - Added plan-only OpenTofu workspace rendering and planning for SES/Cloudflare DNS mail infrastructure.
 - Added read-only AWS SES provider observer support for outbound mail readiness.
