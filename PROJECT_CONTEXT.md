@@ -83,7 +83,7 @@ It should not expand into:
 - Local verification should be straightforward and reproducible.
 - Config files and live systems remain the source of intent and reality until a later slice deliberately changes that contract.
 - SQLite stores cached, observed state and history; it must stay rebuildable and must not store secrets.
-- The daemon is an observer that refreshes cached state; it must not mutate stacks, routing, provider state, or secrets.
+- The daemon is an observer that refreshes cached state; systemd support manages only the daemon process lifecycle. It must not mutate stacks, routing, provider state, or secrets.
 
 ## Public Contracts
 

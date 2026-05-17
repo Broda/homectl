@@ -238,7 +238,7 @@ The state database is a local SQLite cache and index for current and future dash
 
 `homesrvctl list` still scans the configured sites root live by default. Use `list --cached` for fast cached reads, `list --refresh` to refresh local stack metadata before listing from the cache, and `list --live` to force the filesystem view. The TUI prefers cached stack-list data when available and falls back to the live list when the cache is missing or empty.
 
-The daemon is foreground-only in this slice:
+The daemon can run in the foreground for debugging:
 
 ```bash
 homesrvctl daemon run --once
@@ -246,7 +246,19 @@ homesrvctl daemon run --interval-seconds 60
 homesrvctl daemon status
 ```
 
-The daemon is read-only and periodically refreshes local stack cache state. It does not install a systemd service, expose an API/web server, call provider APIs, run Docker commands, or mutate stacks.
+Install the same read-only daemon as a systemd service on Debian-family hosts:
+
+```bash
+sudo homesrvctl daemon install
+sudo homesrvctl daemon install --now
+homesrvctl daemon status
+sudo homesrvctl daemon restart
+sudo homesrvctl daemon uninstall
+```
+
+`daemon install` writes `/etc/systemd/system/homesrvctl-daemon.service` by default and reloads systemd. Use `--now` to enable and start it immediately, or run `sudo systemctl enable --now homesrvctl-daemon.service` later. `daemon uninstall` removes the unit but leaves the SQLite state database, config, stack files, and logs intact.
+
+The daemon is read-only and periodically refreshes local stack cache state. It does not expose an API/web server, call provider APIs, run Docker commands, or mutate stacks.
 
 Manage a domain:
 
@@ -326,7 +338,11 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl db init|status|rebuild [--path PATH] [--json]`
 - `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--json] [--quiet]`
-- `homesrvctl daemon status [--db-path PATH] [--json]`
+- `homesrvctl daemon install [--interval-seconds SECONDS] [--db-path PATH] [--config-path PATH] [--unit-name NAME] [--force] [--dry-run] [--now] [--json]`
+- `homesrvctl daemon uninstall [--unit-name NAME] [--force] [--dry-run] [--json]`
+- `homesrvctl daemon start|stop|restart [--unit-name NAME] [--json]`
+- `homesrvctl daemon logs [--unit-name NAME] [--lines N] [--json]`
+- `homesrvctl daemon status [--db-path PATH] [--unit-name NAME] [--json]`
 - `homesrvctl tui [--refresh-seconds FLOAT]`
 - `homesrvctl cloudflared status [--json]`
 - `homesrvctl cloudflared setup [--json]`

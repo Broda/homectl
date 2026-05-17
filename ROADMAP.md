@@ -33,7 +33,7 @@ Suggested phases:
 - Phase 1: add SQLite state store and `db` commands. Shipped.
 - Phase 2: add refresh/snapshot of local stack state. Shipped.
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
-- Phase 4: add read-only daemon observers. Shipped for local stack refresh.
+- Phase 4: add read-only daemon observers and systemd lifecycle support. Shipped for local stack refresh.
 - Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state.
 - Phase 6: add an operation queue and background jobs for safe mutations.
 - Phase 7: add API/web clients over the same services and state store.

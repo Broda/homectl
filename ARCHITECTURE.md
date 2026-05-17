@@ -72,15 +72,17 @@ The refresh layer currently records stack directory metadata, compose-file prese
 ### Read-only daemon runtime
 
 - [`homesrvctl/services/daemon.py`](homesrvctl/services/daemon.py)
+- [`homesrvctl/services/daemon_systemd.py`](homesrvctl/services/daemon_systemd.py)
 - [`homesrvctl/commands/daemon_cmd.py`](homesrvctl/commands/daemon_cmd.py)
 
 Responsibilities:
 - run the existing local refresh service periodically in a foreground observer loop
+- render, install, uninstall, and inspect the systemd unit for the same read-only daemon
 - keep the SQLite stack cache fresh without becoming an authority
 - record daemon lifecycle and issue events in the state store
-- report persisted cache/refresh status through `daemon status`
+- report persisted cache/refresh status and systemd state through `daemon status`
 
-The current daemon is read-only. It does not install systemd units, expose an API/web server, run Docker, call provider APIs, or perform stack/domain mutations. Future daemon slices may add process supervision, provider observers, and operation queues, but mutation commands should remain explicit and operator-confirmed until a later design deliberately changes that contract.
+The current daemon is read-only. Systemd support only manages the daemon process lifecycle; it does not add Docker observers, expose an API/web server, call provider APIs, or perform stack/domain mutations. Future daemon slices may add provider observers and operation queues, but mutation commands should remain explicit and operator-confirmed until a later design deliberately changes that contract.
 
 ### Config and model layer
 
@@ -237,7 +239,7 @@ The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-
 
 ### Future API and expanded daemon layer
 
-No API server, web UI, daemon installation, provider observer set, or operation queue is implemented yet. When introduced, these layers should:
+No API server, web UI, provider observer set, or operation queue is implemented yet. When introduced, these layers should:
 - call the same service layer used by CLI commands
 - use the SQLite state store for cached observations, operation history, and fast reads
 - keep provider-specific logic in provider modules rather than API handlers
