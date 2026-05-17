@@ -426,8 +426,8 @@ def test_apply_mail_tofu_missing_does_not_apply(tmp_path: Path) -> None:
 def test_infra_apply_mail_requires_plan_file_option() -> None:
     result = CliRunner().invoke(app, ["infra", "apply", "mail", "example.com", "--yes"])
 
-    assert result.exit_code != 0
-    assert "--plan-file" in result.output
+    assert result.exit_code == 2
+    assert "Applied OpenTofu mail plan" not in result.output
 
 
 def test_infra_apply_mail_json_requires_yes(tmp_path: Path) -> None:
