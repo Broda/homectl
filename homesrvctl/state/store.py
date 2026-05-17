@@ -163,6 +163,73 @@ class StateStore:
                 ),
             )
 
+    def add_stack_observation(
+        self,
+        *,
+        stack_hostname: str,
+        observed_at: str,
+        source: str,
+        status: str,
+        detail: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> None:
+        data_json = json.dumps(data, sort_keys=True) if data is not None else None
+        with connect_state_db(self.path) as connection:
+            connection.execute(
+                """
+                INSERT INTO stack_observations (
+                  stack_hostname,
+                  observed_at,
+                  source,
+                  status,
+                  detail,
+                  data_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (stack_hostname, observed_at, source, status, detail, data_json),
+            )
+
+    def list_stack_observations(
+        self,
+        *,
+        source: str | None = None,
+        stack_hostname: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        if not self.status().initialized:
+            return []
+        sql = "SELECT * FROM stack_observations"
+        clauses: list[str] = []
+        params: list[object] = []
+        if source:
+            clauses.append("source = ?")
+            params.append(source)
+        if stack_hostname:
+            clauses.append("stack_hostname = ?")
+            params.append(stack_hostname)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY observed_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def latest_stack_observation(
+        self,
+        *,
+        source: str | None = None,
+        stack_hostname: str | None = None,
+    ) -> dict[str, object] | None:
+        observations = self.list_stack_observations(
+            source=source,
+            stack_hostname=stack_hostname,
+            limit=1,
+        )
+        return observations[0] if observations else None
+
     def list_stacks(self) -> list[dict[str, object]]:
         with sqlite3.connect(self.path) as connection:
             connection.row_factory = sqlite3.Row

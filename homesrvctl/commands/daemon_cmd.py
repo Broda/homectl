@@ -7,6 +7,7 @@ import typer
 
 from homesrvctl.services import daemon_systemd
 from homesrvctl.services.daemon import DEFAULT_DAEMON_INTERVAL_SECONDS, get_daemon_status, run_daemon
+from homesrvctl.services.observers.runner import get_observer_status
 from homesrvctl.state.db import default_state_db_path
 from homesrvctl.utils import success, warn, with_json_schema
 
@@ -24,6 +25,11 @@ def daemon_run(
     once: bool = typer.Option(False, "--once", help="Run one refresh cycle and exit."),
     db_path: Path | None = typer.Option(None, "--db-path", help="Use a custom state database path."),
     config_path: Path | None = typer.Option(None, "--config-path", help="Read config from a custom path."),
+    observe_runtime: bool = typer.Option(
+        False,
+        "--observe-runtime/--no-observe-runtime",
+        help="Run read-only local runtime observers after each stack metadata refresh.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print the daemon result as JSON."),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress per-cycle human output."),
 ) -> None:
@@ -53,6 +59,7 @@ def daemon_run(
         config_path=config_path,
         interval_seconds=interval_seconds,
         once=once,
+        observe_runtime=observe_runtime,
         on_cycle=None if quiet or json_output else _print_cycle_result,
     )
 
@@ -82,7 +89,13 @@ def daemon_status(
     """Show read-only daemon/cache status."""
     status = get_daemon_status(db_path=db_path or default_state_db_path())
     systemd_status = daemon_systemd.inspect_daemon_systemd(unit_name=unit_name)
-    payload = {"action": "daemon_status", **status.to_dict(), **systemd_status.to_dict()}
+    observer_status = get_observer_status(db_path=status.db_path)
+    payload = {
+        "action": "daemon_status",
+        **status.to_dict(),
+        **systemd_status.to_dict(),
+        "observer_status": observer_status.to_dict(),
+    }
     if json_output:
         typer.echo(json.dumps(with_json_schema(payload), indent=2))
         if not status.ok:
@@ -103,6 +116,7 @@ def daemon_status(
         )
         typer.echo(f"last_refresh_at: {status.last_refresh_at or 'N/A'}")
         typer.echo(f"daemon_heartbeat_at: {status.daemon_heartbeat_at or 'N/A'}")
+        typer.echo(f"observers: {'available' if observer_status.ok else 'missing'}")
         for issue in systemd_status.issues:
             typer.echo(f"- {issue}")
         return
@@ -116,6 +130,8 @@ def daemon_status(
     for issue in status.issues:
         typer.echo(f"- {issue}")
     for issue in systemd_status.issues:
+        typer.echo(f"- {issue}")
+    for issue in observer_status.issues:
         typer.echo(f"- {issue}")
     raise typer.Exit(code=1)
 
@@ -138,6 +154,11 @@ def daemon_install(
     force: bool = typer.Option(False, "--force", help="Overwrite an existing unit file."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the planned unit and commands without changing systemd."),
     now: bool = typer.Option(False, "--now", help="Enable and start the unit after installing it."),
+    observe_runtime: bool = typer.Option(
+        False,
+        "--observe-runtime/--no-observe-runtime",
+        help="Include read-only local runtime observers in the installed daemon.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print install result as JSON."),
 ) -> None:
     """Install the read-only daemon as a systemd system service."""
@@ -149,6 +170,7 @@ def daemon_install(
         force=force,
         dry_run=dry_run,
         now=now,
+        observe_runtime=observe_runtime,
     )
     payload = {"action": "daemon_install", **result.to_dict()}
     if json_output:
@@ -275,8 +297,12 @@ def daemon_logs(
 def _print_cycle_result(cycle) -> None:  # noqa: ANN001
     if cycle.ok:
         success(f"Refreshed local stack state: scanned={cycle.scanned_count} updated={cycle.updated_count}")
+        if cycle.observer_run:
+            success(f"Observed local runtime state: observers={len(cycle.observer_run.results)}")
         return
     warn(f"Refresh completed with issues: scanned={cycle.scanned_count} updated={cycle.updated_count}")
+    if cycle.observer_run:
+        warn(f"Observed local runtime state with issues: observers={len(cycle.observer_run.results)}")
     if cycle.error:
         typer.echo(f"- {cycle.error}")
     for issue in cycle.issues:

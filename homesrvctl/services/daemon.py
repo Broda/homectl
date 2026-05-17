@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from time import sleep as default_sleep
 from typing import Callable
 
+from homesrvctl.services.observers.models import ObserverRunResult
+from homesrvctl.services.observers.runner import run_observers
 from homesrvctl.services.refresh import refresh_local_stack_state, utc_now_iso
 from homesrvctl.state.models import RefreshResult
 from homesrvctl.state.store import StateStore
@@ -22,9 +24,20 @@ class DaemonCycleResult:
     updated_count: int
     issues: list[str] = field(default_factory=list)
     error: str | None = None
+    observer_run: ObserverRunResult | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        payload = {
+            "ok": self.ok,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "scanned_count": self.scanned_count,
+            "updated_count": self.updated_count,
+            "issues": self.issues,
+            "error": self.error,
+            "observer_run": self.observer_run.to_dict() if self.observer_run else None,
+        }
+        return payload
 
 
 @dataclass(slots=True)
@@ -84,7 +97,12 @@ class DaemonStatus:
         }
 
 
-def run_daemon_cycle(*, db_path: Path | None = None, config_path: Path | None = None) -> DaemonCycleResult:
+def run_daemon_cycle(
+    *,
+    db_path: Path | None = None,
+    config_path: Path | None = None,
+    observe_runtime: bool = False,
+) -> DaemonCycleResult:
     try:
         refresh_result = refresh_local_stack_state(db_path=db_path, config_path=config_path)
     except Exception as exc:
@@ -98,7 +116,14 @@ def run_daemon_cycle(*, db_path: Path | None = None, config_path: Path | None = 
             issues=[],
             error=str(exc),
         )
-    return _cycle_from_refresh(refresh_result)
+    cycle = _cycle_from_refresh(refresh_result)
+    if not observe_runtime:
+        return cycle
+    observer_run = run_observers(db_path=db_path, config_path=config_path)
+    cycle.observer_run = observer_run
+    cycle.issues.extend(observer_run.issues)
+    cycle.ok = cycle.ok and observer_run.ok
+    return cycle
 
 
 def run_daemon(
@@ -110,6 +135,7 @@ def run_daemon(
     sleep_func: Callable[[float], None] = default_sleep,
     max_cycles: int | None = None,
     on_cycle: Callable[[DaemonCycleResult], None] | None = None,
+    observe_runtime: bool = False,
 ) -> DaemonRunResult:
     started_at = utc_now_iso()
     store = StateStore(db_path)
@@ -124,7 +150,11 @@ def run_daemon(
 
     try:
         while True:
-            last_cycle = run_daemon_cycle(db_path=store.path, config_path=config_path)
+            last_cycle = run_daemon_cycle(
+                db_path=store.path,
+                config_path=config_path,
+                observe_runtime=observe_runtime,
+            )
             cycle_count += 1
             if not last_cycle.ok:
                 _record_cycle_issue_event(store, last_cycle)

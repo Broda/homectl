@@ -7,7 +7,9 @@ import yaml
 from typer.testing import CliRunner
 
 from homesrvctl.main import app
+from homesrvctl.services import daemon as daemon_service
 from homesrvctl.services.daemon import run_daemon
+from homesrvctl.services.observers.models import ObserverRunResult
 from homesrvctl.state.store import StateStore
 
 
@@ -173,3 +175,36 @@ def test_daemon_records_lifecycle_and_issue_events(monkeypatch, tmp_path: Path) 
         "refresh completed with issues",
         "daemon stopped",
     ]
+
+
+def test_daemon_run_once_observe_runtime_invokes_observer_runner(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    _write_stack(sites_root, "app.example.com")
+    monkeypatch.setenv("HOME", str(home))
+    calls: list[Path | None] = []
+
+    def fake_run_observers(**kwargs) -> ObserverRunResult:  # noqa: ANN003
+        calls.append(kwargs.get("db_path"))
+        return ObserverRunResult(
+            ok=True,
+            db_path=kwargs["db_path"],
+            started_at="2026-05-17T00:00:00Z",
+            finished_at="2026-05-17T00:00:00Z",
+            results=[],
+            issues=[],
+        )
+
+    monkeypatch.setattr(daemon_service, "run_observers", fake_run_observers)
+
+    result = CliRunner().invoke(
+        app,
+        ["daemon", "run", "--once", "--observe-runtime", "--db-path", str(db_path), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["last_refresh"]["observer_run"]["ok"] is True
+    assert calls == [db_path]

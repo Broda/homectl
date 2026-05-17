@@ -20,6 +20,7 @@ class DaemonUnitConfig:
     db_path: Path
     config_path: Path | None = None
     executable: str | None = None
+    observe_runtime: bool = False
 
 
 @dataclass(slots=True)
@@ -36,6 +37,7 @@ class DaemonInstallResult:
     daemon_reload_ran: bool
     enabled: bool
     started: bool
+    observe_runtime: bool = False
     commands: list[list[str]] = field(default_factory=list)
     unit_content: str | None = None
     issues: list[str] = field(default_factory=list)
@@ -55,6 +57,7 @@ class DaemonInstallResult:
             "daemon_reload_ran": self.daemon_reload_ran,
             "enabled": self.enabled,
             "started": self.started,
+            "observe_runtime": self.observe_runtime,
             "commands": self.commands,
             "unit_content": self.unit_content,
             "issues": self.issues,
@@ -168,6 +171,8 @@ def render_daemon_unit(config: DaemonUnitConfig) -> str:
     ]
     if config.config_path:
         command.extend(["--config-path", str(config.config_path)])
+    if config.observe_runtime:
+        command.append("--observe-runtime")
     exec_start = " ".join(shlex.quote(part) for part in command)
     return "\n".join(
         [
@@ -199,6 +204,7 @@ def install_daemon_unit(
     force: bool = False,
     dry_run: bool = False,
     now: bool = False,
+    observe_runtime: bool = False,
     unit_dir: Path = SYSTEM_UNIT_DIR,
     runner=run_command,  # noqa: ANN001
 ) -> DaemonInstallResult:
@@ -214,6 +220,7 @@ def install_daemon_unit(
                 interval_seconds=interval_seconds,
                 db_path=target_db_path,
                 config_path=config_path,
+                observe_runtime=observe_runtime,
             )
         )
     except RuntimeError as exc:
@@ -226,6 +233,7 @@ def install_daemon_unit(
             config_path=config_path,
             dry_run=dry_run,
             commands=commands,
+            observe_runtime=observe_runtime,
             error=str(exc),
         )
     if dry_run:
@@ -239,6 +247,7 @@ def install_daemon_unit(
             dry_run=True,
             commands=commands,
             unit_content=unit_content,
+            observe_runtime=observe_runtime,
         )
     if os.geteuid() != 0:
         return _install_result(
@@ -251,6 +260,7 @@ def install_daemon_unit(
             dry_run=False,
             commands=commands,
             unit_content=unit_content,
+            observe_runtime=observe_runtime,
             error="system daemon install requires sudo/root",
         )
     if not command_exists("systemctl"):
@@ -264,6 +274,7 @@ def install_daemon_unit(
             dry_run=False,
             commands=commands,
             unit_content=unit_content,
+            observe_runtime=observe_runtime,
             error="systemctl is not available",
         )
     if unit_path.exists() and not force:
@@ -277,6 +288,7 @@ def install_daemon_unit(
             dry_run=False,
             commands=commands,
             unit_content=unit_content,
+            observe_runtime=observe_runtime,
             error=f"unit already exists; rerun with --force: {unit_path}",
         )
     unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +306,7 @@ def install_daemon_unit(
             wrote_unit=True,
             commands=commands,
             unit_content=unit_content,
+            observe_runtime=observe_runtime,
             error=reload_result.stderr or reload_result.stdout or "systemctl daemon-reload failed",
         )
     enabled = False
@@ -313,6 +326,7 @@ def install_daemon_unit(
                 daemon_reload_ran=True,
                 commands=commands,
                 unit_content=unit_content,
+                observe_runtime=observe_runtime,
                 error=now_result.stderr or now_result.stdout or "systemctl enable --now failed",
             )
         enabled = True
@@ -331,6 +345,7 @@ def install_daemon_unit(
         started=started,
         commands=commands,
         unit_content=unit_content,
+        observe_runtime=observe_runtime,
     )
 
 
@@ -566,6 +581,7 @@ def _install_result(
     enabled: bool = False,
     started: bool = False,
     unit_content: str | None = None,
+    observe_runtime: bool = False,
     error: str | None = None,
 ) -> DaemonInstallResult:
     return DaemonInstallResult(
@@ -581,6 +597,7 @@ def _install_result(
         daemon_reload_ran=daemon_reload_ran,
         enabled=enabled,
         started=started,
+        observe_runtime=observe_runtime,
         commands=commands,
         unit_content=unit_content,
         error=error,
