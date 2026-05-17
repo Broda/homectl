@@ -23,7 +23,34 @@ Success criteria:
 - CI and release workflows exercise the same core checks.
 - Version, changelog, and release tag expectations are explicit and low-friction.
 
-### 2. TUI Operator-Facing Polish
+### 2. Control Plane Persistence and Daemon Runtime
+
+Status: in progress
+
+Goal: evolve `homesrvctl` from live command checks into a local Python control plane with reusable services, rebuildable SQLite state, and future background observation.
+
+Suggested phases:
+- Phase 1: add SQLite state store and `db` commands.
+- Phase 2: add refresh/snapshot of local stack state.
+- Phase 3: let the TUI read cached state where it improves startup or repeated scans.
+- Phase 4: add read-only daemon observers.
+- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state.
+- Phase 6: add an operation queue and background jobs for safe mutations.
+- Phase 7: add API/web clients over the same services and state store.
+
+Design constraints:
+- Keep everything Python until a concrete need says otherwise.
+- Preserve the CLI as a first-class interface.
+- Treat SQLite as cached/indexed/observed state, not the only source of truth.
+- Do not store secrets in the local database.
+- Keep mail, SES, and OpenTofu as later provider surfaces that benefit from this foundation rather than shipping them in the persistence slice.
+
+Success criteria:
+- Deleting the database does not break existing CLI workflows.
+- Refresh behavior is deterministic and testable without Docker, cloudflared, Cloudflare credentials, root, or network access.
+- Future daemon/API work reuses services instead of duplicating command logic.
+
+### 3. TUI Operator-Facing Polish
 
 Status: complete
 
@@ -41,7 +68,7 @@ Success criteria:
 - The dashboard remains compact but uses operator-facing labels consistently. Met.
 - Copy changes do not alter CLI command semantics or JSON contracts. Met.
 
-### 3. Scaffold Surface Consolidation
+### 4. Scaffold Surface Consolidation
 
 Status: planned
 
@@ -62,7 +89,7 @@ Success criteria:
 - Scaffold registration, docs, TUI choices, and packaging checks do not drift.
 - Any registry expansion simplifies maintenance without broadening product scope.
 
-### 4. Cloudflare Control-Plane Extensions
+### 5. Cloudflare Control-Plane Extensions
 
 Status: planned
 
@@ -86,7 +113,7 @@ Success criteria:
 - Operators can identify Cloudflare-side blockers before domain mutation attempts.
 - New Cloudflare features remain narrow, explicit, and convergent.
 
-### 5. Existing App Adoption and Hosting Wrappers
+### 6. Existing App Adoption and Hosting Wrappers
 
 Status: proposed
 
@@ -126,7 +153,7 @@ Current shipped limitations:
 - `app wrap` supports static bind-mount wrappers and Dockerfile build wrappers.
 - It does not yet adopt existing Compose files or expose wrapper flows in the TUI.
 
-### 6. Mail Provider and Routing Surfaces
+### 7. Mail Provider and Routing Surfaces
 
 Status: proposed
 

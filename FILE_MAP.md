@@ -42,6 +42,10 @@ This document is a quick orientation guide to the repository. It is intentionall
   Config loading, default paths, and stack-local config helpers.
 - [`homesrvctl/ports.py`](homesrvctl/ports.py)
   Rendered-stack port inspection helpers used for port reporting.
+- [`homesrvctl/state`](homesrvctl/state)
+  SQLite state-store package for local cached stack state, observations, operations, events, schema initialization, and status helpers.
+- [`homesrvctl/services`](homesrvctl/services)
+  Reusable service layer for core operations shared by commands and future TUI/daemon/API surfaces.
 - [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
   Existing app/site source detection helpers used by adoption and wrapper command surfaces.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
@@ -76,6 +80,10 @@ This document is a quick orientation guide to the repository. It is intentionall
 
 - [`homesrvctl/commands/config_cmd.py`](homesrvctl/commands/config_cmd.py)
   `config init` and related config-surface commands.
+- [`homesrvctl/commands/db_cmd.py`](homesrvctl/commands/db_cmd.py)
+  Local SQLite state database commands such as `db init`, `db status`, and `db rebuild`.
+- [`homesrvctl/commands/refresh_cmd.py`](homesrvctl/commands/refresh_cmd.py)
+  Local refresh command that snapshots current stack directory state into the state database.
 - [`homesrvctl/commands/install_cmd.py`](homesrvctl/commands/install_cmd.py)
   `version` and `install status` diagnostics for package version, executable path, and pipx command-path conflicts.
 - [`homesrvctl/commands/bootstrap_cmd.py`](homesrvctl/commands/bootstrap_cmd.py)

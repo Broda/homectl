@@ -220,6 +220,17 @@ homesrvctl cloudflared config-test
 homesrvctl cloudflared logs
 ```
 
+Refresh the local state index:
+
+```bash
+homesrvctl db init
+homesrvctl refresh
+homesrvctl db status
+homesrvctl db rebuild
+```
+
+The state database is a local SQLite cache and index for current and future dashboard/control-plane workflows. By default it lives at `~/.local/share/homesrvctl/homesrvctl.db`. It records observed local stack metadata and can be rebuilt from the filesystem; it is not the source of truth and does not store secrets.
+
 Manage a domain:
 
 ```bash

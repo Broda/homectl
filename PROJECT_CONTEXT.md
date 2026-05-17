@@ -4,7 +4,7 @@ This document records the working assumptions for `homesrvctl`: what the project
 
 ## Project Purpose
 
-`homesrvctl` is a CLI for operating a home-server hosting setup built around:
+`homesrvctl` is evolving from a command-oriented CLI into a local self-hosting control plane for a home-server setup built around:
 - Cloudflare Tunnel
 - Traefik
 - Docker Compose
@@ -13,7 +13,11 @@ The project focuses on:
 - scaffolding deployable hostname stacks
 - managing domain routing state
 - validating local hosting setup
+- indexing observed local state in a rebuildable SQLite store
+- moving reusable business logic into Python services
 - keeping operator workflows simple and repeatable
+
+The CLI remains a first-class interface for bootstrap, SSH usage, scripting, recovery, and agent-assisted workflows. Future daemon, API, or web surfaces should reuse the same services and state store instead of replacing the CLI or duplicating provider logic.
 
 ## Non-Goals
 
@@ -77,6 +81,8 @@ It should not expand into:
 - Small operator-facing commands over highly abstract orchestration.
 - Clear public contracts over accidental output or config drift.
 - Local verification should be straightforward and reproducible.
+- Config files and live systems remain the source of intent and reality until a later slice deliberately changes that contract.
+- SQLite stores cached, observed state and history; it must stay rebuildable and must not store secrets.
 
 ## Public Contracts
 

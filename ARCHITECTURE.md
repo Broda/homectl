@@ -29,6 +29,46 @@ Should not do:
 - embed `cloudflared` config parsing logic directly
 - spread shell/process logic across individual commands
 
+Over time, command modules should become thin orchestration and formatting layers over reusable services. The existing CLI remains a supported operator interface, not a transitional shell around a future web app.
+
+### Service layer
+
+- [`homesrvctl/services`](homesrvctl/services)
+
+Responsibilities:
+- implement reusable Python business logic without depending on Typer when practical
+- return structured dataclasses or dictionaries that commands, the TUI, and future API/web layers can format
+- wrap existing helpers first, then absorb command-owned orchestration in small slices
+- keep mutation behavior explicit and testable
+
+The first services inspect local stack directories and refresh cached stack state. Future services should cover domain/tunnel inspection, provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
+
+### State store
+
+- [`homesrvctl/state`](homesrvctl/state)
+
+Responsibilities:
+- own SQLite connection helpers, schema initialization, and store operations
+- keep local cached/indexed/observed state rebuildable from config, filesystem, and provider observations
+- store history such as observations, operations, and events without becoming the only source of truth
+- avoid storing secrets
+
+The default local database path is `~/.local/share/homesrvctl/homesrvctl.db`, with `HOMESRVCTL_STATE_DB_PATH` and command options available for overrides. Config files and live systems remain authoritative for this slice.
+
+### Refresh and observer layer
+
+- [`homesrvctl/services/refresh.py`](homesrvctl/services/refresh.py)
+- [`homesrvctl/services/stacks.py`](homesrvctl/services/stacks.py)
+- [`homesrvctl/commands/refresh_cmd.py`](homesrvctl/commands/refresh_cmd.py)
+
+Responsibilities:
+- snapshot observed local state into the SQLite store
+- start with local-only stack directory and stack-local config observations
+- avoid Docker, Cloudflare, `cloudflared`, or network calls unless a later observer explicitly owns that surface
+- preserve enough structure that a future daemon can run the same refresh services periodically
+
+The refresh layer currently records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings.
+
 ### Config and model layer
 
 - [`homesrvctl/models.py`](homesrvctl/models.py)
@@ -180,6 +220,16 @@ Textual is now the active and only retained implementation for `homesrvctl tui`.
 The command wrapper should import the Textual app lazily so the rest of the CLI can still start cleanly if the local environment has not yet been refreshed to include the new dependency.
 The shipped TUI now covers the public CLI surface with a mix of guided mutation flows, focused tool menus, and read-only detail views instead of relying on a separate backend model.
 The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-prompt buttons, and the detail-pane action button strip are real Textual widgets that accept both keyboard and mouse input. Mouse and keyboard selection share a single `--selected` class on the same row widget, so the two input modes cannot drift into separate tracks; click targets are additive rather than replacements for the underlying keyboard bindings.
+
+### Future daemon and API layer
+
+No daemon, API server, or web UI is implemented yet. When introduced, these layers should:
+- call the same service layer used by CLI commands
+- use the SQLite state store for cached observations, operation history, and fast reads
+- keep provider-specific logic in provider modules rather than API handlers
+- leave the CLI available for bootstrap, SSH recovery, scripting, and agent workflows
+
+The daemon should begin as a read-only observer/reconciler before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened.
 
 ### Public contract changes should be deliberate
 
