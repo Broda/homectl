@@ -230,11 +230,23 @@ homesrvctl db rebuild
 homesrvctl list --cached
 homesrvctl list --refresh
 homesrvctl list --live
+homesrvctl daemon run --once
+homesrvctl daemon status
 ```
 
 The state database is a local SQLite cache and index for current and future dashboard/control-plane workflows. By default it lives at `~/.local/share/homesrvctl/homesrvctl.db`. It records observed local stack metadata and can be rebuilt from the filesystem; it is not the source of truth and does not store secrets.
 
-`homesrvctl list` still scans the configured sites root live by default. Use `list --cached` for fast cached reads, `list --refresh` to refresh local stack metadata before listing from the cache, and `list --live` to force the filesystem view. The TUI prefers cached stack-list data when available and falls back to the live list when the cache is missing or empty. A daemon, web UI, and provider observers remain future work.
+`homesrvctl list` still scans the configured sites root live by default. Use `list --cached` for fast cached reads, `list --refresh` to refresh local stack metadata before listing from the cache, and `list --live` to force the filesystem view. The TUI prefers cached stack-list data when available and falls back to the live list when the cache is missing or empty.
+
+The daemon is foreground-only in this slice:
+
+```bash
+homesrvctl daemon run --once
+homesrvctl daemon run --interval-seconds 60
+homesrvctl daemon status
+```
+
+The daemon is read-only and periodically refreshes local stack cache state. It does not install a systemd service, expose an API/web server, call provider APIs, run Docker commands, or mutate stacks.
 
 Manage a domain:
 
@@ -313,6 +325,8 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl list [--cached] [--live] [--refresh] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl db init|status|rebuild [--path PATH] [--json]`
 - `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
+- `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--json] [--quiet]`
+- `homesrvctl daemon status [--db-path PATH] [--json]`
 - `homesrvctl tui [--refresh-seconds FLOAT]`
 - `homesrvctl cloudflared status [--json]`
 - `homesrvctl cloudflared setup [--json]`

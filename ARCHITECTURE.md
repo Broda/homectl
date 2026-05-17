@@ -69,6 +69,19 @@ Responsibilities:
 
 The refresh layer currently records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings. It is intentionally local-only; Docker, `cloudflared`, Cloudflare, SES, OpenTofu, backups, and other provider observations belong to later observer slices.
 
+### Read-only daemon runtime
+
+- [`homesrvctl/services/daemon.py`](homesrvctl/services/daemon.py)
+- [`homesrvctl/commands/daemon_cmd.py`](homesrvctl/commands/daemon_cmd.py)
+
+Responsibilities:
+- run the existing local refresh service periodically in a foreground observer loop
+- keep the SQLite stack cache fresh without becoming an authority
+- record daemon lifecycle and issue events in the state store
+- report persisted cache/refresh status through `daemon status`
+
+The current daemon is read-only. It does not install systemd units, expose an API/web server, run Docker, call provider APIs, or perform stack/domain mutations. Future daemon slices may add process supervision, provider observers, and operation queues, but mutation commands should remain explicit and operator-confirmed until a later design deliberately changes that contract.
+
 ### Config and model layer
 
 - [`homesrvctl/models.py`](homesrvctl/models.py)
@@ -222,15 +235,15 @@ The shipped TUI now covers the public CLI surface with a mix of guided mutation 
 For stack lists, the TUI tries the cached JSON list first and falls back to the live JSON list when the database is missing, uninitialized, or empty.
 The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-prompt buttons, and the detail-pane action button strip are real Textual widgets that accept both keyboard and mouse input. Mouse and keyboard selection share a single `--selected` class on the same row widget, so the two input modes cannot drift into separate tracks; click targets are additive rather than replacements for the underlying keyboard bindings.
 
-### Future daemon and API layer
+### Future API and expanded daemon layer
 
-No daemon, API server, or web UI is implemented yet. When introduced, these layers should:
+No API server, web UI, daemon installation, provider observer set, or operation queue is implemented yet. When introduced, these layers should:
 - call the same service layer used by CLI commands
 - use the SQLite state store for cached observations, operation history, and fast reads
 - keep provider-specific logic in provider modules rather than API handlers
 - leave the CLI available for bootstrap, SSH recovery, scripting, and agent workflows
 
-The daemon should begin as a read-only observer/reconciler that keeps the cache fresh before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened. Future API/web clients should call services and state-store helpers rather than duplicating command logic, provider logic, or SQL.
+The daemon begins as a read-only observer/reconciler that keeps the cache fresh before it owns mutation queues. Mutation operations should eventually be recorded in `operations` and `events` so operator-facing surfaces can explain what happened. Future API/web clients should call services and state-store helpers rather than duplicating command logic, provider logic, or SQL.
 
 ### Public contract changes should be deliberate
 

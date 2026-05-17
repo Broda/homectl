@@ -33,7 +33,7 @@ Suggested phases:
 - Phase 1: add SQLite state store and `db` commands. Shipped.
 - Phase 2: add refresh/snapshot of local stack state. Shipped.
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
-- Phase 4: add read-only daemon observers.
+- Phase 4: add read-only daemon observers. Shipped for local stack refresh.
 - Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state.
 - Phase 6: add an operation queue and background jobs for safe mutations.
 - Phase 7: add API/web clients over the same services and state store.
@@ -48,6 +48,7 @@ Design constraints:
 Success criteria:
 - Deleting the database does not break existing CLI workflows.
 - Cached reads are explicit or opportunistic and always have a live fallback.
+- The daemon can keep the local cache fresh without mutating stacks or provider state.
 - Refresh behavior is deterministic and testable without Docker, cloudflared, Cloudflare credentials, root, or network access.
 - Future daemon/API work reuses services instead of duplicating command logic.
 

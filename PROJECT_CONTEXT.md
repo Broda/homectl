@@ -17,7 +17,7 @@ The project focuses on:
 - moving reusable business logic into Python services
 - keeping operator workflows simple and repeatable
 
-The CLI remains a first-class interface for bootstrap, SSH usage, scripting, recovery, and agent-assisted workflows. Future daemon, API, or web surfaces should reuse the same services and state store instead of replacing the CLI or duplicating provider logic.
+The CLI remains a first-class interface for bootstrap, SSH usage, scripting, recovery, and agent-assisted workflows. The read-only daemon and any future API or web surfaces should reuse the same services and state store instead of replacing the CLI or duplicating provider logic.
 
 ## Non-Goals
 
@@ -83,6 +83,7 @@ It should not expand into:
 - Local verification should be straightforward and reproducible.
 - Config files and live systems remain the source of intent and reality until a later slice deliberately changes that contract.
 - SQLite stores cached, observed state and history; it must stay rebuildable and must not store secrets.
+- The daemon is an observer that refreshes cached state; it must not mutate stacks, routing, provider state, or secrets.
 
 ## Public Contracts
 

@@ -6,6 +6,7 @@ from homesrvctl.commands.app_cmd import app_cli
 from homesrvctl.commands.bootstrap_cmd import bootstrap_cli
 from homesrvctl.commands.cloudflared_cmd import cloudflared_cli
 from homesrvctl.commands.config_cmd import config_cli
+from homesrvctl.commands.daemon_cmd import daemon_cli
 from homesrvctl.commands.db_cmd import db_cli
 from homesrvctl.commands.deploy_cmd import cleanup, doctor, down, list_sites_with_format, restart, up
 from homesrvctl.commands.domain_cmd import domain_cli
@@ -28,6 +29,7 @@ app = typer.Typer(
 app.add_typer(config_cli, name="config")
 app.add_typer(bootstrap_cli, name="bootstrap")
 app.add_typer(cloudflared_cli, name="cloudflared")
+app.add_typer(daemon_cli, name="daemon")
 app.add_typer(db_cli, name="db")
 app.add_typer(domain_cli, name="domain")
 app.add_typer(tunnel_cli, name="tunnel")

@@ -199,6 +199,54 @@ class StateStore:
     def last_stack_refresh_at(self) -> str | None:
         return self.status().last_refresh_at
 
+    def add_event(
+        self,
+        *,
+        created_at: str,
+        severity: str,
+        source: str,
+        message: str,
+        target_type: str | None = None,
+        target: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> None:
+        data_json = json.dumps(data, sort_keys=True) if data is not None else None
+        with connect_state_db(self.path) as connection:
+            connection.execute(
+                """
+                INSERT INTO events (
+                  created_at,
+                  severity,
+                  source,
+                  target_type,
+                  target,
+                  message,
+                  data_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (created_at, severity, source, target_type, target, message, data_json),
+            )
+
+    def list_recent_events(self, *, source: str | None = None, limit: int = 10) -> list[dict[str, object]]:
+        if not self.status().initialized:
+            return []
+        sql = "SELECT * FROM events"
+        params: list[object] = []
+        if source:
+            sql += " WHERE source = ?"
+            params.append(source)
+        sql += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def latest_event(self, *, source: str | None = None) -> dict[str, object] | None:
+        events = self.list_recent_events(source=source, limit=1)
+        return events[0] if events else None
+
     def clear_local_stack_state(self) -> None:
         with connect_state_db(self.path) as connection:
             connection.execute(

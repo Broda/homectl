@@ -46,6 +46,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   SQLite state-store package for local cached stack state, observations, operations, events, schema initialization, and status helpers.
 - [`homesrvctl/services`](homesrvctl/services)
   Reusable service layer for core operations shared by commands and future TUI/daemon/API surfaces.
+- [`homesrvctl/services/daemon.py`](homesrvctl/services/daemon.py)
+  Read-only foreground daemon service that periodically refreshes local observed state into SQLite.
 - [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
   Existing app/site source detection helpers used by adoption and wrapper command surfaces.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
@@ -82,6 +84,8 @@ This document is a quick orientation guide to the repository. It is intentionall
   `config init` and related config-surface commands.
 - [`homesrvctl/commands/db_cmd.py`](homesrvctl/commands/db_cmd.py)
   Local SQLite state database commands such as `db init`, `db status`, and `db rebuild`.
+- [`homesrvctl/commands/daemon_cmd.py`](homesrvctl/commands/daemon_cmd.py)
+  Read-only daemon commands such as `daemon run` and `daemon status`.
 - [`homesrvctl/commands/refresh_cmd.py`](homesrvctl/commands/refresh_cmd.py)
   Local refresh command that snapshots current stack directory state into the state database.
 - [`homesrvctl/commands/install_cmd.py`](homesrvctl/commands/install_cmd.py)
