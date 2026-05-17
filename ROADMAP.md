@@ -19,7 +19,7 @@ Near-term work:
 - Decide whether GitHub-generated release notes remain enough or whether a small curated release-note template is worthwhile.
 
 Success criteria:
-- `python -m build` remains reproducible locally.
+- `uv build` remains reproducible locally.
 - CI and release workflows exercise the same core checks.
 - Version, changelog, and release tag expectations are explicit and low-friction.
 

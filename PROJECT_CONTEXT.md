@@ -94,22 +94,28 @@ If one of these changes, update the relevant docs and tests in the same slice.
 
 These are the standard local verification commands for this repository.
 
+### Setup
+
+```bash
+uv sync --extra dev
+```
+
 ### Compile
 
 ```bash
-python3 -m compileall homesrvctl tests
+uv run python -m compileall homesrvctl tests
 ```
 
 ### Test
 
 ```bash
-.venv/bin/python -m pytest -q
+uv run pytest -q
 ```
 
 ### Build
 
 ```bash
-.venv/bin/python -m build
+uv build
 ```
 
 Use the build step when packaging, release automation, or project metadata changes are involved.

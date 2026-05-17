@@ -21,6 +21,15 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`scripts/check_wiki_sync.sh`](scripts/check_wiki_sync.sh)
   Advisory check that reminds you to update the sibling GitHub wiki checkout when user-facing repo surfaces changed.
 
+## Project Tooling
+
+- [`pyproject.toml`](pyproject.toml)
+  Python package metadata, dependencies, build backend, console script, and pytest defaults.
+- [`uv.lock`](uv.lock)
+  uv-managed dependency lockfile for local development, verification, CI, and builds.
+- [`.python-version`](.python-version)
+  Local uv/Python default version pin for development; CI still tests the supported Python matrix.
+
 ## Python Package
 
 - [`homesrvctl/main.py`](homesrvctl/main.py)

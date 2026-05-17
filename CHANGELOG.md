@@ -8,6 +8,9 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 
 ## Unreleased
 
+### Changed
+- Developer workflow now uses uv for dependency sync, verification, CI setup, and builds.
+
 ## 0.5.0 - 2026-05-12
 
 ### Added

@@ -33,3 +33,14 @@ The published Python distribution name is `homesrvctl`. The CLI command remains 
    - publish the built artifacts to TestPyPI through trusted publishing
    - publish the same built artifacts to PyPI through trusted publishing
    - create a GitHub Release and attach the built artifacts
+
+## Local Release Verification
+
+Before tagging, run:
+
+```bash
+uv sync --extra dev
+uv run python -m compileall homesrvctl tests
+uv run pytest -q
+uv build
+```

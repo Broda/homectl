@@ -63,9 +63,10 @@ pip install "homesrvctl @ https://github.com/Broda/homesrvctl/archive/refs/tags/
 For local development:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync --extra dev
+uv run homesrvctl version
+uv run pytest -q
 ```
 
 The published Python distribution name is `homesrvctl`. The CLI command is also `homesrvctl`.
