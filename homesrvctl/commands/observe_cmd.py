@@ -9,7 +9,7 @@ from homesrvctl.services.observers.runner import get_observer_status, run_observ
 from homesrvctl.state.db import default_state_db_path
 from homesrvctl.utils import success, warn, with_json_schema
 
-observe_cli = typer.Typer(help="Run and inspect read-only local runtime observers.")
+observe_cli = typer.Typer(help="Run and inspect read-only observers.")
 
 
 @observe_cli.command("run")
@@ -17,17 +17,19 @@ def observe_run(
     stack_runtime: bool = typer.Option(True, "--stack-runtime/--no-stack-runtime", help="Observe Docker Compose stack runtime state."),
     cloudflared: bool = typer.Option(True, "--cloudflared/--no-cloudflared", help="Observe local cloudflared runtime/config state."),
     traefik: bool = typer.Option(True, "--traefik/--no-traefik", help="Observe configured Traefik URL reachability."),
-    all_observers: bool = typer.Option(False, "--all", help="Run all implemented local observers."),
+    cloudflare: bool = typer.Option(False, "--cloudflare/--no-cloudflare", help="Observe read-only Cloudflare provider DNS/tunnel readiness."),
+    all_observers: bool = typer.Option(False, "--all", help="Run all implemented local and provider observers."),
     db_path: Path | None = typer.Option(None, "--db-path", help="Use a custom state database path."),
     config_path: Path | None = typer.Option(None, "--config-path", help="Read config from a custom path."),
     json_output: bool = typer.Option(False, "--json", help="Print observer result as JSON."),
 ) -> None:
-    """Run selected read-only local runtime observers once."""
+    """Run selected read-only observers once."""
     if all_observers:
         stack_runtime = True
         cloudflared = True
         traefik = True
-    if not any([stack_runtime, cloudflared, traefik]):
+        cloudflare = True
+    if not any([stack_runtime, cloudflared, traefik, cloudflare]):
         payload = {
             "action": "observe_run",
             "ok": False,
@@ -45,6 +47,7 @@ def observe_run(
         stack_runtime=stack_runtime,
         cloudflared=cloudflared,
         traefik=traefik,
+        cloudflare=cloudflare,
     )
     payload = {"action": "observe_run", **result.to_dict()}
     if json_output:
@@ -87,6 +90,7 @@ def observe_status(
         warn("stack-runtime: no observations")
     _print_runtime_status("cloudflared", result.cloudflared)
     _print_runtime_status("traefik", result.traefik)
+    _print_runtime_status("cloudflare", result.cloudflare)
     for issue in result.issues:
         typer.echo(f"- {issue}")
     if not result.ok:

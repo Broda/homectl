@@ -9,6 +9,10 @@ from homesrvctl.services.observers.cloudflared_runtime import (
     CLOUDFLARED_RUNTIME_OBSERVER,
     observe_cloudflared_runtime,
 )
+from homesrvctl.services.observers.cloudflare_provider import (
+    CLOUDFLARE_PROVIDER_OBSERVER,
+    observe_cloudflare_provider,
+)
 from homesrvctl.services.observers.models import ObserverResult, ObserverRunResult, ObserverStatusResult
 from homesrvctl.services.observers.stacks_runtime import STACK_RUNTIME_OBSERVER, observe_stack_runtime
 from homesrvctl.services.observers.traefik_runtime import TRAEFIK_RUNTIME_OBSERVER, observe_traefik_runtime
@@ -24,6 +28,7 @@ def run_observers(
     stack_runtime: bool = True,
     cloudflared: bool = True,
     traefik: bool = True,
+    cloudflare: bool = False,
 ) -> ObserverRunResult:
     started_at = utc_now_iso()
     store = StateStore(db_path)
@@ -37,6 +42,8 @@ def run_observers(
         results.append(observe_cloudflared_runtime(active_config))
     if traefik:
         results.append(observe_traefik_runtime(active_config))
+    if cloudflare:
+        results.append(observe_cloudflare_provider(active_config))
 
     for result in results:
         _persist_observer_result(store, result)
@@ -63,6 +70,7 @@ def get_observer_status(*, db_path: Path | None = None) -> ObserverStatusResult:
             stack_runtime=None,
             cloudflared=None,
             traefik=None,
+            cloudflare=None,
             issues=status.issues or ["no observer state found; run `homesrvctl observe run`"],
         )
 
@@ -83,6 +91,7 @@ def get_observer_status(*, db_path: Path | None = None) -> ObserverStatusResult:
 
     cloudflared = _decode_event(store.latest_event(source=CLOUDFLARED_RUNTIME_OBSERVER))
     traefik = _decode_event(store.latest_event(source=TRAEFIK_RUNTIME_OBSERVER))
+    cloudflare = _decode_event(store.latest_event(source=CLOUDFLARE_PROVIDER_OBSERVER))
     issues: list[str] = []
     if stack_runtime is None:
         issues.append("no stack runtime observations found; run `homesrvctl observe run`")
@@ -96,6 +105,7 @@ def get_observer_status(*, db_path: Path | None = None) -> ObserverStatusResult:
         stack_runtime=stack_runtime,
         cloudflared=cloudflared,
         traefik=traefik,
+        cloudflare=cloudflare,
         issues=issues,
     )
 

@@ -76,6 +76,7 @@ class ObserverStatusResult:
     stack_runtime: dict[str, object] | None
     cloudflared: dict[str, object] | None
     traefik: dict[str, object] | None
+    cloudflare: dict[str, object] | None = None
     issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -85,5 +86,9 @@ class ObserverStatusResult:
             "stack_runtime": self.stack_runtime,
             "cloudflared": self.cloudflared,
             "traefik": self.traefik,
+            "cloudflare": self.cloudflare,
+            "provider_observers": {
+                "cloudflare": self.cloudflare,
+            },
             "issues": self.issues,
         }

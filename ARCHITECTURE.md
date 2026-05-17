@@ -41,7 +41,7 @@ Responsibilities:
 - wrap existing helpers first, then absorb command-owned orchestration in small slices
 - keep mutation behavior explicit and testable
 
-The first services inspect local stack directories, refresh cached stack state, run read-only local runtime observers, and provide stack-listing results from either the live filesystem or the SQLite cache. Future services should cover domain/tunnel inspection, provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
+The first services inspect local stack directories, refresh cached stack state, run read-only local and Cloudflare provider observers, and provide stack-listing results from either the live filesystem or the SQLite cache. Future services should cover additional provider observers, operation recording, and eventually mutation orchestration without duplicating CLI code.
 
 ### State store
 
@@ -67,10 +67,11 @@ Responsibilities:
 - snapshot observed local state into the SQLite store
 - start with local-only stack directory and stack-local config observations
 - run explicitly owned read-only local runtime observers for Docker Compose status, `cloudflared` runtime/config status, and Traefik reachability
-- avoid mutation commands, Cloudflare APIs, AWS APIs, OpenTofu, and provider resource changes
+- run explicit read-only Cloudflare provider observation when selected
+- avoid mutation commands, AWS APIs, OpenTofu, and provider resource changes
 - preserve enough structure that the daemon can run the same refresh and observer services periodically
 
-The refresh layer records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings. The observer layer records read-only local runtime snapshots into `stack_observations` and `events`. External provider observations for Cloudflare, SES, OpenTofu, backups, and related services belong to later slices.
+The refresh layer records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings. The observer layer records read-only local runtime snapshots into `stack_observations` and `events`. The Cloudflare provider observer records token, zone, DNS, and tunnel readiness into `events` without creating, updating, or deleting Cloudflare resources. SES, OpenTofu, backups, and related provider observers belong to later slices.
 
 ### Read-only daemon runtime
 
@@ -81,12 +82,13 @@ The refresh layer records stack directory metadata, compose-file presence, stack
 Responsibilities:
 - run the existing local refresh service periodically in a foreground observer loop
 - optionally run local runtime observers after refresh when `--observe-runtime` is enabled
+- optionally run read-only Cloudflare provider observation after refresh when `--observe-cloudflare` is enabled
 - render, install, uninstall, and inspect the systemd unit for the same read-only daemon
 - keep the SQLite stack cache fresh without becoming an authority
 - record daemon lifecycle and issue events in the state store
 - report persisted cache/refresh status and systemd state through `daemon status`
 
-The current daemon is read-only. Systemd support only manages the daemon process lifecycle. Runtime observers can inspect Docker Compose status, local `cloudflared` status/config, and Traefik reachability, but they must not start/stop containers, mutate `cloudflared`, expose an API/web server, call provider APIs, or perform stack/domain mutations. Future daemon slices may add provider observers and operation queues, but mutation commands should remain explicit and operator-confirmed until a later design deliberately changes that contract.
+The current daemon is read-only. Systemd support only manages the daemon process lifecycle. Runtime observers can inspect Docker Compose status, local `cloudflared` status/config, and Traefik reachability. The Cloudflare provider observer can inspect token, zone, DNS, and tunnel readiness. These paths must not start/stop containers, mutate `cloudflared`, expose an API/web server, mutate provider resources, or perform stack/domain mutations. Future daemon slices may add more provider observers and operation queues, but mutation commands should remain explicit and operator-confirmed until a later design deliberately changes that contract.
 
 ### Config and model layer
 
@@ -119,6 +121,8 @@ Responsibilities:
 - tunnel-target-related helper logic used by domain and tunnel-inspection flows
 
 This module should stay focused on Cloudflare control-plane behavior, not local runtime orchestration.
+
+The Cloudflare provider observer in [`homesrvctl/services/observers/cloudflare_provider.py`](homesrvctl/services/observers/cloudflare_provider.py) uses this module for read-only zone, DNS, and tunnel readiness checks. Provider observation belongs in services/observer modules, while Cloudflare API mechanics belong here. Command modules should not duplicate Cloudflare request logic.
 
 Future note:
 - If mail-provider admin support is introduced, it should not be added to `cloudflare.py` or folded into existing domain command wiring as ad hoc boto or SMTP calls.
@@ -243,7 +247,7 @@ The TUI is mouse-aware: control rows, summary cards, modal option rows, confirm-
 
 ### Future API and expanded daemon layer
 
-No API server, web UI, external provider observer set, or operation queue is implemented yet. When introduced, these layers should:
+No API server, web UI, operation queue, or broad external provider observer set is implemented yet. Cloudflare provider observation exists as the first read-only provider observer. When introduced, additional layers should:
 - call the same service layer used by CLI commands
 - use the SQLite state store for cached observations, operation history, and fast reads
 - keep provider-specific logic in provider modules rather than API handlers

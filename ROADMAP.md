@@ -34,7 +34,7 @@ Suggested phases:
 - Phase 2: add refresh/snapshot of local stack state. Shipped.
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
 - Phase 4: add read-only daemon observers and systemd lifecycle support. Shipped for local stack refresh and local runtime observations.
-- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state.
+- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness.
 - Phase 6: add an operation queue and background jobs for safe mutations.
 - Phase 7: add API/web clients over the same services and state store.
 
@@ -49,7 +49,7 @@ Success criteria:
 - Deleting the database does not break existing CLI workflows.
 - Cached reads are explicit or opportunistic and always have a live fallback.
 - The daemon can keep the local cache fresh without mutating stacks or provider state.
-- Refresh behavior is deterministic and testable without Docker, cloudflared, Cloudflare credentials, root, or network access.
+- Refresh and observer behavior is deterministic and testable without Docker, cloudflared, real Cloudflare credentials, root, or network access.
 - Future daemon/API work reuses services instead of duplicating command logic.
 
 ### 3. TUI Operator-Facing Polish
@@ -93,17 +93,18 @@ Success criteria:
 
 ### 5. Cloudflare Control-Plane Extensions
 
-Status: planned
+Status: in progress
 
 Goal: add narrow Cloudflare-adjacent inspection and convergence features that directly improve self-hosted app operations.
 
 Preferred ordering:
-1. Domain onboarding and delegation checks.
-2. Richer tunnel API inspection and remote config visibility.
-3. Ancillary DNS and Email Routing visibility.
-4. Access protection for private services.
-5. Zone edge setting profiles.
-6. Redirect and edge-rule profiles.
+1. Read-only Cloudflare domain/DNS/tunnel readiness observation. Shipped.
+2. Domain onboarding and delegation checks.
+3. Richer tunnel API inspection and remote config visibility.
+4. Ancillary DNS and Email Routing visibility.
+5. Access protection for private services.
+6. Zone edge setting profiles.
+7. Redirect and edge-rule profiles.
 
 Design constraints:
 - Keep the shared-host-tunnel and local-Traefik model intact.

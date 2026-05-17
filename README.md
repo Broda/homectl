@@ -231,6 +231,7 @@ homesrvctl list --cached
 homesrvctl list --refresh
 homesrvctl list --live
 homesrvctl observe run
+homesrvctl observe run --cloudflare
 homesrvctl observe status
 homesrvctl daemon run --once
 homesrvctl daemon status
@@ -240,7 +241,7 @@ The state database is a local SQLite cache and index for current and future dash
 
 `homesrvctl list` still scans the configured sites root live by default. Use `list --cached` for fast cached reads, `list --refresh` to refresh local stack metadata before listing from the cache, and `list --live` to force the filesystem view. The TUI prefers cached stack-list data when available and falls back to the live list when the cache is missing or empty.
 
-`observe run` snapshots read-only local runtime state into SQLite: Docker Compose stack status, local `cloudflared` runtime/config status, and configured Traefik URL reachability. `observe status` reads the latest cached observer results without running live checks.
+`observe run` snapshots read-only local runtime state into SQLite: Docker Compose stack status, local `cloudflared` runtime/config status, and configured Traefik URL reachability. Add `--cloudflare` to include read-only Cloudflare provider observation for token, zone, DNS, and tunnel readiness. `observe status` reads the latest cached observer results without running live checks.
 
 The daemon can run in the foreground for debugging:
 
@@ -248,6 +249,7 @@ The daemon can run in the foreground for debugging:
 homesrvctl daemon run --once
 homesrvctl daemon run --interval-seconds 60
 homesrvctl daemon run --observe-runtime --interval-seconds 60
+homesrvctl daemon run --observe-cloudflare --interval-seconds 300
 homesrvctl daemon status
 ```
 
@@ -257,14 +259,15 @@ Install the same read-only daemon as a systemd service on Debian-family hosts:
 sudo homesrvctl daemon install
 sudo homesrvctl daemon install --now
 sudo homesrvctl daemon install --observe-runtime --now
+sudo homesrvctl daemon install --observe-cloudflare --now
 homesrvctl daemon status
 sudo homesrvctl daemon restart
 sudo homesrvctl daemon uninstall
 ```
 
-`daemon install` writes `/etc/systemd/system/homesrvctl-daemon.service` by default and reloads systemd. Use `--now` to enable and start it immediately, or run `sudo systemctl enable --now homesrvctl-daemon.service` later. Add `--observe-runtime` to include the local runtime observers in the installed daemon. `daemon uninstall` removes the unit but leaves the SQLite state database, config, stack files, and logs intact.
+`daemon install` writes `/etc/systemd/system/homesrvctl-daemon.service` by default and reloads systemd. Use `--now` to enable and start it immediately, or run `sudo systemctl enable --now homesrvctl-daemon.service` later. Add `--observe-runtime` to include the local runtime observers in the installed daemon, and `--observe-cloudflare` to include the read-only Cloudflare provider observer. `daemon uninstall` removes the unit but leaves the SQLite state database, config, stack files, and logs intact.
 
-The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Provider observers for Cloudflare, SES, OpenTofu, backups, API/web, and operation queues are still future work.
+The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Cloudflare provider observation checks token, zone, DNS, and tunnel readiness; it does not create, repair, or delete DNS records. SES, OpenTofu, backups, API/web, operation queues, and provider mutations are still future work.
 
 Manage a domain:
 
@@ -343,10 +346,10 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl list [--cached] [--live] [--refresh] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl db init|status|rebuild [--path PATH] [--json]`
 - `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
-- `homesrvctl observe run [--stack-runtime|--no-stack-runtime] [--cloudflared|--no-cloudflared] [--traefik|--no-traefik] [--all] [--db-path PATH] [--config-path PATH] [--json]`
+- `homesrvctl observe run [--stack-runtime|--no-stack-runtime] [--cloudflared|--no-cloudflared] [--traefik|--no-traefik] [--cloudflare|--no-cloudflare] [--all] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl observe status [--db-path PATH] [--json]`
-- `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--observe-runtime] [--json] [--quiet]`
-- `homesrvctl daemon install [--interval-seconds SECONDS] [--db-path PATH] [--config-path PATH] [--unit-name NAME] [--force] [--dry-run] [--now] [--observe-runtime] [--json]`
+- `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--observe-runtime] [--observe-cloudflare] [--json] [--quiet]`
+- `homesrvctl daemon install [--interval-seconds SECONDS] [--db-path PATH] [--config-path PATH] [--unit-name NAME] [--force] [--dry-run] [--now] [--observe-runtime] [--observe-cloudflare] [--json]`
 - `homesrvctl daemon uninstall [--unit-name NAME] [--force] [--dry-run] [--json]`
 - `homesrvctl daemon start|stop|restart [--unit-name NAME] [--json]`
 - `homesrvctl daemon logs [--unit-name NAME] [--lines N] [--json]`

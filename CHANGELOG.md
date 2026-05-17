@@ -13,6 +13,7 @@ The format is loosely based on Keep a Changelog, but kept simple for this projec
 - Began the control-plane service/state architecture while preserving existing CLI behavior.
 
 ### Added
+- Added read-only Cloudflare provider observer support for domain/DNS/tunnel readiness.
 - Added read-only local runtime observers for Docker Compose stack status, `cloudflared` runtime/config state, and Traefik reachability.
 - Added systemd installation and lifecycle commands for the read-only daemon.
 - Added a read-only daemon runtime that can periodically refresh local stack cache state.

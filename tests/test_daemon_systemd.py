@@ -54,6 +54,7 @@ def test_render_daemon_unit_includes_expected_exec_start(tmp_path: Path) -> None
             config_path=tmp_path / "config.yml",
             executable="/usr/local/bin/homesrvctl",
             observe_runtime=True,
+            observe_cloudflare=True,
         )
     )
 
@@ -63,6 +64,7 @@ def test_render_daemon_unit_includes_expected_exec_start(tmp_path: Path) -> None
     assert f"--db-path {tmp_path / 'state' / 'homesrvctl.db'}" in unit
     assert f"--config-path {tmp_path / 'config.yml'}" in unit
     assert "--observe-runtime" in unit
+    assert "--observe-cloudflare" in unit
     assert "cloudflare_api_token" not in unit
 
 

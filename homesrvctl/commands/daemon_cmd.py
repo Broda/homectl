@@ -30,6 +30,11 @@ def daemon_run(
         "--observe-runtime/--no-observe-runtime",
         help="Run read-only local runtime observers after each stack metadata refresh.",
     ),
+    observe_cloudflare: bool = typer.Option(
+        False,
+        "--observe-cloudflare/--no-observe-cloudflare",
+        help="Run the read-only Cloudflare provider observer after each stack metadata refresh.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print the daemon result as JSON."),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress per-cycle human output."),
 ) -> None:
@@ -60,6 +65,7 @@ def daemon_run(
         interval_seconds=interval_seconds,
         once=once,
         observe_runtime=observe_runtime,
+        observe_cloudflare=observe_cloudflare,
         on_cycle=None if quiet or json_output else _print_cycle_result,
     )
 
@@ -159,6 +165,11 @@ def daemon_install(
         "--observe-runtime/--no-observe-runtime",
         help="Include read-only local runtime observers in the installed daemon.",
     ),
+    observe_cloudflare: bool = typer.Option(
+        False,
+        "--observe-cloudflare/--no-observe-cloudflare",
+        help="Include the read-only Cloudflare provider observer in the installed daemon.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print install result as JSON."),
 ) -> None:
     """Install the read-only daemon as a systemd system service."""
@@ -171,6 +182,7 @@ def daemon_install(
         dry_run=dry_run,
         now=now,
         observe_runtime=observe_runtime,
+        observe_cloudflare=observe_cloudflare,
     )
     payload = {"action": "daemon_install", **result.to_dict()}
     if json_output:

@@ -208,3 +208,57 @@ def test_daemon_run_once_observe_runtime_invokes_observer_runner(monkeypatch, tm
     payload = json.loads(result.output)
     assert payload["last_refresh"]["observer_run"]["ok"] is True
     assert calls == [db_path]
+
+
+def test_daemon_run_once_observe_cloudflare_invokes_provider_observer(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    _write_stack(sites_root, "app.example.com")
+    monkeypatch.setenv("HOME", str(home))
+    calls: list[dict[str, object]] = []
+
+    def fake_run_observers(**kwargs) -> ObserverRunResult:  # noqa: ANN003
+        calls.append(kwargs)
+        return ObserverRunResult(
+            ok=True,
+            db_path=kwargs["db_path"],
+            started_at="2026-05-17T00:00:00Z",
+            finished_at="2026-05-17T00:00:00Z",
+            results=[],
+            issues=[],
+        )
+
+    monkeypatch.setattr(daemon_service, "run_observers", fake_run_observers)
+
+    result = CliRunner().invoke(
+        app,
+        ["daemon", "run", "--once", "--observe-cloudflare", "--db-path", str(db_path), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["stack_runtime"] is False
+    assert calls[0]["cloudflared"] is False
+    assert calls[0]["traefik"] is False
+    assert calls[0]["cloudflare"] is True
+
+
+def test_daemon_run_once_without_provider_flag_does_not_invoke_observers(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    sites_root = tmp_path / "sites"
+    db_path = tmp_path / "state" / "homesrvctl.db"
+    _write_config(home, sites_root)
+    _write_stack(sites_root, "app.example.com")
+    monkeypatch.setenv("HOME", str(home))
+
+    def fail_run_observers(**kwargs) -> ObserverRunResult:  # noqa: ANN003
+        raise AssertionError("observer runner should not run by default")
+
+    monkeypatch.setattr(daemon_service, "run_observers", fail_run_observers)
+
+    result = CliRunner().invoke(app, ["daemon", "run", "--once", "--db-path", str(db_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["last_refresh"]["observer_run"] is None
