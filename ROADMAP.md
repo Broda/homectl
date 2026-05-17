@@ -34,7 +34,7 @@ Suggested phases:
 - Phase 2: add refresh/snapshot of local stack state. Shipped.
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
 - Phase 4: add read-only daemon observers and systemd lifecycle support. Shipped for local stack refresh and local runtime observations.
-- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness plus read-only SES outbound readiness.
+- Phase 5: add provider observers and plan-only convergence helpers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness; read-only SES outbound readiness; and plan-only OpenTofu SES/Cloudflare DNS workspace rendering.
 - Phase 6: add an operation queue and background jobs for safe mutations.
 - Phase 7: add API/web clients over the same services and state store.
 
@@ -43,7 +43,7 @@ Design constraints:
 - Preserve the CLI as a first-class interface.
 - Treat SQLite as cached/indexed/observed state, not the only source of truth.
 - Do not store secrets in the local database.
-- Keep SES mutation/convergence, OpenTofu, and backups as later provider surfaces that benefit from this foundation rather than shipping them in the persistence slice.
+- Keep SES mutation/apply convergence, backups, and broader provider surfaces as later work that benefits from this foundation rather than shipping them in the persistence slice.
 
 Success criteria:
 - Deleting the database does not break existing CLI workflows.
@@ -164,6 +164,7 @@ Goal: add mail-related domain administration only where it fits the same narrow 
 
 Candidate areas:
 - SES outbound readiness inspection. Shipped as a read-only observer.
+- SES plus Cloudflare DNS OpenTofu planning. Shipped as a plan-only workspace renderer and `tofu plan` wrapper.
 - Narrow SES identity convergence.
 - Cloudflare Email Routing inspection and explicit route administration.
 
@@ -175,6 +176,7 @@ Suggested sequencing:
   - required DNS records
   - operator-facing issues and next steps
 - Add mutation commands only after JSON output and read behavior stabilize.
+- Keep OpenTofu apply/destroy out of the CLI until an explicit operator-approved convergence design exists.
 - Add TUI views only after CLI contracts exist.
 
 Design constraints:

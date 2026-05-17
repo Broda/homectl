@@ -26,6 +26,7 @@ The CLI remains a first-class interface for bootstrap, SSH usage, scripting, rec
 - a generic application framework generator
 - a replacement for Docker Compose, Traefik, or `cloudflared`
 - an all-purpose Cloudflare administration tool
+- a general-purpose infrastructure-as-code framework
 
 The project should stay narrow enough that operators can understand what each command changes.
 
@@ -86,6 +87,7 @@ It should not expand into:
 - The daemon and observers refresh cached state; systemd support manages only the daemon process lifecycle. They must not mutate stacks, routing, provider state, or secrets.
 - Provider observers are read-only until a later explicit convergence milestone; live provider systems remain the source of truth.
 - Provider observer snapshots may include public DNS requirements, but must not store AWS credentials, Cloudflare tokens, SMTP credentials, or other secrets.
+- OpenTofu support is narrow and plan-only until a later explicit apply/convergence milestone; generated workspaces must not contain provider credentials or secrets.
 
 ## Public Contracts
 

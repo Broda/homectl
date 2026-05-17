@@ -258,6 +258,18 @@ The state database is a local SQLite cache and index for current and future dash
 
 SES observation uses `AWS_REGION` or `AWS_DEFAULT_REGION` and the normal AWS credential provider chain. If no explicit domains are configured for this first observer slice, it infers candidate mail domains from stack hostnames; set `HOMESRVCTL_SES_DOMAINS=example.com,example.net` to provide exact mail domains.
 
+Render and plan optional OpenTofu mail infrastructure:
+
+```bash
+homesrvctl infra status
+homesrvctl infra render mail example.com --region us-east-1
+homesrvctl infra plan mail example.com --region us-east-1
+```
+
+OpenTofu support is plan-only in this slice. `infra render mail` writes a local workspace for SES outbound mail and Cloudflare DNS convergence under `~/.local/share/homesrvctl/infra/workspaces/mail/<domain>` by default. The workspace includes `main.tf`, `variables.tf`, `outputs.tf`, `terraform.tfvars.json`, and a generated README. It uses normal AWS and Cloudflare provider environment authentication and does not write credentials or SMTP secrets.
+
+`infra plan mail` renders the workspace if needed, runs `tofu init`, then runs `tofu plan -detailed-exitcode`. It reports whether the plan has changes but never runs `tofu apply` or `tofu destroy`. Install the external `tofu` binary separately before using plan commands.
+
 The daemon can run in the foreground for debugging:
 
 ```bash
@@ -284,7 +296,7 @@ sudo homesrvctl daemon uninstall
 
 `daemon install` writes `/etc/systemd/system/homesrvctl-daemon.service` by default and reloads systemd. Use `--now` to enable and start it immediately, or run `sudo systemctl enable --now homesrvctl-daemon.service` later. Add `--observe-runtime` to include the local runtime observers in the installed daemon, `--observe-cloudflare` to include the read-only Cloudflare provider observer, and `--observe-ses` to include the read-only SES provider observer. `daemon uninstall` removes the unit but leaves the SQLite state database, config, stack files, and logs intact.
 
-The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Cloudflare provider observation checks token, zone, DNS, and tunnel readiness; it does not create, repair, or delete DNS records. SES observation checks AWS/SES account, identity, DKIM, MAIL FROM, and DNS readiness; it does not create identities, mutate DNS, generate SMTP credentials, request production access, or send email. OpenTofu, backups, Cloudflare Email Routing, inbound SES, API/web, operation queues, and provider mutations are still future work.
+The daemon and observers are read-only. Stack runtime observation uses Docker Compose status commands only. `cloudflared` observation inspects local runtime/config state. Traefik observation checks the configured local URL with a short HTTP request. Cloudflare provider observation checks token, zone, DNS, and tunnel readiness; it does not create, repair, or delete DNS records. SES observation checks AWS/SES account, identity, DKIM, MAIL FROM, and DNS readiness; it does not create identities, mutate DNS, generate SMTP credentials, request production access, or send email. OpenTofu support renders and plans only; apply/destroy, backups, Cloudflare Email Routing, inbound SES, API/web, operation queues, and provider mutations are still future work.
 
 Manage a domain:
 
@@ -365,6 +377,9 @@ All JSON commands include a top-level `schema_version`.
 - `homesrvctl refresh [--stack HOSTNAME] [--dry-run] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl observe run [--stack-runtime|--no-stack-runtime] [--cloudflared|--no-cloudflared] [--traefik|--no-traefik] [--cloudflare|--no-cloudflare] [--ses|--no-ses] [--all] [--db-path PATH] [--config-path PATH] [--json]`
 - `homesrvctl observe status [--db-path PATH] [--json]`
+- `homesrvctl infra status [--domain DOMAIN] [--workspace PATH] [--json]`
+- `homesrvctl infra render mail <domain> [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--force] [--dry-run] [--json]`
+- `homesrvctl infra plan mail <domain> [--provider ses] [--region REGION] [--mail-from-subdomain NAME] [--dmarc-policy none|quarantine|reject] [--rua EMAIL_OR_MAILTO] [--cloudflare-zone-id ZONE_ID] [--manage-domain-spf] [--manage-dmarc|--no-manage-dmarc] [--workspace PATH] [--refresh-render] [--force-render] [--json]`
 - `homesrvctl daemon run [--interval-seconds SECONDS] [--once] [--db-path PATH] [--config-path PATH] [--observe-runtime] [--observe-cloudflare] [--observe-ses] [--json] [--quiet]`
 - `homesrvctl daemon install [--interval-seconds SECONDS] [--db-path PATH] [--config-path PATH] [--unit-name NAME] [--force] [--dry-run] [--now] [--observe-runtime] [--observe-cloudflare] [--observe-ses] [--json]`
 - `homesrvctl daemon uninstall [--unit-name NAME] [--force] [--dry-run] [--json]`
