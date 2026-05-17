@@ -35,6 +35,11 @@ def daemon_run(
         "--observe-cloudflare/--no-observe-cloudflare",
         help="Run the read-only Cloudflare provider observer after each stack metadata refresh.",
     ),
+    observe_ses: bool = typer.Option(
+        False,
+        "--observe-ses/--no-observe-ses",
+        help="Run the read-only AWS SES provider observer after each stack metadata refresh.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print the daemon result as JSON."),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress per-cycle human output."),
 ) -> None:
@@ -66,6 +71,7 @@ def daemon_run(
         once=once,
         observe_runtime=observe_runtime,
         observe_cloudflare=observe_cloudflare,
+        observe_ses=observe_ses,
         on_cycle=None if quiet or json_output else _print_cycle_result,
     )
 
@@ -170,6 +176,11 @@ def daemon_install(
         "--observe-cloudflare/--no-observe-cloudflare",
         help="Include the read-only Cloudflare provider observer in the installed daemon.",
     ),
+    observe_ses: bool = typer.Option(
+        False,
+        "--observe-ses/--no-observe-ses",
+        help="Include the read-only AWS SES provider observer in the installed daemon.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print install result as JSON."),
 ) -> None:
     """Install the read-only daemon as a systemd system service."""
@@ -183,6 +194,7 @@ def daemon_install(
         now=now,
         observe_runtime=observe_runtime,
         observe_cloudflare=observe_cloudflare,
+        observe_ses=observe_ses,
     )
     payload = {"action": "daemon_install", **result.to_dict()}
     if json_output:
@@ -310,11 +322,11 @@ def _print_cycle_result(cycle) -> None:  # noqa: ANN001
     if cycle.ok:
         success(f"Refreshed local stack state: scanned={cycle.scanned_count} updated={cycle.updated_count}")
         if cycle.observer_run:
-            success(f"Observed local runtime state: observers={len(cycle.observer_run.results)}")
+            success(f"Observed selected state: observers={len(cycle.observer_run.results)}")
         return
     warn(f"Refresh completed with issues: scanned={cycle.scanned_count} updated={cycle.updated_count}")
     if cycle.observer_run:
-        warn(f"Observed local runtime state with issues: observers={len(cycle.observer_run.results)}")
+        warn(f"Observed selected state with issues: observers={len(cycle.observer_run.results)}")
     if cycle.error:
         typer.echo(f"- {cycle.error}")
     for issue in cycle.issues:

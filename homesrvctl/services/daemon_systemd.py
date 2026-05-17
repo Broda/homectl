@@ -22,6 +22,7 @@ class DaemonUnitConfig:
     executable: str | None = None
     observe_runtime: bool = False
     observe_cloudflare: bool = False
+    observe_ses: bool = False
 
 
 @dataclass(slots=True)
@@ -40,6 +41,7 @@ class DaemonInstallResult:
     started: bool
     observe_runtime: bool = False
     observe_cloudflare: bool = False
+    observe_ses: bool = False
     commands: list[list[str]] = field(default_factory=list)
     unit_content: str | None = None
     issues: list[str] = field(default_factory=list)
@@ -61,6 +63,7 @@ class DaemonInstallResult:
             "started": self.started,
             "observe_runtime": self.observe_runtime,
             "observe_cloudflare": self.observe_cloudflare,
+            "observe_ses": self.observe_ses,
             "commands": self.commands,
             "unit_content": self.unit_content,
             "issues": self.issues,
@@ -178,6 +181,8 @@ def render_daemon_unit(config: DaemonUnitConfig) -> str:
         command.append("--observe-runtime")
     if config.observe_cloudflare:
         command.append("--observe-cloudflare")
+    if config.observe_ses:
+        command.append("--observe-ses")
     exec_start = " ".join(shlex.quote(part) for part in command)
     return "\n".join(
         [
@@ -211,6 +216,7 @@ def install_daemon_unit(
     now: bool = False,
     observe_runtime: bool = False,
     observe_cloudflare: bool = False,
+    observe_ses: bool = False,
     unit_dir: Path = SYSTEM_UNIT_DIR,
     runner=run_command,  # noqa: ANN001
 ) -> DaemonInstallResult:
@@ -228,6 +234,7 @@ def install_daemon_unit(
                 config_path=config_path,
                 observe_runtime=observe_runtime,
                 observe_cloudflare=observe_cloudflare,
+                observe_ses=observe_ses,
             )
         )
     except RuntimeError as exc:
@@ -242,6 +249,7 @@ def install_daemon_unit(
             commands=commands,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
             error=str(exc),
         )
     if dry_run:
@@ -257,6 +265,7 @@ def install_daemon_unit(
             unit_content=unit_content,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
         )
     if os.geteuid() != 0:
         return _install_result(
@@ -271,6 +280,7 @@ def install_daemon_unit(
             unit_content=unit_content,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
             error="system daemon install requires sudo/root",
         )
     if not command_exists("systemctl"):
@@ -286,6 +296,7 @@ def install_daemon_unit(
             unit_content=unit_content,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
             error="systemctl is not available",
         )
     if unit_path.exists() and not force:
@@ -301,6 +312,7 @@ def install_daemon_unit(
             unit_content=unit_content,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
             error=f"unit already exists; rerun with --force: {unit_path}",
         )
     unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -320,6 +332,7 @@ def install_daemon_unit(
             unit_content=unit_content,
             observe_runtime=observe_runtime,
             observe_cloudflare=observe_cloudflare,
+            observe_ses=observe_ses,
             error=reload_result.stderr or reload_result.stdout or "systemctl daemon-reload failed",
         )
     enabled = False
@@ -341,6 +354,7 @@ def install_daemon_unit(
                 unit_content=unit_content,
                 observe_runtime=observe_runtime,
                 observe_cloudflare=observe_cloudflare,
+                observe_ses=observe_ses,
                 error=now_result.stderr or now_result.stdout or "systemctl enable --now failed",
             )
         enabled = True
@@ -361,6 +375,7 @@ def install_daemon_unit(
         unit_content=unit_content,
         observe_runtime=observe_runtime,
         observe_cloudflare=observe_cloudflare,
+        observe_ses=observe_ses,
     )
 
 
@@ -598,6 +613,7 @@ def _install_result(
     unit_content: str | None = None,
     observe_runtime: bool = False,
     observe_cloudflare: bool = False,
+    observe_ses: bool = False,
     error: str | None = None,
 ) -> DaemonInstallResult:
     return DaemonInstallResult(
@@ -615,6 +631,7 @@ def _install_result(
         started=started,
         observe_runtime=observe_runtime,
         observe_cloudflare=observe_cloudflare,
+        observe_ses=observe_ses,
         commands=commands,
         unit_content=unit_content,
         error=error,

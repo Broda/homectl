@@ -51,9 +51,11 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/services/daemon_systemd.py`](homesrvctl/services/daemon_systemd.py)
   Systemd unit rendering, installation, lifecycle action, log, and status helpers for the read-only daemon.
 - [`homesrvctl/services/observers`](homesrvctl/services/observers)
-  Read-only observer services for Docker Compose stack status, `cloudflared` runtime/config state, Traefik reachability, Cloudflare provider readiness, and observer persistence/status aggregation.
+  Read-only observer services for Docker Compose stack status, `cloudflared` runtime/config state, Traefik reachability, Cloudflare provider readiness, SES provider readiness, and observer persistence/status aggregation.
 - [`homesrvctl/services/observers/cloudflare_provider.py`](homesrvctl/services/observers/cloudflare_provider.py)
   Read-only Cloudflare provider observer for token, zone, DNS, and tunnel readiness snapshots.
+- [`homesrvctl/services/observers/ses_provider.py`](homesrvctl/services/observers/ses_provider.py)
+  Read-only AWS SES provider observer for outbound mail, identity, DKIM, custom MAIL FROM, and DNS readiness snapshots.
 - [`homesrvctl/adoption.py`](homesrvctl/adoption.py)
   Existing app/site source detection helpers used by adoption and wrapper command surfaces.
 - [`homesrvctl/bootstrap.py`](homesrvctl/bootstrap.py)
@@ -93,7 +95,7 @@ This document is a quick orientation guide to the repository. It is intentionall
 - [`homesrvctl/commands/daemon_cmd.py`](homesrvctl/commands/daemon_cmd.py)
   Read-only daemon commands such as `daemon run`, `daemon install`, lifecycle actions, logs, and `daemon status`.
 - [`homesrvctl/commands/observe_cmd.py`](homesrvctl/commands/observe_cmd.py)
-  Read-only observer commands such as `observe run`, `observe run --cloudflare`, and `observe status`.
+  Read-only observer commands such as `observe run`, `observe run --cloudflare`, `observe run --ses`, and `observe status`.
 - [`homesrvctl/commands/refresh_cmd.py`](homesrvctl/commands/refresh_cmd.py)
   Local refresh command that snapshots current stack directory state into the state database.
 - [`homesrvctl/commands/install_cmd.py`](homesrvctl/commands/install_cmd.py)

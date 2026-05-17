@@ -18,6 +18,7 @@ def observe_run(
     cloudflared: bool = typer.Option(True, "--cloudflared/--no-cloudflared", help="Observe local cloudflared runtime/config state."),
     traefik: bool = typer.Option(True, "--traefik/--no-traefik", help="Observe configured Traefik URL reachability."),
     cloudflare: bool = typer.Option(False, "--cloudflare/--no-cloudflare", help="Observe read-only Cloudflare provider DNS/tunnel readiness."),
+    ses: bool = typer.Option(False, "--ses/--no-ses", help="Observe read-only AWS SES outbound mail readiness."),
     all_observers: bool = typer.Option(False, "--all", help="Run all implemented local and provider observers."),
     db_path: Path | None = typer.Option(None, "--db-path", help="Use a custom state database path."),
     config_path: Path | None = typer.Option(None, "--config-path", help="Read config from a custom path."),
@@ -29,7 +30,8 @@ def observe_run(
         cloudflared = True
         traefik = True
         cloudflare = True
-    if not any([stack_runtime, cloudflared, traefik, cloudflare]):
+        ses = True
+    if not any([stack_runtime, cloudflared, traefik, cloudflare, ses]):
         payload = {
             "action": "observe_run",
             "ok": False,
@@ -48,6 +50,7 @@ def observe_run(
         cloudflared=cloudflared,
         traefik=traefik,
         cloudflare=cloudflare,
+        ses=ses,
     )
     payload = {"action": "observe_run", **result.to_dict()}
     if json_output:
@@ -91,6 +94,7 @@ def observe_status(
     _print_runtime_status("cloudflared", result.cloudflared)
     _print_runtime_status("traefik", result.traefik)
     _print_runtime_status("cloudflare", result.cloudflare)
+    _print_runtime_status("ses", result.ses)
     for issue in result.issues:
         typer.echo(f"- {issue}")
     if not result.ok:

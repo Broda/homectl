@@ -103,6 +103,7 @@ def run_daemon_cycle(
     config_path: Path | None = None,
     observe_runtime: bool = False,
     observe_cloudflare: bool = False,
+    observe_ses: bool = False,
 ) -> DaemonCycleResult:
     try:
         refresh_result = refresh_local_stack_state(db_path=db_path, config_path=config_path)
@@ -118,7 +119,7 @@ def run_daemon_cycle(
             error=str(exc),
         )
     cycle = _cycle_from_refresh(refresh_result)
-    if not observe_runtime and not observe_cloudflare:
+    if not observe_runtime and not observe_cloudflare and not observe_ses:
         return cycle
     observer_run = run_observers(
         db_path=db_path,
@@ -127,6 +128,7 @@ def run_daemon_cycle(
         cloudflared=observe_runtime,
         traefik=observe_runtime,
         cloudflare=observe_cloudflare,
+        ses=observe_ses,
     )
     cycle.observer_run = observer_run
     cycle.issues.extend(observer_run.issues)
@@ -145,6 +147,7 @@ def run_daemon(
     on_cycle: Callable[[DaemonCycleResult], None] | None = None,
     observe_runtime: bool = False,
     observe_cloudflare: bool = False,
+    observe_ses: bool = False,
 ) -> DaemonRunResult:
     started_at = utc_now_iso()
     store = StateStore(db_path)
@@ -164,6 +167,7 @@ def run_daemon(
                 config_path=config_path,
                 observe_runtime=observe_runtime,
                 observe_cloudflare=observe_cloudflare,
+                observe_ses=observe_ses,
             )
             cycle_count += 1
             if not last_cycle.ok:

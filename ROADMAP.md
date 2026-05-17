@@ -34,7 +34,7 @@ Suggested phases:
 - Phase 2: add refresh/snapshot of local stack state. Shipped.
 - Phase 3: add cache-aware stack listing and let the TUI read cached state where it improves startup or repeated scans. Shipped.
 - Phase 4: add read-only daemon observers and systemd lifecycle support. Shipped for local stack refresh and local runtime observations.
-- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness.
+- Phase 5: add provider observers for Cloudflare, SES, OpenTofu, backups, and related external state. Shipped for read-only Cloudflare token, zone, DNS, and tunnel readiness plus read-only SES outbound readiness.
 - Phase 6: add an operation queue and background jobs for safe mutations.
 - Phase 7: add API/web clients over the same services and state store.
 
@@ -43,7 +43,7 @@ Design constraints:
 - Preserve the CLI as a first-class interface.
 - Treat SQLite as cached/indexed/observed state, not the only source of truth.
 - Do not store secrets in the local database.
-- Keep mail, SES, and OpenTofu as later provider surfaces that benefit from this foundation rather than shipping them in the persistence slice.
+- Keep SES mutation/convergence, OpenTofu, and backups as later provider surfaces that benefit from this foundation rather than shipping them in the persistence slice.
 
 Success criteria:
 - Deleting the database does not break existing CLI workflows.
@@ -118,7 +118,7 @@ Success criteria:
 
 ### 6. Existing App Adoption and Hosting Wrappers
 
-Status: proposed
+Status: in progress
 
 Goal: help operators bring existing apps into the `homesrvctl` hosting model without adding a long tail of framework-specific templates.
 
@@ -163,7 +163,8 @@ Status: proposed
 Goal: add mail-related domain administration only where it fits the same narrow operator model as DNS and tunnel readiness.
 
 Candidate areas:
-- SES outbound readiness inspection and narrow identity convergence.
+- SES outbound readiness inspection. Shipped as a read-only observer.
+- Narrow SES identity convergence.
 - Cloudflare Email Routing inspection and explicit route administration.
 
 Suggested sequencing:
