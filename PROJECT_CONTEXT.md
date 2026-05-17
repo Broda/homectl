@@ -87,7 +87,8 @@ It should not expand into:
 - The daemon and observers refresh cached state; systemd support manages only the daemon process lifecycle. They must not mutate stacks, routing, provider state, or secrets.
 - Provider observers are read-only until a later explicit convergence milestone; live provider systems remain the source of truth.
 - Provider observer snapshots may include public DNS requirements, but must not store AWS credentials, Cloudflare tokens, SMTP credentials, or other secrets.
-- OpenTofu support is narrow and plan-only until a later explicit apply/convergence milestone; generated workspaces must not contain provider credentials or secrets.
+- OpenTofu support is narrow and operator-approved. Apply is foreground-only, saved-plan-only, and must not run from the daemon or a background queue.
+- Generated workspaces and SQLite events must not contain provider credentials or secrets. Saved OpenTofu plan files may contain sensitive values and should be treated as protected local artifacts.
 
 ## Public Contracts
 

@@ -13,11 +13,16 @@ from homesrvctl.services.infra.opentofu import (
     TofuCommandResult,
     Which,
     inspect_tofu,
+    run_tofu_apply_saved_plan,
     run_tofu_init,
     run_tofu_plan,
 )
+from homesrvctl.services.refresh import utc_now_iso
+from homesrvctl.state.store import StateStore
 from homesrvctl.utils import validate_bare_domain
 
+INFRA_EVENT_SOURCE = "infra.opentofu"
+SENSITIVE_PLAN_WARNING = "Saved OpenTofu plan files may contain sensitive values; protect or remove them after use."
 VALID_DMARC_POLICIES = {"none", "quarantine", "reject"}
 SUBDOMAIN_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
 
@@ -106,6 +111,8 @@ class InfraPlanResult:
     init_result: TofuCommandResult | None
     plan_result: TofuCommandResult | None
     has_changes: bool | None
+    plan_file: Path | None = None
+    saved_plan: bool = False
     render_result: InfraWorkspaceResult | None = None
     issues: list[str] = field(default_factory=list)
     error: str | None = None
@@ -119,6 +126,9 @@ class InfraPlanResult:
             "init": self.init_result.to_dict() if self.init_result else None,
             "plan": self._plan_payload(),
             "has_changes": self.has_changes,
+            "plan_file": str(self.plan_file) if self.plan_file else None,
+            "saved_plan": self.saved_plan,
+            "sensitive_artifact_warning": SENSITIVE_PLAN_WARNING if self.saved_plan else None,
             "issues": self.issues,
         }
         if self.render_result:
@@ -134,6 +144,40 @@ class InfraPlanResult:
         payload["detailed_exitcode"] = self.plan_result.returncode
         payload["has_changes"] = self.has_changes
         payload["ok"] = self.plan_result.returncode in {0, 2}
+        return payload
+
+
+@dataclass(slots=True)
+class InfraApplyResult:
+    ok: bool
+    domain: str
+    workspace_path: Path
+    plan_file: Path
+    tofu_available: bool
+    apply_result: TofuCommandResult | None
+    applied: bool
+    event_recorded: bool
+    issues: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "ok": self.ok,
+            "domain": self.domain,
+            "workspace_path": str(self.workspace_path),
+            "plan_file": str(self.plan_file),
+            "tofu_available": self.tofu_available,
+            "command": self.apply_result.command if self.apply_result else None,
+            "returncode": self.apply_result.returncode if self.apply_result else None,
+            "stdout": self.apply_result.to_dict()["stdout"] if self.apply_result else "",
+            "stderr": self.apply_result.to_dict()["stderr"] if self.apply_result else "",
+            "applied": self.applied,
+            "event_recorded": self.event_recorded,
+            "sensitive_artifact_warning": SENSITIVE_PLAN_WARNING,
+            "issues": self.issues,
+        }
+        if self.error:
+            payload["error"] = self.error
         return payload
 
 
@@ -242,10 +286,12 @@ def plan_mail_workspace(
     workspace_path: Path | None = None,
     refresh_render: bool = False,
     force_render: bool = False,
+    out: Path | None = None,
     which: Which,
     runner: Runner,
 ) -> InfraPlanResult:
     workspace = (workspace_path or default_mail_workspace_path(config.domain)).expanduser()
+    plan_file = resolve_plan_file(workspace, out) if out is not None else None
     tofu_status = inspect_tofu(which=which, runner=runner)
     if not tofu_status.available:
         return InfraPlanResult(
@@ -256,6 +302,7 @@ def plan_mail_workspace(
             init_result=None,
             plan_result=None,
             has_changes=None,
+            plan_file=plan_file,
             issues=tofu_status.issues,
             error=tofu_status.issues[0] if tofu_status.issues else "OpenTofu unavailable",
         )
@@ -276,6 +323,7 @@ def plan_mail_workspace(
                 init_result=None,
                 plan_result=None,
                 has_changes=None,
+                plan_file=plan_file,
                 render_result=render_result,
                 issues=render_result.issues,
                 error=render_result.error,
@@ -292,11 +340,12 @@ def plan_mail_workspace(
             init_result=init_result,
             plan_result=None,
             has_changes=None,
+            plan_file=plan_file,
             render_result=render_result,
             error=init_result.stderr or init_result.stdout or "OpenTofu init failed",
         )
 
-    plan_result = run_tofu_plan(workspace, tofu_path=tofu_status.path, runner=runner)
+    plan_result = run_tofu_plan(workspace, out=plan_file, tofu_path=tofu_status.path, runner=runner)
     has_changes = plan_result.returncode == 2
     plan_ok = plan_result.returncode in {0, 2}
     return InfraPlanResult(
@@ -307,9 +356,105 @@ def plan_mail_workspace(
         init_result=init_result,
         plan_result=plan_result,
         has_changes=has_changes if plan_ok else None,
+        plan_file=plan_file,
+        saved_plan=plan_file is not None and plan_ok,
         render_result=render_result,
+        issues=[SENSITIVE_PLAN_WARNING] if plan_file is not None and plan_ok else [],
         error=None if plan_ok else plan_result.stderr or plan_result.stdout or "OpenTofu plan failed",
     )
+
+
+def apply_mail_workspace(
+    config: MailWorkspaceConfig,
+    *,
+    plan_file: Path,
+    workspace_path: Path | None = None,
+    db_path: Path | None = None,
+    record_event: bool = True,
+    which: Which,
+    runner: Runner,
+) -> InfraApplyResult:
+    workspace = (workspace_path or default_mail_workspace_path(config.domain)).expanduser()
+    resolved_plan_file = resolve_plan_file(workspace, plan_file)
+    tofu_status = inspect_tofu(which=which, runner=runner)
+    if not tofu_status.available:
+        return InfraApplyResult(
+            ok=False,
+            domain=config.domain,
+            workspace_path=workspace,
+            plan_file=resolved_plan_file,
+            tofu_available=False,
+            apply_result=None,
+            applied=False,
+            event_recorded=False,
+            issues=tofu_status.issues,
+            error=tofu_status.issues[0] if tofu_status.issues else "OpenTofu unavailable",
+        )
+    if not resolved_plan_file.is_file():
+        return InfraApplyResult(
+            ok=False,
+            domain=config.domain,
+            workspace_path=workspace,
+            plan_file=resolved_plan_file,
+            tofu_available=True,
+            apply_result=None,
+            applied=False,
+            event_recorded=False,
+            error=f"saved plan file does not exist: {resolved_plan_file}",
+        )
+
+    assert tofu_status.path is not None
+    apply_result = run_tofu_apply_saved_plan(
+        workspace,
+        resolved_plan_file,
+        tofu_path=tofu_status.path,
+        runner=runner,
+    )
+    ok = apply_result.ok
+    result = InfraApplyResult(
+        ok=ok,
+        domain=config.domain,
+        workspace_path=workspace,
+        plan_file=resolved_plan_file,
+        tofu_available=True,
+        apply_result=apply_result,
+        applied=ok,
+        event_recorded=False,
+        error=None if ok else apply_result.stderr or apply_result.stdout or "OpenTofu apply failed",
+    )
+    if record_event:
+        result.event_recorded = _record_apply_event(result, db_path=db_path)
+    return result
+
+
+def resolve_plan_file(workspace: Path, plan_file: Path) -> Path:
+    expanded = plan_file.expanduser()
+    if expanded.is_absolute():
+        return expanded
+    return workspace / expanded
+
+
+def _record_apply_event(result: InfraApplyResult, *, db_path: Path | None = None) -> bool:
+    observed_at = utc_now_iso()
+    store = StateStore(db_path)
+    store.initialize(observed_at)
+    store.add_event(
+        created_at=observed_at,
+        severity="info" if result.ok else "warning",
+        source=INFRA_EVENT_SOURCE,
+        target_type="mail_domain",
+        target=result.domain,
+        message="mail apply completed" if result.ok else "mail apply failed",
+        data={
+            "domain": result.domain,
+            "workspace_path": str(result.workspace_path),
+            "plan_file": str(result.plan_file),
+            "returncode": result.apply_result.returncode if result.apply_result else None,
+            "applied": result.applied,
+            "error": result.error,
+        },
+    )
+    return True
 
 
 def _workspace_files(config: MailWorkspaceConfig, workspace: Path) -> list[WorkspaceFile]:
@@ -508,8 +653,9 @@ def _readme_md(config: MailWorkspaceConfig) -> str:
 
 This workspace was generated by `homesrvctl infra render mail`.
 
-Current homesrvctl OpenTofu support is plan-only. Use `homesrvctl infra plan mail {config.domain}` to run
-`tofu init` and `tofu plan`; homesrvctl does not run `tofu apply` or `tofu destroy` in this slice.
+Use `homesrvctl infra plan mail {config.domain}` to run `tofu init` and `tofu plan`. Add
+`--out tfplan` to save a plan file, then run `homesrvctl infra apply mail {config.domain} --plan-file tfplan`
+to explicitly apply that saved plan. homesrvctl does not run `tofu destroy`, import resources, or edit state.
 
 Do not put secrets in this workspace. Provider authentication is read from standard environment/provider
 configuration, including:
@@ -523,4 +669,6 @@ Planned scope:
 - SES DKIM tokens
 - SES custom MAIL FROM domain `{config.mail_from_domain}`
 - Cloudflare DNS records for SES verification, DKIM, MAIL FROM MX/SPF, and optional DMARC/SPF records
+
+Saved OpenTofu plan files may contain sensitive values. Protect or remove them after use.
 """

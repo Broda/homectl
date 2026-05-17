@@ -92,11 +92,29 @@ def run_tofu_init(
 def run_tofu_plan(
     workspace_path: Path,
     *,
+    out: Path | None = None,
+    tofu_path: str = TOFU_BINARY,
+    runner: Runner = run_command,
+) -> TofuCommandResult:
+    command = [tofu_path, "plan", "-detailed-exitcode", "-input=false", "-no-color"]
+    if out is not None:
+        command.append(f"-out={out}")
+    return _run_tofu(
+        command,
+        workspace_path,
+        runner=runner,
+    )
+
+
+def run_tofu_apply_saved_plan(
+    workspace_path: Path,
+    plan_file: Path,
+    *,
     tofu_path: str = TOFU_BINARY,
     runner: Runner = run_command,
 ) -> TofuCommandResult:
     return _run_tofu(
-        [tofu_path, "plan", "-detailed-exitcode", "-input=false", "-no-color"],
+        [tofu_path, "apply", "-input=false", "-no-color", str(plan_file)],
         workspace_path,
         runner=runner,
     )
@@ -125,4 +143,3 @@ def _truncate(value: str, *, limit: int = 8000) -> str:
     if len(value) <= limit:
         return value
     return value[:limit] + "\n[truncated]"
-

@@ -10,12 +10,15 @@ from typer.testing import CliRunner
 from homesrvctl.commands import infra_cmd
 from homesrvctl.main import app
 from homesrvctl.services.infra.mail_workspace import (
+    INFRA_EVENT_SOURCE,
+    apply_mail_workspace,
     build_mail_workspace_config,
     plan_mail_workspace,
     render_mail_workspace,
 )
 from homesrvctl.services.infra.opentofu import inspect_tofu
 from homesrvctl.shell import CommandResult
+from homesrvctl.state.store import StateStore
 
 
 def _command_result(command: list[str], returncode: int = 0, stdout: str = "", stderr: str = "") -> CommandResult:
@@ -172,6 +175,80 @@ def test_plan_mail_workspace_changes_with_fake_tofu(tmp_path: Path) -> None:
     assert result.plan_result.returncode == 2
 
 
+def test_plan_mail_workspace_out_saves_plan_metadata_with_fake_tofu(tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        commands.append(command)
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        if command[1] == "init":
+            return _command_result(command, stdout="init ok")
+        return _command_result(command, returncode=2, stdout="Plan: 5 to add.")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    workspace = tmp_path / "workspace"
+    result = plan_mail_workspace(
+        config,
+        workspace_path=workspace,
+        out=Path("tfplan"),
+        which=lambda binary: "/usr/bin/tofu",
+        runner=runner,
+    )
+
+    assert result.ok is True
+    assert result.has_changes is True
+    assert result.saved_plan is True
+    assert result.plan_file == workspace / "tfplan"
+    assert f"-out={workspace / 'tfplan'}" in commands[2]
+    payload = result.to_dict()
+    assert payload["saved_plan"] is True
+    assert payload["plan_file"] == str(workspace / "tfplan")
+    assert "sensitive" in str(payload["sensitive_artifact_warning"]).lower()
+
+
+def test_infra_plan_mail_cli_out_json_includes_saved_plan(monkeypatch, tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        commands.append(command)
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        if command[1] == "init":
+            return _command_result(command, stdout="init ok")
+        return _command_result(command, returncode=2, stdout="Plan: 5 to add.")
+
+    monkeypatch.setattr(infra_cmd.shutil, "which", lambda binary: "/usr/bin/tofu")
+    monkeypatch.setattr(infra_cmd, "run_command", runner)
+    workspace = tmp_path / "workspace"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "infra",
+            "plan",
+            "mail",
+            "example.com",
+            "--region",
+            "us-east-1",
+            "--workspace",
+            str(workspace),
+            "--out",
+            "tfplan",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["action"] == "infra_plan"
+    assert payload["ok"] is True
+    assert payload["has_changes"] is True
+    assert payload["saved_plan"] is True
+    assert payload["plan_file"] == str(workspace / "tfplan")
+    assert f"-out={workspace / 'tfplan'}" in commands[2]
+
+
 def test_plan_mail_workspace_error_with_fake_tofu(tmp_path: Path) -> None:
     def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
         if command[-1] == "version":
@@ -208,6 +285,226 @@ def test_plan_mail_workspace_tofu_missing_does_not_render(tmp_path: Path) -> Non
     assert result.tofu_available is False
     assert not workspace.exists()
     assert "OpenTofu binary `tofu` not found" in str(result.error)
+
+
+def test_plan_mail_workspace_out_error_is_not_ok(tmp_path: Path) -> None:
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        if command[1] == "init":
+            return _command_result(command, stdout="init ok")
+        return _command_result(command, returncode=1, stderr="plan failed")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    result = plan_mail_workspace(
+        config,
+        workspace_path=tmp_path / "workspace",
+        out=Path("tfplan"),
+        which=lambda binary: "/usr/bin/tofu",
+        runner=runner,
+    )
+
+    assert result.ok is False
+    assert result.saved_plan is False
+    assert result.plan_file == tmp_path / "workspace" / "tfplan"
+    assert result.error == "plan failed"
+
+
+def test_apply_mail_requires_existing_plan_file_before_running_tofu(tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        commands.append(command)
+        return _command_result(command, stdout="OpenTofu v1.9.0\n")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    result = apply_mail_workspace(
+        config,
+        workspace_path=tmp_path / "workspace",
+        plan_file=Path("missing.tfplan"),
+        which=lambda binary: "/usr/bin/tofu",
+        runner=runner,
+    )
+
+    assert result.ok is False
+    assert result.applied is False
+    assert "saved plan file does not exist" in str(result.error)
+    assert len(commands) == 1
+    assert commands[0][-1] == "version"
+
+
+def test_apply_mail_uses_saved_plan_only_and_records_sanitized_event(tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    plan_file = workspace / "tfplan"
+    plan_file.write_text("fake sensitive plan contents", encoding="utf-8")
+    db_path = tmp_path / "state.db"
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        commands.append(command)
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        return _command_result(command, stdout="apply stdout with secret-looking value")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    result = apply_mail_workspace(
+        config,
+        workspace_path=workspace,
+        plan_file=Path("tfplan"),
+        db_path=db_path,
+        which=lambda binary: "/usr/bin/tofu",
+        runner=runner,
+    )
+
+    assert result.ok is True
+    assert result.applied is True
+    assert result.event_recorded is True
+    assert commands[1][1] == "apply"
+    assert "destroy" not in commands[1]
+    assert "plan" not in commands[1]
+    assert str(plan_file) in commands[1]
+    event = StateStore(db_path).latest_event(source=INFRA_EVENT_SOURCE)
+    assert event is not None
+    event_blob = json.dumps(event, sort_keys=True)
+    assert "apply stdout" not in event_blob
+    assert "fake sensitive plan contents" not in event_blob
+    assert "AKIA" not in event_blob
+    assert "cloudflare_api_token" not in event_blob.lower()
+
+
+def test_apply_mail_failure_records_failure_event(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tfplan").write_text("fake plan", encoding="utf-8")
+    db_path = tmp_path / "state.db"
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        return _command_result(command, returncode=1, stderr="apply failed")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    result = apply_mail_workspace(
+        config,
+        workspace_path=workspace,
+        plan_file=Path("tfplan"),
+        db_path=db_path,
+        which=lambda binary: "/usr/bin/tofu",
+        runner=runner,
+    )
+
+    assert result.ok is False
+    assert result.applied is False
+    assert result.event_recorded is True
+    assert result.error == "apply failed"
+    event = StateStore(db_path).latest_event(source=INFRA_EVENT_SOURCE)
+    assert event is not None
+    assert event["severity"] == "warning"
+
+
+def test_apply_mail_tofu_missing_does_not_apply(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tfplan").write_text("fake plan", encoding="utf-8")
+
+    config = build_mail_workspace_config("example.com", region="us-east-1")
+    result = apply_mail_workspace(
+        config,
+        workspace_path=workspace,
+        plan_file=Path("tfplan"),
+        which=lambda binary: None,
+        runner=lambda command, cwd=None, quiet=False: _command_result(command),
+    )
+
+    assert result.ok is False
+    assert result.tofu_available is False
+    assert result.applied is False
+    assert "OpenTofu binary `tofu` not found" in str(result.error)
+
+
+def test_infra_apply_mail_requires_plan_file_option() -> None:
+    result = CliRunner().invoke(app, ["infra", "apply", "mail", "example.com", "--yes"])
+
+    assert result.exit_code != 0
+    assert "--plan-file" in result.output
+
+
+def test_infra_apply_mail_json_requires_yes(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "infra",
+            "apply",
+            "mail",
+            "example.com",
+            "--region",
+            "us-east-1",
+            "--workspace",
+            str(workspace),
+            "--plan-file",
+            "tfplan",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["applied"] is False
+    assert "requires --yes" in payload["error"]
+
+
+def test_infra_apply_mail_cli_yes_json_applies_saved_plan(monkeypatch, tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tfplan").write_text("fake plan", encoding="utf-8")
+    db_path = tmp_path / "state.db"
+
+    def runner(command: list[str], cwd=None, quiet=False):  # noqa: ANN001, ANN202
+        commands.append(command)
+        if command[-1] == "version":
+            return _command_result(command, stdout="OpenTofu v1.9.0\n")
+        return _command_result(command, stdout="apply ok")
+
+    monkeypatch.setattr(infra_cmd.shutil, "which", lambda binary: "/usr/bin/tofu")
+    monkeypatch.setattr(infra_cmd, "run_command", runner)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "infra",
+            "apply",
+            "mail",
+            "example.com",
+            "--region",
+            "us-east-1",
+            "--workspace",
+            str(workspace),
+            "--plan-file",
+            "tfplan",
+            "--db-path",
+            str(db_path),
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "1"
+    assert payload["action"] == "infra_apply"
+    assert payload["ok"] is True
+    assert payload["applied"] is True
+    assert payload["event_recorded"] is True
+    assert payload["plan_file"] == str(workspace / "tfplan")
+    assert commands[1][1] == "apply"
+    assert str(workspace / "tfplan") in commands[1]
 
 
 def test_infra_render_mail_cli_json_dry_run(tmp_path: Path) -> None:

@@ -73,7 +73,7 @@ Responsibilities:
 
 The refresh layer records stack directory metadata, compose-file presence, stack-local config presence, scaffold metadata, and effective routing settings. The observer layer records read-only local runtime snapshots into `stack_observations` and `events`. The Cloudflare provider observer records token, zone, DNS, and tunnel readiness into `events` without creating, updating, or deleting Cloudflare resources. The SES provider observer records AWS/SES account, domain identity, DKIM, custom MAIL FROM, and DNS-readiness snapshots into `events` without mutating AWS, DNS, or SMTP credentials. OpenTofu, backups, and related provider observers belong to later slices.
 
-### OpenTofu planning layer
+### OpenTofu convergence layer
 
 - [`homesrvctl/services/infra`](homesrvctl/services/infra)
 - [`homesrvctl/commands/infra_cmd.py`](homesrvctl/commands/infra_cmd.py)
@@ -82,11 +82,14 @@ Responsibilities:
 - render narrow OpenTofu workspaces from explicit operator intent
 - detect the external `tofu` binary and report its version
 - run `tofu init` and `tofu plan -detailed-exitcode`
+- save explicit plan files when requested with `--out`
+- apply only operator-supplied saved plan files after confirmation
 - interpret plan exit codes without hiding stdout/stderr
+- record sanitized apply metadata in SQLite events
 - keep subprocess execution in services rather than command formatting code
 - avoid writing provider credentials, SMTP credentials, or other secrets
 
-The current OpenTofu slice is plan-only. It renders SES outbound mail plus Cloudflare DNS planning workspaces with AWS and Cloudflare provider authentication left to normal environment/provider configuration. It may model SES identities, DKIM, custom MAIL FROM, and Cloudflare DNS records in generated `.tf` files, but `homesrvctl` does not run `tofu apply`, `tofu destroy`, import resources, generate SMTP credentials, or mutate providers. OpenTofu is optional and must not be required for normal stack, observer, daemon, or TUI workflows.
+The current OpenTofu path renders SES outbound mail plus Cloudflare DNS workspaces with AWS and Cloudflare provider authentication left to normal environment/provider configuration. It may model SES identities, DKIM, custom MAIL FROM, and Cloudflare DNS records in generated `.tf` files. Apply is supported only as an explicit foreground command against an existing saved plan file. `homesrvctl` does not run `tofu destroy`, import resources, edit state, generate SMTP credentials, or run apply from the daemon or an operation queue. OpenTofu is optional and must not be required for normal stack, observer, daemon, or TUI workflows.
 
 ### Read-only daemon runtime
 
@@ -144,7 +147,7 @@ Future note:
 - If mail-provider admin support is introduced, it should not be added to `cloudflare.py` or folded into existing domain command wiring as ad hoc boto or SMTP calls.
 - The frontend surface may use a generic `mail` command family, but provider logic should remain provider-specific.
 - The SES observer in [`homesrvctl/services/observers/ses_provider.py`](homesrvctl/services/observers/ses_provider.py) is the first read-only mail-provider slice. It should stay observer-owned until a future `mail` command family is deliberately introduced.
-- The OpenTofu planning layer in [`homesrvctl/services/infra`](homesrvctl/services/infra) is the first plan-only convergence slice. It should stay explicit and mail-focused until an operator-approved apply design exists.
+- The OpenTofu convergence layer in [`homesrvctl/services/infra`](homesrvctl/services/infra) supports explicit saved-plan apply for the mail workspace. It should stay foreground, operator-approved, and mail-focused until operation queues or broader convergence are deliberately designed.
 - A future generic `mail` command surface may accept `--provider`, but the default should stay `ses` until another provider is actually shipped.
 - A future layout such as:
   - [`homesrvctl/mail_models.py`](homesrvctl/mail_models.py)
